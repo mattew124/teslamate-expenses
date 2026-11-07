@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Categories{% endblock %}
+{% block content %}
+<h1>Categories</h1>
+<ul class="plain">
+  {% for c in categories %}
+  <li>{{ c.name }} <small>{{ 'capital cost' if c.kind == 'purchase' else 'running cost' }}</small></li>
+  {% endfor %}
+</ul>
+<form method="post" class="stack">
+  <label>New category <input name="name" maxlength="60" required placeholder="e.g. Servicing">
+    {% if error %}<span class="error">{{ error }}</span>{% endif %}</label>
+  <button type="submit" class="button">Add category</button>
+</form>
+<p><small>New categories count as running costs in the Grafana dashboard.</small></p>
+{% endblock %}

@@ -1,0 +1,26 @@
+# Optional override: publish the UI at https://$PUBLIC_HOST$BASE_PATH through Traefik
+# behind a forward-auth middleware. The app has NO login of its own, so don't
+# expose it any other way.
+#   docker compose -f docker-compose.yml -f docker-compose.traefik.yml up -d
+services:
+  expenses:
+    ports: !reset []
+    networks:
+      - teslamate
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${PROXY_NETWORK:-proxy}"
+      - "traefik.http.services.tm-expenses.loadbalancer.server.port=8080"
+      # Priority beats a catch-all router on the same host, such as TeslaMate's own.
+      - "traefik.http.routers.tm-expenses-secure.rule=Host(`${PUBLIC_HOST:?}`) && PathPrefix(`${BASE_PATH:-/expenses}`)"
+      - "traefik.http.routers.tm-expenses-secure.priority=100"
+      - "traefik.http.routers.tm-expenses-secure.entrypoints=${PROXY_ENTRYPOINT:-websecure}"
+      - "traefik.http.routers.tm-expenses-secure.tls=true"
+      - "traefik.http.routers.tm-expenses-secure.service=tm-expenses"
+      - "traefik.http.routers.tm-expenses-secure.middlewares=${AUTH_MIDDLEWARE:?the app has no login of its own: set a forward-auth middleware}"
+
+networks:
+  proxy:
+    name: ${PROXY_NETWORK:-proxy}
+    external: true

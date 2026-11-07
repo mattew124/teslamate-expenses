@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Expenses{% endblock %} · TeslaMate</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</head>
+<body>
+  <header>
+    <a class="brand" href="{{ url_for('index') }}">Expenses</a>
+    <nav>
+      <a href="{{ url_for('index') }}">All</a>
+      <a href="{{ url_for('categories') }}">Categories</a>
+      <a class="button" href="{{ url_for('new') }}">+ Add</a>
+    </nav>
+  </header>
+  <main>
+    {% if message %}<p class="notice">{{ message }}</p>{% endif %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

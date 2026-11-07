@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit expense' if expense_id else 'Add expense' }}{% endblock %}
+{% macro err(field) %}{% if errors.get(field) %}<span class="error">{{ errors[field] }}</span>{% endif %}{% endmacro %}
+{% block content %}
+<h1>{{ 'Edit expense' if expense_id else 'Add expense' }}</h1>
+{% if errors %}<p class="notice bad">Please fix the highlighted fields.</p>{% endif %}
+<form method="post" class="stack" id="expense-form"
+      data-odometer-url="{{ url_for('api_odometer') }}">
+  <label>Car
+    <select name="car_id" required>
+      {% if cars|length != 1 %}<option value="">Choose…</option>{% endif %}
+      {% for c in cars %}<option value="{{ c.id }}" {{ 'selected' if values.car_id|string == c.id|string }}>{{ c.name or ('Car ' ~ c.id) }}</option>{% endfor %}
+    </select>{{ err('car_id') }}
+  </label>
+
+  <label>Category
+    <select name="category_id" required>
+      <option value="">Choose…</option>
+      {% for c in categories %}<option value="{{ c.id }}" {{ 'selected' if values.category_id|string == c.id|string }}>{{ c.name }}</option>{% endfor %}
+    </select>{{ err('category_id') }}
+    <small><a href="{{ url_for('categories') }}">Need another category?</a></small>
+  </label>
+
+  <div class="row">
+    <label>Date <input type="date" name="date" value="{{ values.date }}" required>{{ err('date') }}</label>
+    <label>Time <input type="time" name="time" value="{{ values.time }}" required></label>
+  </div>
+
+  <label>Amount paid ($)
+    <input name="amount" inputmode="decimal" autocomplete="off" placeholder="0.00" value="{{ values.amount }}" required>{{ err('amount') }}
+  </label>
+
+  <label>Odometer (km)
+    <input name="odometer_km" inputmode="decimal" autocomplete="off" value="{{ values.odometer_km }}">{{ err('odometer_km') }}
+    <small><button type="button" id="fill-odometer" class="linklike">Fill from TeslaMate</button>
+      <span id="odometer-hint"></span></small>
+  </label>
+
+  <label>Vendor / shop <input name="vendor" maxlength="500" value="{{ values.vendor }}">{{ err('vendor') }}</label>
+
+  <label>Invoice link
+    <input type="url" name="invoice_url" placeholder="https://…" value="{{ values.invoice_url }}">{{ err('invoice_url') }}
+    <small>A share link to the PDF, e.g. from OneDrive or Google Drive.</small>
+  </label>
+
+  <label>Notes <textarea name="notes" rows="3" maxlength="2000">{{ values.notes }}</textarea>{{ err('notes') }}</label>
+
+  <div class="row">
+    <button type="submit" class="button">Save</button>
+    <a href="{{ url_for('index') }}">Cancel</a>
+  </div>
+</form>
+
+{% if expense_id %}
+<form method="post" action="{{ url_for('delete', expense_id=expense_id) }}" data-confirm="Delete this expense?">
+  <button type="submit" class="danger">Delete expense</button>
+</form>
+{% endif %}
+{% endblock %}

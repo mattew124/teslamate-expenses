@@ -1,0 +1,8 @@
+CLAUDE.local.md
+.dev/
+dev.env
+.env
+*.pyc
+__pycache__/
+.pytest_cache/
+.venv/

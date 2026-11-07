@@ -1,0 +1,36 @@
+# TeslaMate expenses — runs *beside* the TeslaMate stack, not inside it.
+# It joins TeslaMate's own compose network (external) to reach the `database`
+# service, and talks to it as a dedicated least-privilege role, never as the
+# TeslaMate superuser. See README.md for first-time setup (provision-db.sh).
+services:
+  expenses:
+    build: .
+    # Pin a released version: EXPENSES_IMAGE=ghcr.io/mattew124/teslamate-expenses:0.1.0
+    image: ${EXPENSES_IMAGE:-teslamate-expenses:latest}
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: ["/dev/shm"]
+    env_file: .env
+    environment:
+      DATABASE_HOST: database
+      BASE_PATH: ${BASE_PATH:-/expenses}
+      APP_TZ: ${APP_TZ:-UTC}
+      TZ: ${APP_TZ:-UTC}
+    ports:
+      # Loopback only; docker-compose.traefik.yml publishes it behind forward-auth.
+      - "127.0.0.1:${HOST_PORT:-8088}:8080"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - teslamate
+
+networks:
+  teslamate:
+    # <TeslaMate compose project>_default — `docker network ls | grep tesla`.
+    name: ${TESLAMATE_NETWORK:-teslamate_default}
+    external: true
