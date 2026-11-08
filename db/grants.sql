@@ -7,6 +7,7 @@ GRANT USAGE ON SCHEMA expenses TO :"app_role";
 GRANT SELECT, INSERT, UPDATE, DELETE ON expenses.expense TO :"app_role";
 GRANT SELECT, UPDATE ON expenses.setting TO :"app_role";
 GRANT SELECT, INSERT ON expenses.category TO :"app_role";
+GRANT UPDATE (upload_folder) ON expenses.category TO :"app_role";
 GRANT SELECT, INSERT, UPDATE, DELETE ON expenses.car_folder, expenses.onedrive_account TO :"app_role";
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA expenses TO :"app_role";
 -- USAGE on public is not implied: the live TeslaMate DB has revoked it from PUBLIC.

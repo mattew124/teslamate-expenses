@@ -16,7 +16,7 @@ from flask import Flask, abort, jsonify, make_response, redirect, render_templat
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from . import db, onedrive, validation
+from . import db, invoices, onedrive, validation
 
 MESSAGES = {
     "saved": "Expense saved.",
@@ -28,7 +28,13 @@ MESSAGES = {
     "connected": "OneDrive connected.",
     "credentials": "App registration saved. Now connect OneDrive.",
     "disconnected": "OneDrive disconnected.",
+    "imported": "Invoices imported.",
+    "category_folder": "OneDrive folder saved.",
 }
+
+# PDFs read per page: each is downloaded and text-extracted (OCR for scans) while
+# the request waits, so a big folder is worked through in rounds.
+IMPORT_BATCH = 10
 
 
 
@@ -179,7 +185,8 @@ def create_app(connect=None, onedrive_transport=None):
     def upload_invoice(values, pdf):
         with connect() as conn:
             folder = db.car_folders(conn).get(values["car_id"])
-            category = next(c["name"] for c in db.categories(conn) if c["id"] == values["category_id"])
+            category_row = next(c for c in db.categories(conn) if c["id"] == values["category_id"])
+            category = category_row["name"]
             connected = (db.onedrive_account(conn) or {}).get("refresh_token")
             date_pattern = db.get_settings(conn)["invoice_date_format"]
         if not connected:
@@ -187,7 +194,9 @@ def create_app(connect=None, onedrive_transport=None):
         if not folder:
             raise onedrive.OneDriveError("Choose a OneDrive folder for this car on the OneDrive page first.")
         name = validation.invoice_filename(values["occurred_at"], category, values["vendor"], date_pattern)
-        return drive.upload(access_token(), folder["folder_id"], name, pdf)
+        token = access_token()
+        subfolder = validation.safe_folder_name(category_row["upload_folder"] or category)
+        return drive.upload(token, drive.ensure_subfolder(token, folder["folder_id"], subfolder), name, pdf)
 
     def form_values(form):
         """Echo the raw submission back into the form after a validation error."""
@@ -287,6 +296,20 @@ def create_app(connect=None, onedrive_transport=None):
             cats = db.categories(conn)
         return render_template("categories.html", categories=cats, error=error,
                                message=MESSAGES.get(request.args.get("msg", ""))), (400 if error else 200)
+
+    @app.post("/categories/<int:category_id>/folder")
+    def category_folder(category_id):
+        try:
+            folder = validation.parse_upload_folder(request.form.get("upload_folder"))
+        except ValueError as exc:
+            with connect() as conn:
+                cats = db.categories(conn)
+            return render_template("categories.html", categories=cats, error=None,
+                                   folder_error=(category_id, str(exc)), message=None), 400
+        with connect() as conn:
+            if not db.set_upload_folder(conn, category_id, folder):
+                abort(404)
+        return redirect(url_for("categories", msg="category_folder"), 303)
 
     # ---- OneDrive ---------------------------------------------------------------
 
@@ -464,6 +487,100 @@ def create_app(connect=None, onedrive_transport=None):
         with connect() as conn:
             db.clear_car_folder(conn, car_id)
         return redirect(url_for("onedrive_page", msg="folders"), 303)
+
+    # ---- import existing invoices from the car's OneDrive folder --------------
+
+    def import_row(n, **fields):
+        return {"n": n, "include": False, "date": "", "category_id": "", "vendor": "",
+                "amount": "", "odometer_km": "", "url": "", "name": "", "folder": "",
+                "note": "", **fields}
+
+    def render_import(car, rows, remaining=0, errors=None, status=200, notice=None):
+        with connect() as conn:
+            categories = db.categories(conn)
+        return render_template("import.html", car=car, rows=rows, remaining=remaining,
+                               errors=errors or {}, categories=categories, notice=notice), status
+
+    @app.get("/onedrive/import/<int:car_id>")
+    def onedrive_import(car_id):
+        need_drive()
+        car = car_or_404(car_id)
+        with connect() as conn:
+            folder = db.car_folders(conn).get(car_id)
+            categories = db.categories(conn)
+        if not folder:
+            return redirect(url_for("onedrive_page"), 303)
+        by_name = {c["name"]: c["id"] for c in categories}
+        try:
+            token = access_token()
+            files = drive.pdfs(token, folder["folder_id"])
+            with connect() as conn:
+                known = db.known_invoice_urls(conn, [f["web_url"] for f in files])
+            pending = [f for f in files if f["web_url"] not in known]
+            rows = []
+            for n, f in enumerate(pending[:IMPORT_BATCH]):
+                row = import_row(n, url=f["web_url"], name=f["name"], folder=f["folder"])
+                try:
+                    guess = invoices.propose(f["folder"], f["name"], invoices.extract_text(
+                        drive.download(token, f["id"])), list(by_name))
+                except onedrive.OneDriveError as exc:
+                    row["note"] = str(exc)
+                    rows.append(row)
+                    continue
+                row.update(
+                    date=guess["date"].isoformat() if guess["date"] else "",
+                    category_id=str(by_name.get(guess["category"], "")),
+                    vendor=guess["vendor"] or "", odometer_km=guess["odometer_km"] or "",
+                    amount=f"{guess['amount']:.2f}" if guess["amount"] is not None else "",
+                    include=not guess["missing"],
+                    note=("Couldn't read the " + ", ".join(guess["missing"]) + ": fill in to import."
+                          if guess["missing"] else ""))
+                rows.append(row)
+        except onedrive.NotConnected:
+            return redirect(url_for("onedrive_page"), 303)
+        except onedrive.SignInExpired as exc:
+            return render_onedrive(status=400, notice=str(exc))
+        except onedrive.OneDriveError as exc:
+            return render_onedrive(status=502, notice=str(exc))
+        return render_import(car, rows, remaining=len(pending) - len(rows), status=200,
+                             notice=None if files else "No PDFs found in that folder.")
+
+    @app.post("/onedrive/import/<int:car_id>")
+    def onedrive_import_confirm(car_id):
+        need_drive()
+        car = car_or_404(car_id)
+        with connect() as conn:
+            car_ids = {c["id"] for c in db.cars(conn)}
+            cat_ids = {c["id"] for c in db.categories(conn)}
+        count = min(request.form.get("count", type=int) or 0, 200)
+        rows, chosen, errors = [], [], {}
+        for n in range(count):
+            f = lambda key: request.form.get(f"{key}_{n}", "")
+            row = import_row(n, include=bool(f("include")), date=f("date"), category_id=f("category_id"),
+                             vendor=f("vendor"), amount=f("amount"), odometer_km=f("odometer_km"),
+                             url=f("url"), name=f("name"), folder=f("folder"))
+            rows.append(row)
+            if not row["include"]:
+                continue
+            values, row_errors = validation.parse_expense_form({
+                "car_id": car_id, "category_id": row["category_id"], "date": row["date"], "time": "12:00",
+                "amount": row["amount"], "odometer_km": row["odometer_km"], "vendor": row["vendor"],
+                "invoice_url": row["url"]}, tz, car_ids, cat_ids)
+            if not row["url"]:
+                row_errors["invoice_url"] = "Missing link to the PDF."
+            if row_errors:
+                errors[n] = " ".join(row_errors.values())
+            else:
+                chosen.append(values)
+        if errors or not chosen:
+            return render_import(car, rows, errors=errors, status=400,
+                                 notice=None if errors else "Tick at least one invoice to import.")
+        with connect() as conn:
+            known = db.known_invoice_urls(conn, [v["invoice_url"] for v in chosen])
+            for values in chosen:
+                if values["invoice_url"] not in known:  # a double submit imports once
+                    db.insert_expense(conn, values)
+        return redirect(url_for("index", msg="imported"), 303)
 
     @app.route("/settings", methods=["GET", "POST"])
     def settings():

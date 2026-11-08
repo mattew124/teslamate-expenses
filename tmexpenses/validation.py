@@ -127,6 +127,18 @@ def parse_folder_name(raw):
     return name
 
 
+def parse_upload_folder(raw):
+    """The OneDrive subfolder for a category's invoices. Blank -> None (named after the category)."""
+    name = (raw or "").strip()
+    return parse_folder_name(name) if name else None
+
+
+def safe_folder_name(name):
+    """A category name as a legal OneDrive folder name (for categories with odd characters)."""
+    cleaned = "".join("-" if ch in ONEDRIVE_FORBIDDEN or ord(ch) < 32 else ch for ch in name)
+    return cleaned[:MAX_FOLDER_NAME_LEN].strip(" .") or "Invoices"
+
+
 MAX_DATE_PATTERN_LEN = 20
 _DATE_TOKENS = (("yyyy", "%Y"), ("yy", "%y"), ("mm", "%m"), ("dd", "%d"))
 DEFAULT_DATE_PATTERN = "yymmdd"

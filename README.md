@@ -63,12 +63,17 @@ can write expenses and read only `cars` and `positions(car_id, date, odometer)`.
 
 ## OneDrive uploads
 
-With this on, the expense form takes the invoice PDF itself. The app uploads it to the folder
-you chose for that car, names it `261107 Tyres - Tyre Shop.pdf` (date, category, vendor;
+With this on, the expense form takes the invoice PDF itself. The app uploads it to a subfolder of
+the folder you chose for that car (made when first needed, and found again whatever its case),
+names it `261107 Tyres - Tyre Shop.pdf` (date, category, vendor;
 an existing name gets a suffix, never overwritten) and stores the file's OneDrive link as the
 expense's invoice link. It works with a personal Microsoft account (OneDrive Personal).
 The date part is `yymmdd` unless you change it under **Settings → Invoice file name date**
 (for example `yyyy-mm-dd`).
+
+The subfolder is set per category on the **Categories** page. The standard categories start
+mapped (Tyres, filters, alignment and rotation to `Maintenance`; Insurance and Registration to
+folders of the same name); a blank box means a folder named after the category.
 
 1. **Turn it on.** Add a key to `.env`, re-run `scripts/provision-db.sh` (it adds two tables)
    and restart the app:
@@ -145,6 +150,22 @@ PDFs only (checked by content, not just the name), up to 20 MB. Uploading on the
 replaces the link; the old file stays in OneDrive. Disconnecting deletes the saved sign-in;
 to revoke the app's access entirely, remove it at
 [account.live.com/consent/Manage](https://account.live.com/consent/Manage).
+
+### Importing invoices you already have
+
+Invoices already in a car's OneDrive folder (and its subfolders) can be turned into expenses:
+**OneDrive → Import existing invoices** beside the car. The app reads up to 10 PDFs not yet
+linked to an expense, guesses each one's date, category, vendor, amount and odometer, and shows
+them in a table to check, correct and untick. **Nothing is saved until you press Import**, and a
+file already linked to an expense never appears again, so you can work through a big folder in
+rounds.
+
+The guesses come from the file name (a leading `yymmdd`, `yyyymmdd` or `yyyy-mm-dd`, and a
+category name in it or in its folder name, as in `Tyres/261024 - Tyres - Tyre Shop.pdf`), then
+the PDF's text (`Invoice Date`, a `Total` line, `Odometer`). Scanned PDFs with no text are read
+by OCR, which is slower and rougher. An amount is never guessed without a clear total, and
+rows missing a date, category or amount start unticked. The image includes `poppler-utils` and
+`tesseract-ocr` for this; without them the app still runs and simply proposes less.
 
 ## What the dashboard counts
 

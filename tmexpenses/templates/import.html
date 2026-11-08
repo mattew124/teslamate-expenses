@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Import invoices{% endblock %}
+{% block content %}
+<h1>Import invoices for {{ car.name or ('Car ' ~ car.id) }}</h1>
+{% if notice %}<p class="notice bad">{{ notice }}</p>{% endif %}
+{% if rows %}
+<p>These PDFs are in the car's OneDrive folder but not yet in your expenses. Date, category,
+  vendor, amount and odometer are <strong>guesses</strong> from the file name, its folder and the text
+  inside the PDF (scans are read by OCR). Check every row, correct what's wrong, and untick anything
+  you don't want. Nothing is saved until you press Import.</p>
+<form method="post" action="{{ url_for('onedrive_import_confirm', car_id=car.id) }}" class="import">
+  <input type="hidden" name="count" value="{{ rows|length }}">
+  <div class="table-wrap">
+  <table class="import-table">
+    <thead><tr><th>Import</th><th>File</th><th>Date</th><th>Category</th><th>Vendor</th>
+      <th class="num">Amount</th><th class="num">Odometer (km)</th></tr></thead>
+    <tbody>
+    {% for r in rows %}{% set n = r.n %}
+    <tr>
+      <td data-label="Import"><input type="checkbox" name="include_{{ n }}" {{ 'checked' if r.include }}></td>
+      <td data-label="File"><div class="file">
+        <a href="{{ r.url }}" target="_blank" rel="noopener noreferrer">{{ r.name }} ↗</a>
+        {% if r.folder %}<br><small>{{ r.folder }}</small>{% endif %}
+        {% if errors.get(n) %}<br><span class="error">{{ errors[n] }}</span>{% elif r.note %}<br><small>{{ r.note }}</small>{% endif %}
+        <input type="hidden" name="url_{{ n }}" value="{{ r.url }}">
+        <input type="hidden" name="name_{{ n }}" value="{{ r.name }}">
+        <input type="hidden" name="folder_{{ n }}" value="{{ r.folder }}">
+      </div></td>
+      <td data-label="Date"><input type="date" name="date_{{ n }}" value="{{ r.date }}"></td>
+      <td data-label="Category">
+        <select name="category_id_{{ n }}">
+          <option value="">Choose…</option>
+          {% for c in categories %}<option value="{{ c.id }}" {{ 'selected' if c.id|string == r.category_id }}>{{ c.name }}</option>{% endfor %}
+        </select></td>
+      <td data-label="Vendor"><input name="vendor_{{ n }}" maxlength="500" value="{{ r.vendor }}"></td>
+      <td class="num" data-label="Amount"><input name="amount_{{ n }}" inputmode="decimal" value="{{ r.amount }}"></td>
+      <td class="num" data-label="Odometer"><input name="odometer_km_{{ n }}" inputmode="decimal" value="{{ r.odometer_km }}"></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if remaining %}<p><small>{{ remaining }} more waiting: import these, then open this page again for the next batch.</small></p>{% endif %}
+  <div class="row">
+    <button type="submit" class="button">Import ticked</button>
+    <a href="{{ url_for('onedrive_page') }}">Cancel</a>
+  </div>
+</form>
+{% elif not notice %}
+<p class="empty">Every PDF in the folder already has an expense. <a href="{{ url_for('onedrive_page') }}">Back</a></p>
+{% else %}
+<p><a href="{{ url_for('onedrive_page') }}">Back</a></p>
+{% endif %}
+{% endblock %}

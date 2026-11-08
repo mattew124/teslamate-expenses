@@ -2,6 +2,12 @@ FROM python:3.13-slim
 
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PIP_NO_CACHE_DIR=1
 
+# PDF text (poppler) and OCR for scanned invoices (tesseract), used when importing
+# existing invoices from OneDrive.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends poppler-utils tesseract-ocr tesseract-ocr-eng \
+ && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /srv
 COPY requirements.txt .
 RUN pip install -r requirements.txt
@@ -15,5 +21,5 @@ USER 10001:10001
 EXPOSE 8080
 # Root filesystem is read-only: heartbeat file goes to tmpfs, and the control
 # socket (unused, defaults to $HOME) is switched off.
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "--worker-tmp-dir", "/dev/shm", "--no-control-socket", \
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "120", "--worker-tmp-dir", "/dev/shm", "--no-control-socket", \
      "--access-logfile", "-", "tmexpenses:create_app()"]
