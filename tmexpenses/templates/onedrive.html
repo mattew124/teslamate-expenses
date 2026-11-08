@@ -21,14 +21,31 @@
   {% endif %}
   <details {{ 'open' if not (account and account.client_id) or errors }}>
     <summary>{{ 'Change the app registration' if account and account.client_id else 'Set up' }}</summary>
+    <p><small>Once per installation, about 10 minutes. Any Microsoft account can register the app,
+      with no paid Azure subscription; the account that matters is the one you sign in with at
+      step 2, whose OneDrive gets the invoices. Use a new registration for this app rather than
+      reusing one made for something else.</small></p>
     <ol class="steps">
-      <li>In <a href="https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank" rel="noopener noreferrer">Microsoft Entra → App registrations</a>,
-        choose <strong>New registration</strong>. Supported account types: <strong>Personal Microsoft accounts only</strong>.</li>
-      <li>Redirect URI: platform <strong>Web</strong>, address:
-        <code class="copy">{{ callback_url }}</code></li>
-      <li>Under <strong>Authentication</strong>, leave <strong>Allow public client flows</strong> at <strong>No</strong>.</li>
-      <li>Under <strong>Certificates &amp; secrets</strong>, add a <strong>New client secret</strong> and copy its <strong>Value</strong> (shown only once; not the Secret ID).</li>
-      <li>Paste the Application (client) ID from the <strong>Overview</strong> page, and the secret, here:</li>
+      <li>Open the <a href="https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank" rel="noopener noreferrer">Microsoft Entra admin center</a>
+        (<strong>Identity → Applications → App registrations</strong>) and choose <strong>New registration</strong>.</li>
+      <li><strong>Name:</strong> anything, e.g. <code>teslamate-expenses</code>.</li>
+      <li><strong>Supported account types:</strong> <strong>Personal Microsoft accounts only</strong>
+        (“any organizational directory and personal Microsoft accounts” also works).</li>
+      <li><strong>Redirect URI:</strong> choose the platform <strong>Web</strong> and enter exactly this address, then <strong>Register</strong>:
+        <code class="copy">{{ callback_url }}</code>
+        <button type="button" class="linklike" data-copy="{{ callback_url }}">Copy address</button>
+        <small>It must match character for character. Microsoft only accepts <code>http://</code> for <code>localhost</code>.</small></li>
+      <li><strong>Authentication:</strong> leave <strong>Allow public client flows</strong> at <strong>No</strong> (the default).
+        <small>With it on, Microsoft treats the app as a public client and every later sign-in refresh fails
+          with <code>AADSTS90023: Public clients can't send a client secret</code>.</small></li>
+      <li><strong>API permissions</strong> (optional): <strong>Add a permission → Microsoft Graph → Delegated permissions</strong>,
+        tick <code>Files.ReadWrite</code> and <code>offline_access</code>.
+        <small>Skip it and you're asked to consent to the same two when you connect.</small></li>
+      <li><strong>Certificates &amp; secrets → Client secrets → New client secret.</strong> Copy its <strong>Value</strong> straight away.
+        <small>It's shown only once, and the <strong>Secret ID</strong> beside it is not the secret. Secrets last at most
+          24 months: note the <strong>Expires</strong> date for the box below.</small></li>
+      <li>From <strong>Overview</strong>, copy the <strong>Application (client) ID</strong> (not secret).</li>
+      <li>Paste both here and save, then press <strong>Connect OneDrive</strong>.</li>
     </ol>
     <form method="post" action="{{ url_for('onedrive_credentials') }}" class="stack">
       <label>Application (client) ID

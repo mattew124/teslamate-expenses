@@ -186,7 +186,7 @@ def test_bad_token_key_refuses_to_start(app_for, ms):
 def test_setup_page_shows_the_redirect_uri_to_register(client):
     page = client.get("/onedrive").data.decode()
     assert CALLBACK in page and 'name="client_secret"' in page
-    assert "Connect OneDrive" not in page          # nothing to connect with yet
+    assert "Connect OneDrive</button>" not in page   # nothing to connect with yet
 
 
 def test_redirect_uri_follows_the_proxy(app_for, ms, monkeypatch):
@@ -424,3 +424,12 @@ def test_app_role_can_use_onedrive_tables_only(pg, admin):
         conn.execute("SELECT * FROM expenses.onedrive_account")
         with pytest.raises(psycopg.errors.InsufficientPrivilege):
             conn.execute("DROP TABLE expenses.car_folder")
+
+
+def test_setup_page_has_the_full_registration_walkthrough(client):
+    page = client.get("/onedrive").data.decode()
+    for text in ("New registration", "Personal Microsoft accounts only", "Web",
+                 "Allow public client flows", "AADSTS90023", "Files.ReadWrite",
+                 "Secret ID", "24 months", "Application (client) ID"):
+        assert text in page, text
+    assert f'data-copy="{CALLBACK}"' in page        # one-click copy of the exact address

@@ -56,3 +56,4 @@ ul.folders li { display: flex; justify-content: space-between; align-items: cent
 ul.folders .actions { display: flex; gap: 1rem; align-items: center; }
 ul.folder-list li a { display: block; padding: .3rem 0; }
 .here code { overflow-wrap: anywhere; }
+ol.steps small { display: block; }
