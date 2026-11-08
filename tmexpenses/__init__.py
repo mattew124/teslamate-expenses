@@ -181,11 +181,12 @@ def create_app(connect=None, onedrive_transport=None):
             folder = db.car_folders(conn).get(values["car_id"])
             category = next(c["name"] for c in db.categories(conn) if c["id"] == values["category_id"])
             connected = (db.onedrive_account(conn) or {}).get("refresh_token")
+            date_pattern = db.get_settings(conn)["invoice_date_format"]
         if not connected:
             raise onedrive.NotConnected()
         if not folder:
             raise onedrive.OneDriveError("Choose a OneDrive folder for this car on the OneDrive page first.")
-        name = validation.invoice_filename(values["occurred_at"], category, values["vendor"])
+        name = validation.invoice_filename(values["occurred_at"], category, values["vendor"], date_pattern)
         return drive.upload(access_token(), folder["folder_id"], name, pdf)
 
     def form_values(form):
@@ -475,9 +476,16 @@ def create_app(connect=None, onedrive_transport=None):
                     values[field] = validation.parse_url_setting(raw)
                 except ValueError as exc:
                     errors[field] = str(exc)
+            raw = request.form.get("invoice_date_format", "")
+            values["invoice_date_format"] = raw
+            try:
+                values["invoice_date_format"] = validation.parse_date_pattern(raw)
+            except ValueError as exc:
+                errors["invoice_date_format"] = str(exc)
             if not errors:
                 with connect() as conn:
-                    db.save_settings(conn, values["expenses_url"], values["grafana_url"])
+                    db.save_settings(conn, values["expenses_url"], values["grafana_url"],
+                                     values["invoice_date_format"])
                 return redirect(url_for("settings", msg="settings"), 303)
         else:
             with connect() as conn:

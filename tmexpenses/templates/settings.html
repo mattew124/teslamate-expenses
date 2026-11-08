@@ -13,6 +13,11 @@
            placeholder="https://teslamate.example.com/expenses/">
     {% if errors.expenses_url %}<span class="error">{{ errors.expenses_url }}</span>{% endif %}
     <small>Where you open this app. The Grafana dashboard's “Add / edit expenses” link goes here.</small></label>
+  <label>Invoice file name date
+    <input type="text" name="invoice_date_format" maxlength="20" value="{{ values.invoice_date_format or '' }}"
+           placeholder="yymmdd">
+    {% if errors.invoice_date_format %}<span class="error">{{ errors.invoice_date_format }}</span>{% endif %}
+    <small>The date at the start of invoice PDFs uploaded to OneDrive, e.g. <code>261107</code>. Use yyyy, yy, mm and dd, with - _ . or a space between (<code>yyyy-mm-dd</code> gives <code>2026-11-07</code>). Blank uses <code>yymmdd</code>.</small></label>
   <button type="submit" class="button">Save</button>
 </form>
 {% endblock %}

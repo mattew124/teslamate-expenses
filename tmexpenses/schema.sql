@@ -37,6 +37,10 @@ CREATE TABLE IF NOT EXISTS expenses.setting (
     expenses_url  text CHECK (expenses_url IS NULL OR expenses_url ~* '^https?://[^[:space:]]+$'),
     grafana_url   text CHECK (grafana_url IS NULL OR grafana_url ~* '^https?://[^[:space:]]+$')
 );
+-- Added after the table first shipped, so existing databases get it too.
+--   invoice_date_format  the date in uploaded invoice names (yyyy, yy, mm, dd); NULL = yymmdd
+ALTER TABLE expenses.setting ADD COLUMN IF NOT EXISTS invoice_date_format text
+    CHECK (invoice_date_format IS NULL OR length(invoice_date_format) <= 20);
 INSERT INTO expenses.setting (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS expenses.expense (

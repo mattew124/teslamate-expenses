@@ -347,6 +347,15 @@ def test_folder_can_be_cleared(client, ms, admin):
 
 # ---- upload ---------------------------------------------------------------------
 
+def test_upload_name_follows_the_date_format_setting(client, ms, admin):
+    sign_in(client, ms)
+    choose_folder(client)
+    admin.execute("UPDATE expenses.setting SET invoice_date_format = 'yyyy-mm-dd'")
+    client.post("/new", data=with_pdf(form(admin, invoice_url="")), headers=ORIGIN)
+    (put,) = ms.uploads()
+    assert unquote(urlparse(put[1]).path).endswith("/INV:/2026-11-07 Tyres - Tyre Shop.pdf:/content")
+
+
 def test_upload_on_create(client, ms, admin):
     sign_in(client, ms)
     choose_folder(client)
@@ -356,7 +365,7 @@ def test_upload_on_create(client, ms, admin):
     (put,) = ms.uploads()
     method, url, body, headers = put
     # by folder id, so renaming or moving the folder in OneDrive doesn't break uploads
-    assert unquote(urlparse(url).path).endswith("/me/drive/items/INV:/2026-11-07 Tyres - Tyre Shop.pdf:/content")
+    assert unquote(urlparse(url).path).endswith("/me/drive/items/INV:/261107 Tyres - Tyre Shop.pdf:/content")
     assert "conflictBehavior=rename" in url    # never overwrite an existing invoice
     assert body == PDF and headers["Content-Type"] == "application/pdf"
     (row,) = rows(admin)
