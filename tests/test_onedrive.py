@@ -57,6 +57,7 @@ class FakeMicrosoft:
         self.upload_status = 201
         self.refresh_count = 0
         self.challenge = None
+        self.created = []
 
     def __call__(self, method, url, data=None, headers=None):
         headers = headers or {}
@@ -92,6 +93,22 @@ class FakeMicrosoft:
         if method == "GET" and "/me/drive/items/" in path:
             key = path.rsplit("/", 1)[1]
             return (200, item(key)) if key in FOLDERS else (404, {"error": {"code": "itemNotFound"}})
+        if method == "POST" and path.endswith("/children"):
+            parent = "ROOT" if path.endswith("/me/drive/root/children") else path.split("/items/")[1].split("/")[0]
+            assert headers["Content-Type"] == "application/json"
+            req = json.loads(data)
+            assert req["folder"] == {} and req["@microsoft.graph.conflictBehavior"] == "fail"
+            if any(FOLDERS[k]["name"].lower() == req["name"].lower() for k in CHILDREN[parent]):
+                return 409, {"error": {"code": "nameAlreadyExists", "message": "Name already exists"}}
+            key = f"NEW{len(FOLDERS)}"
+            parent_path = "/drive/root:" + ("" if parent == "ROOT" else
+                                            item(parent)["parentReference"]["path"].partition("root:")[2]
+                                            + "/" + FOLDERS[parent]["name"])
+            FOLDERS[key] = {"name": req["name"], "path": parent_path, "parent": parent}
+            CHILDREN[key] = []
+            CHILDREN[parent].append(key)
+            self.created.append((parent, req["name"]))
+            return 201, item(key)
         if method == "PUT" and path.endswith(":/content"):
             if self.upload_status >= 400:
                 return self.upload_status, {"error": {"code": "accessDenied", "message": "Nope"}}
@@ -104,7 +121,10 @@ class FakeMicrosoft:
 
 @pytest.fixture()
 def ms():
-    return FakeMicrosoft()
+    snapshot = ({k: dict(v) for k, v in FOLDERS.items()}, {k: list(v) for k, v in CHILDREN.items()})
+    yield FakeMicrosoft()
+    FOLDERS.clear(); FOLDERS.update(snapshot[0])      # undo folders a test created
+    CHILDREN.clear(); CHILDREN.update(snapshot[1])
 
 
 @pytest.fixture()
@@ -452,3 +472,48 @@ def test_connect_never_relies_on_a_form_redirect(client, ms):
         form_action = next(d for d in r.headers["Content-Security-Policy"].split(";")
                            if d.strip().startswith("form-action"))
         assert form_action.strip() == "form-action 'self'"
+
+
+# ---- new folder -----------------------------------------------------------------
+
+def new_folder(client, name, parent="TESTCAR", car_id=1):
+    return client.post(f"/onedrive/browse/{car_id}/new-folder", headers=ORIGIN,
+                       data={"parent_id": parent, "name": name})
+
+
+def test_new_folder_opens_it_ready_to_use(client, ms):
+    sign_in(client, ms)
+    assert 'name="name"' in client.get("/onedrive/browse/1?folder=TESTCAR").data.decode()
+    resp = new_folder(client, "  2027 invoices ")
+    assert resp.status_code == 303
+    assert ms.created == [("TESTCAR", "2027 invoices")]
+    new_id = parse_qs(urlparse(resp.headers["Location"]).query)["folder"][0]
+    page = client.get(resp.headers["Location"]).data.decode()
+    assert "/Cars/Test car/2027 invoices" in page
+    assert choose_folder(client, folder_id=new_id).status_code == 303
+
+
+def test_new_folder_at_the_top_of_the_drive(client, ms):
+    sign_in(client, ms)
+    assert new_folder(client, "Car invoices", parent="").status_code == 303
+    assert ms.created == [("ROOT", "Car invoices")]
+
+
+@pytest.mark.parametrize("name,expected", [
+    ("", "Enter a name"), ("a/b", "can't contain"), ("bad:name", "can't contain"),
+    ("trailing.", "can't end"), ("x" * 256, "too long"), ("Invoices", "already exists"),
+])
+def test_new_folder_names_are_checked(client, ms, name, expected):
+    sign_in(client, ms)
+    resp = new_folder(client, name, parent="TESTCAR")   # TESTCAR already holds "Invoices"
+    page = html.unescape(resp.data.decode())
+    assert resp.status_code == 400 and expected in page
+    assert ms.created == []
+    assert "/Cars/Test car" in page                      # still browsing the same folder
+
+
+def test_new_folder_is_guarded(client, ms):
+    sign_in(client, ms)
+    assert client.post("/onedrive/browse/1/new-folder", data={"parent_id": "", "name": "x"}).status_code == 403
+    assert new_folder(client, "x", car_id=99).status_code == 404
+    assert ms.created == []

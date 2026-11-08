@@ -18,6 +18,7 @@ MAX_NOTES_LEN = 2000
 MAX_CATEGORY_LEN = 60
 MAX_PDF_BYTES = 20 * 1024 * 1024
 MAX_FILENAME_LEN = 120
+MAX_FOLDER_NAME_LEN = 255
 GUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 # Characters OneDrive refuses in file and folder names.
 ONEDRIVE_FORBIDDEN = set('"*:<>?/\\|')
@@ -110,6 +111,20 @@ def parse_optional_date(raw):
         return date.fromisoformat(value)
     except ValueError:
         raise ValueError("Date isn't valid.") from None
+
+
+def parse_folder_name(raw):
+    """A new OneDrive folder's name, checked against what OneDrive refuses."""
+    name = (raw or "").strip()
+    if not name:
+        raise ValueError("Enter a name for the new folder.")
+    if len(name) > MAX_FOLDER_NAME_LEN:
+        raise ValueError(f"Folder name is too long (max {MAX_FOLDER_NAME_LEN} characters).")
+    if any(ch in ONEDRIVE_FORBIDDEN or ord(ch) < 32 for ch in name):
+        raise ValueError('Folder names can\'t contain \\ / : * ? " < > | or tabs.')
+    if name.endswith("."):
+        raise ValueError("Folder names can't end with a dot.")
+    return name
 
 
 def invoice_filename(occurred_at, category, vendor):

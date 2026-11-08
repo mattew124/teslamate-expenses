@@ -400,10 +400,11 @@ def create_app(connect=None, onedrive_transport=None):
     @app.get("/onedrive/browse/<int:car_id>")
     def onedrive_browse(car_id):
         need_drive()
-        car = car_or_404(car_id)
+        return render_browse(car_or_404(car_id), request.args.get("folder") or None)
+
+    def render_browse(car, folder_id, error=None, status=200):
         try:
             token = access_token()
-            folder_id = request.args.get("folder") or None
             here = drive.folder(token, folder_id)
             children = drive.subfolders(token, folder_id)
         except onedrive.NotConnected:
@@ -413,7 +414,22 @@ def create_app(connect=None, onedrive_transport=None):
         except onedrive.OneDriveError as exc:
             return render_onedrive(status=502, notice=str(exc))
         return render_template("browse.html", car=car, here=here, children=children,
-                               is_root=folder_id is None)
+                               is_root=folder_id is None, error=error,
+                               new_name=request.form.get("name", "") if error else ""), status
+
+    @app.post("/onedrive/browse/<int:car_id>/new-folder")
+    def onedrive_new_folder(car_id):
+        need_drive()
+        car = car_or_404(car_id)
+        parent_id = request.form.get("parent_id") or None
+        try:
+            name = validation.parse_folder_name(request.form.get("name"))
+            created = drive.create_folder(access_token(), parent_id, name)
+        except onedrive.NotConnected:
+            return redirect(url_for("onedrive_page"), 303)
+        except (ValueError, onedrive.OneDriveError) as exc:
+            return render_browse(car, parent_id, error=str(exc), status=400)
+        return redirect(url_for("onedrive_browse", car_id=car_id, folder=created["id"]), 303)
 
     @app.post("/onedrive/folders/<int:car_id>")
     def onedrive_choose_folder(car_id):

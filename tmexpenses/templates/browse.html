@@ -18,5 +18,12 @@
   <button type="submit" class="button">Use {{ here.path }}</button>
   <a href="{{ url_for('onedrive_page') }}">Cancel</a>
 </form>
-<p><small>To use a new folder, create it in OneDrive first, then reload this page.</small></p>
+<form method="post" action="{{ url_for('onedrive_new_folder', car_id=car.id) }}" class="stack new-folder">
+  <input type="hidden" name="parent_id" value="{{ '' if is_root else here.id }}">
+  <label>New folder in <code>{{ here.path }}</code>
+    <input name="name" maxlength="255" autocomplete="off" placeholder="e.g. Invoices" value="{{ new_name }}">
+    {% if error %}<span class="error">{{ error }}</span>{% endif %}
+  </label>
+  <button type="submit" class="secondary">Create folder</button>
+</form>
 {% endblock %}

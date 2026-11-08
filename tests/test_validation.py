@@ -113,3 +113,11 @@ def test_invoice_filename():
     assert v.invoice_filename(when, "Tyres", 'A/B: "C"*?<>|\\ ') == "2026-11-07 Tyres - A-B- -C-------.pdf"
     long = v.invoice_filename(when, "Tyres", "x" * 500)
     assert len(long) <= 120 and long.endswith(".pdf")
+
+
+def test_folder_name():
+    assert v.parse_folder_name("  2027 invoices ") == "2027 invoices"
+    for bad in ("", "  ", "a/b", "a\\b", "a:b", 'a"b', "a*b", "a?b", "a<b", "a>b", "a|b",
+                "end.", "..", "x" * 256, "tab\there"):
+        with pytest.raises(ValueError):
+            v.parse_folder_name(bad)

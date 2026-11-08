@@ -188,6 +188,20 @@ class OneDrive:
                 break
         return sorted(found, key=lambda f: f["name"].lower())
 
+    def create_folder(self, access_token, parent_id, name):
+        """New folder inside parent_id (the drive root when None). Fails rather
+        than renaming if the name is taken. -> {id, name, path, parent_id}"""
+        base = f"{GRAPH}/me/drive/items/{quote(parent_id, safe='')}" if parent_id else f"{GRAPH}/me/drive/root"
+        body = json.dumps({"name": name, "folder": {}, "@microsoft.graph.conflictBehavior": "fail"}).encode()
+        status, item = self.transport("POST", f"{base}/children", body, {
+            "Authorization": f"Bearer {access_token}", "Content-Type": "application/json"})
+        if status == 409:
+            raise OneDriveError(f"A folder called “{name}” already exists here.")
+        if status not in (200, 201) or "id" not in item:
+            raise OneDriveError("OneDrive didn't create the folder: " + graph_error(status, item))
+        return {"id": item["id"], "name": item["name"], "path": display_path(item),
+                "parent_id": (item.get("parentReference") or {}).get("id")}
+
     def upload(self, access_token, folder_id, filename, content):
         """Simple upload (fine to 250 MB) into a folder, by id. A name that
         already exists gets a suffix rather than being overwritten.

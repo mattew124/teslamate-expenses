@@ -182,6 +182,21 @@ def test_connect_reaches_microsoft(page):
     page.unroute("https://login.microsoftonline.com/**")
 
 
+def test_folder_browser(page):
+    """Read-only: when the dev stack is connected to a real OneDrive, open the
+    folder browser for the first car. Creates nothing and changes no choice."""
+    page.goto(UI + "onedrive")
+    if not page.locator("button:has-text('Disconnect')").count():
+        print("     (skipped: dev stack isn't connected to OneDrive)")
+        return
+    page.locator("ul.folders a").first.click()
+    expect(page.locator("h1")).to_contain_text("Folder for")
+    expect(page.locator("form.new-folder input[name=name]")).to_be_visible()
+    expect(page.locator("button:has-text('Use ')")).to_be_visible()
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    shot(page, "folder-browser-phone")
+
+
 def test_dashboard(page):
     add_expense(page, "62000", "Initial purchase")
     add_expense(page, "1500", "Tyres")
@@ -228,6 +243,7 @@ def main():
         step("phone list shows amount, invoice and edit", test_list_shows_key_fields_on_a_phone, page)
         step("OneDrive page and upload field", test_onedrive_page, page)
         step("Connect OneDrive goes to Microsoft", test_connect_reaches_microsoft, page)
+        step("folder browser (read-only)", test_folder_browser, page)
         # Expected 400s from the deliberate bad submissions above aren't script errors.
         real = [t for t in problems if "400" not in t]
         step("no script or CSP errors", lambda: (_ for _ in ()).throw(AssertionError(real)) if real else None)

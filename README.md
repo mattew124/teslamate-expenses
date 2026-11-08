@@ -74,8 +74,9 @@ expense's invoice link. It works with a personal Microsoft account (OneDrive Per
    the app's **OneDrive** page. The page shows the exact redirect URI to register.
 3. **Connect OneDrive.** You sign in on Microsoft's page and come straight back. The app asks
    for delegated `Files.ReadWrite` and `offline_access`.
-4. **Choose a folder for each car** by browsing your OneDrive. Uploads go by the folder's ID,
-   so renaming or moving it later doesn't break them.
+4. **Choose a folder for each car** by browsing your OneDrive, creating one with **New folder**
+   if it doesn't exist yet. Uploads go by the folder's ID, so renaming or moving it later
+   doesn't break them.
 
 ### Registering the app
 
