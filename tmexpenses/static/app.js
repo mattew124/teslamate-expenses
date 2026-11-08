@@ -8,6 +8,21 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!confirm(form.dataset.confirm)) ev.preventDefault();
     }));
 
+  // Connect OneDrive: go on to Microsoft by navigation, not a form redirect
+  // (form-action would block that). The link works without JavaScript too.
+  const signIn = document.querySelector("a[data-auto-follow]");
+  if (signIn) window.location.assign(signIn.href);
+
+  document.querySelectorAll("[data-copy]").forEach((btn) =>
+    btn.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(btn.dataset.copy);
+        btn.textContent = "Copied";
+      } catch (e) {
+        btn.textContent = "Select the address above and copy it";
+      }
+    }));
+
   const form = document.getElementById("expense-form");
   if (!form) return;
 

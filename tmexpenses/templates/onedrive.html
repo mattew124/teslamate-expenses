@@ -1,53 +1,103 @@
 {% extends "base.html" %}
 {% block title %}OneDrive{% endblock %}
+{% macro err(field) %}{% if errors.get(field) %}<span class="error">{{ errors[field] }}</span>{% endif %}{% endmacro %}
 {% block content %}
 <h1>OneDrive</h1>
 {% if not onedrive_enabled %}
 <p>Invoice PDFs can be uploaded straight to your OneDrive, into a folder you choose for each car.
-  To turn it on, set <code>ONEDRIVE_CLIENT_ID</code> and <code>ONEDRIVE_TOKEN_KEY</code> for the app
-  (see “OneDrive” in the README) and restart it.</p>
+  To turn it on, set <code>ONEDRIVE_TOKEN_KEY</code> for the app (see “OneDrive uploads” in the
+  README) and restart it. Everything else is set up on this page.</p>
 {% else %}
 {% if notice %}<p class="notice bad">{{ notice }}</p>{% endif %}
 
 <section class="stack">
-  <h2>Account</h2>
-  {% if account %}
+  <h2>1. App registration</h2>
+  {% if account and account.client_id %}
+  <p>Client ID <code>{{ account.client_id }}</code>{% if account.secret_expires %}, secret valid until {{ account.secret_expires.strftime('%d %b %Y') }}{% endif %}.</p>
+  {% if secret_days_left is not none and secret_days_left <= 30 %}
+  <p class="notice bad">The client secret expires {% if secret_days_left < 0 %}— it expired {{ -secret_days_left }} days ago{% else %}in {{ secret_days_left }} days{% endif %}.
+    Add a new secret to the app registration and enter it below, then connect again.</p>
+  {% endif %}
+  {% endif %}
+  <details {{ 'open' if not (account and account.client_id) or errors }}>
+    <summary>{{ 'Change the app registration' if account and account.client_id else 'Set up' }}</summary>
+    <p><small>Once per installation, about 10 minutes. Any Microsoft account can register the app,
+      with no paid Azure subscription; the account that matters is the one you sign in with at
+      step 2, whose OneDrive gets the invoices. Use a new registration for this app rather than
+      reusing one made for something else.</small></p>
+    <ol class="steps">
+      <li>Open the <a href="https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank" rel="noopener noreferrer">Microsoft Entra admin center</a>
+        (<strong>Identity → Applications → App registrations</strong>) and choose <strong>New registration</strong>.</li>
+      <li><strong>Name:</strong> anything, e.g. <code>teslamate-expenses</code>.</li>
+      <li><strong>Supported account types:</strong> <strong>Personal Microsoft accounts only</strong>
+        (“any organizational directory and personal Microsoft accounts” also works).</li>
+      <li><strong>Redirect URI:</strong> choose the platform <strong>Web</strong> and enter exactly this address, then <strong>Register</strong>:
+        <code class="copy">{{ callback_url }}</code>
+        <button type="button" class="linklike" data-copy="{{ callback_url }}">Copy address</button>
+        <small>It must match character for character. Microsoft only accepts <code>http://</code> for <code>localhost</code>.</small></li>
+      <li><strong>Authentication:</strong> leave <strong>Allow public client flows</strong> at <strong>No</strong> (the default).
+        <small>With it on, Microsoft treats the app as a public client and every later sign-in refresh fails
+          with <code>AADSTS90023: Public clients can't send a client secret</code>.</small></li>
+      <li><strong>API permissions</strong> (optional): <strong>Add a permission → Microsoft Graph → Delegated permissions</strong>,
+        tick <code>Files.ReadWrite</code> and <code>offline_access</code>.
+        <small>Skip it and you're asked to consent to the same two when you connect.</small></li>
+      <li><strong>Certificates &amp; secrets → Client secrets → New client secret.</strong> Copy its <strong>Value</strong> straight away.
+        <small>It's shown only once, and the <strong>Secret ID</strong> beside it is not the secret. Secrets last at most
+          24 months: note the <strong>Expires</strong> date for the box below.</small></li>
+      <li>From <strong>Overview</strong>, copy the <strong>Application (client) ID</strong> (not secret).</li>
+      <li>Paste both here and save, then press <strong>Connect OneDrive</strong>.</li>
+    </ol>
+    <form method="post" action="{{ url_for('onedrive_credentials') }}" class="stack">
+      <label>Application (client) ID
+        <input name="client_id" autocomplete="off" spellcheck="false" value="{{ values.get('client_id', '') }}" required>{{ err('client_id') }}</label>
+      <label>Client secret value
+        <input name="client_secret" type="password" autocomplete="off" required>{{ err('client_secret') }}
+        <small>Stored encrypted; never shown again.</small></label>
+      <label>Secret expires (optional)
+        <input name="secret_expires" type="date" value="{{ values.get('secret_expires', '') }}">{{ err('secret_expires') }}
+        <small>From the secret's “Expires” column, so this page can warn you before it stops working.</small></label>
+      <button type="submit" class="button">Save</button>
+    </form>
+  </details>
+</section>
+
+{% if account and account.client_id %}
+<section class="stack">
+  <h2>2. Account</h2>
+  {% if connected %}
   <p>Connected as <strong>{{ account.account }}</strong>.</p>
   <form method="post" action="{{ url_for('onedrive_disconnect') }}" data-confirm="Disconnect OneDrive? Uploaded invoices stay where they are.">
     <button type="submit" class="secondary">Disconnect</button>
   </form>
-  {% elif pending %}
-  <ol class="steps">
-    <li>Open <a href="{{ pending.verification_uri }}" target="_blank" rel="noopener noreferrer">{{ pending.verification_uri }}</a>
-      and sign in with the Microsoft account that owns the OneDrive.</li>
-    <li>Enter this code: <code class="user-code">{{ pending.user_code }}</code></li>
-    <li>Come back here and check:</li>
-  </ol>
-  <form method="post" action="{{ url_for('onedrive_check') }}">
-    <button type="submit" class="button" id="check-sign-in">I've signed in</button>
-  </form>
-  <small>The code expires at {{ pending.device_expires_at|when }}.</small>
   {% else %}
-  <p>Not connected.</p>
   <form method="post" action="{{ url_for('onedrive_connect') }}">
     <button type="submit" class="button">Connect OneDrive</button>
   </form>
-  <small>The app can then read and write files in your OneDrive. It only ever writes invoice PDFs, into the folders below.</small>
+  <small>Opens Microsoft's sign-in page, then comes back here. The app can then read and write
+    files in your OneDrive; it only ever writes invoice PDFs, into the folders you choose below.</small>
   {% endif %}
 </section>
+{% endif %}
 
-<form method="post" action="{{ url_for('onedrive_folders') }}" class="stack">
-  <h2>Folder per car</h2>
-  {% for c in cars %}
-  <label>{{ c.name or ('Car ' ~ c.id) }}
-    <input name="folder_{{ c.id }}" maxlength="400" placeholder="e.g. Cars/{{ c.name or 'My car' }}/Invoices"
-           value="{{ folders.get(c.id, '') }}">
-    {% if errors.get(c.id) %}<span class="error">{{ errors[c.id] }}</span>{% endif %}
-  </label>
-  {% endfor %}
-  <small>From the top of your OneDrive, with / between folders. Missing folders are created on the first upload.
-    Files are named by date, category and vendor, e.g. “2026-11-07 Tyres - Tyre Shop.pdf”.</small>
-  <button type="submit" class="button">Save folders</button>
-</form>
+{% if connected %}
+<section class="stack">
+  <h2>3. Folder per car</h2>
+  <ul class="plain folders">
+    {% for c in cars %}{% set f = folders.get(c.id) %}
+    <li>
+      <span><strong>{{ c.name or ('Car ' ~ c.id) }}</strong><br>
+        <small>{{ f.folder_path if f else 'No folder chosen' }}</small></span>
+      <span class="actions">
+        <a href="{{ url_for('onedrive_browse', car_id=c.id) }}">{{ 'Change' if f else 'Choose folder' }}</a>
+        {% if f %}<form method="post" action="{{ url_for('onedrive_clear_folder', car_id=c.id) }}">
+          <button type="submit" class="linklike">Clear</button></form>{% endif %}
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+  <small>Invoices are named by date, category and vendor, e.g. “2026-11-07 Tyres - Tyre Shop.pdf”.
+    The folder can be renamed or moved in OneDrive later without breaking uploads.</small>
+</section>
+{% endif %}
 {% endif %}
 {% endblock %}

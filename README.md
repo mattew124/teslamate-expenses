@@ -64,35 +64,80 @@ can write expenses and read only `cars` and `positions(car_id, date, odometer)`.
 ## OneDrive uploads
 
 With this on, the expense form takes the invoice PDF itself. The app uploads it to the folder
-you set for that car, names it `2026-11-07 Tyres - Tyre Shop.pdf` (date, category, vendor;
+you chose for that car, names it `2026-11-07 Tyres - Tyre Shop.pdf` (date, category, vendor;
 an existing name gets a suffix, never overwritten) and stores the file's OneDrive link as the
 expense's invoice link. It works with a personal Microsoft account (OneDrive Personal).
 
-1. **Register an app** at [Microsoft Entra → App registrations](https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade)
-   → New registration:
-   - Supported account types: **Personal Microsoft accounts only** (or any org directory and
-     personal accounts).
-   - No redirect URI.
-   - Then, under Authentication, set **Allow public client flows** to **Yes**.
-   - Copy the **Application (client) ID**. There is no client secret.
-
-   The app signs in with the device code flow, so it asks for delegated `Files.ReadWrite` and
-   `offline_access` and needs no redirect URI on your hostname.
-2. **Configure.** In `.env`:
+1. **Turn it on.** Add a key to `.env`, re-run `scripts/provision-db.sh` (it adds two tables)
+   and restart the app:
 
    ```bash
-   ONEDRIVE_CLIENT_ID=<application (client) id>
    ONEDRIVE_TOKEN_KEY=<output of: openssl rand -base64 32 | tr '+/' '-_'>
    ```
 
-   The key encrypts the saved sign-in (a refresh token for your whole OneDrive) before it goes
-   into the database, so a database dump or backup on its own can't open the drive. Keep the key
-   out of those backups. If you lose or change it, connect again.
-3. **Re-run `scripts/provision-db.sh`** (it adds the two tables), restart the app, open the
-   **OneDrive** page, press **Connect OneDrive**, enter the code shown at
-   microsoft.com/devicelogin, then press **I've signed in**.
-4. **Set a folder per car** on the same page, e.g. `Cars/Model 3/Invoices`, from the top of
-   your OneDrive. Missing folders are created on the first upload.
+   The key encrypts the client secret and the saved sign-in (a refresh token for your whole
+   OneDrive) before they go into the database, so a database dump or backup on its own can't
+   open the drive. Keep the key out of those backups. If you lose or change it, enter the
+   secret and connect again.
+2. **Register an app with Microsoft** (once per installation; see
+   [Registering the app](#registering-the-app) below), then enter its client ID and secret on
+   the app's **OneDrive** page. The page shows the exact redirect URI to register.
+3. **Connect OneDrive.** You sign in on Microsoft's page and come straight back. The app asks
+   for delegated `Files.ReadWrite` and `offline_access`.
+4. **Choose a folder for each car** by browsing your OneDrive, creating one with **New folder**
+   if it doesn't exist yet. Uploads go by the folder's ID, so renaming or moving it later
+   doesn't break them.
+
+### Registering the app
+
+Any Microsoft account can register the app, including the personal one that owns the OneDrive.
+It needs no paid Azure subscription: Microsoft creates a free directory for personal-account
+registrations. The account choice that matters comes later, at **Connect OneDrive**, where you
+sign in as the account whose OneDrive gets the invoices.
+
+1. In the [Microsoft Entra admin center](https://entra.microsoft.com), go to **Identity** →
+   **Applications** → **App registrations** → **New registration**.
+2. **Name:** anything, e.g. `teslamate-expenses`.
+3. **Supported account types:** **Personal Microsoft accounts only**. "Accounts in any
+   organizational directory and personal Microsoft accounts" also works.
+4. **Redirect URI:** platform **Web**, and the address shown on the app's OneDrive page,
+   `https://<your host><BASE_PATH>/onedrive/callback`. It must match byte for byte, scheme
+   and path included, and Microsoft accepts plain `http://` only for `localhost`. Then
+   **Register**.
+5. **Authentication:** leave **Allow public client flows** at **No** (the default). Turning it on
+   makes Microsoft treat the app as a public client, and every token refresh then fails with
+   `AADSTS90023: Public clients can't send a client secret`.
+6. **API permissions** (optional): **Add a permission** → **Microsoft Graph** →
+   **Delegated permissions** → `Files.ReadWrite` and `offline_access`. If you skip this, you're
+   asked to consent to the same two at the first sign-in.
+7. **Certificates & secrets** → **Client secrets** → **New client secret**. Copy its **Value**
+   straight away; it's shown only once, and the **Secret ID** next to it is not the secret.
+   Secrets last at most 24 months, so note the **Expires** date.
+8. From **Overview**, copy the **Application (client) ID**. It isn't secret.
+9. On the app's **OneDrive** page, paste the client ID, the secret's value and its expiry date,
+   then press **Connect OneDrive**.
+
+A dev stack or second installation needs its own callback address: add it as another **Web**
+redirect URI on the same registration.
+
+Why the normal web sign-in and not a device code or the "nativeclient" redirect: both have
+been tried with personal accounts and fail. A device-code sign-in marks the app as a public
+client and breaks refreshes (`AADSTS90023` above). Microsoft's out-of-band
+`https://login.microsoftonline.com/common/oauth2/nativeclient` page now redirects to an error
+page after a few seconds, which made rclone and the
+[abraunegg/onedrive](https://github.com/abraunegg/onedrive/discussions/3558) client drop it too.
+
+References: [Register an application](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app) ·
+[Authorization code flow](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow) ·
+[Graph permissions](https://learn.microsoft.com/en-us/graph/permissions-reference) ·
+[Remove an app's access to your account](https://account.live.com/consent/Manage)
+
+Every installation registers its own app because Microsoft only redirects to addresses
+registered on the app, and each installation has its own. Sign-in uses PKCE, and the
+callback must return to the browser that started it.
+
+The redirect URI is built from the proxy's `X-Forwarded-Proto` and `X-Forwarded-Host`
+headers, so the proxy must set them (Traefik does).
 
 PDFs only (checked by content, not just the name), up to 20 MB. Uploading on the edit page
 replaces the link; the old file stays in OneDrive. Disconnecting deletes the saved sign-in;
@@ -156,9 +201,9 @@ parallel branches never share running code. `scripts/dev.sh info` shows a checko
 ports, `list` shows every running dev stack, and `destroy` removes one. `.worktreeinclude`
 copies your `dev.env` into new Claude Code worktrees.
 
-To try OneDrive uploads in dev, set `ONEDRIVE_CLIENT_ID` in `dev.env`; the token key is
-generated into `.dev/env`. A sign-in there writes to your real OneDrive, so give each car a test
-folder.
+OneDrive is on in the dev stack with a throwaway token key in `.dev/env`. To sign in there,
+add the dev stack's callback address (shown on its OneDrive page) as a second redirect URI on
+your app registration. A sign-in writes to your real OneDrive, so give each car a test folder.
 
 The seed only reads from TeslaMate. It copies all of `cars` and `charging_processes`, and one
 `positions` row per hour with latitude, longitude and elevation blanked. `up` warns if

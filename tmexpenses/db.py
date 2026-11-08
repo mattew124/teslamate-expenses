@@ -200,19 +200,21 @@ def odometer_at(conn, car_id, when):
 # ---- OneDrive ------------------------------------------------------------------
 
 def car_folders(conn):
-    """-> {car_id: folder}"""
-    return {r["car_id"]: r["onedrive_folder"] for r in
-            conn.execute("SELECT car_id, onedrive_folder FROM expenses.car_folder")}
+    """-> {car_id: {folder_id, folder_path}}"""
+    return {r["car_id"]: r for r in
+            conn.execute("SELECT car_id, folder_id, folder_path FROM expenses.car_folder")}
 
 
-def set_car_folder(conn, car_id, folder):
-    if folder is None:
-        conn.execute("DELETE FROM expenses.car_folder WHERE car_id = %s", (car_id,))
-    else:
-        conn.execute(
-            "INSERT INTO expenses.car_folder (car_id, onedrive_folder) VALUES (%s, %s) "
-            "ON CONFLICT (car_id) DO UPDATE SET onedrive_folder = EXCLUDED.onedrive_folder",
-            (car_id, folder))
+def set_car_folder(conn, car_id, folder_id, folder_path):
+    conn.execute(
+        "INSERT INTO expenses.car_folder (car_id, folder_id, folder_path) VALUES (%s, %s, %s) "
+        "ON CONFLICT (car_id) DO UPDATE SET folder_id = EXCLUDED.folder_id, "
+        "folder_path = EXCLUDED.folder_path",
+        (car_id, folder_id, folder_path))
+
+
+def clear_car_folder(conn, car_id):
+    conn.execute("DELETE FROM expenses.car_folder WHERE car_id = %s", (car_id,))
 
 
 def onedrive_account(conn, lock=False):
@@ -233,6 +235,3 @@ def save_onedrive_account(conn, **fields):
         f"ON CONFLICT (id) DO UPDATE SET {sets}, updated_at = now()",
         fields)
 
-
-def forget_onedrive_account(conn):
-    conn.execute("DELETE FROM expenses.onedrive_account")

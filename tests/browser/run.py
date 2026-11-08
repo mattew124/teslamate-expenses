@@ -169,33 +169,59 @@ def test_list_shows_key_fields_on_a_phone(page):
 
 
 def test_onedrive_page(page):
-    """Works whether or not the stack has ONEDRIVE_CLIENT_ID. When it has, the
-    folder of the first car is saved and put back, and the form offers an upload."""
+    """The setup steps render on a phone, with the address to register. Only
+    invalid details are submitted, so a real registration in the dev database
+    is left alone."""
     page.goto(UI + "onedrive")
     expect(page.locator("h1")).to_have_text("OneDrive")
-    if not page.locator("input[name^=folder_]").count():
-        expect(page.locator("main")).to_contain_text("ONEDRIVE_CLIENT_ID")
-        page.goto(UI + "new")
-        expect(page.locator("input[name=invoice_file]")).to_have_count(0)
-        shot(page, "onedrive-off-phone")
-        return
-    field = page.locator("input[name^=folder_]").first
-    before = field.input_value()
-    field.fill(" /Bad/../Folder ")
-    page.click("text=Save folders")
-    expect(page.locator(".error").first).to_contain_text("can't be a OneDrive folder name")
-    page.locator("input[name^=folder_]").first.fill(f"/{MARKER}//Invoices/")
-    page.click("text=Save folders")
-    page.wait_for_url(re.compile(r"msg=folders"))
-    expect(page.locator("input[name^=folder_]").first).to_have_value(f"{MARKER}/Invoices")
+    expect(page.locator("code.copy")).to_have_text(re.compile(re.escape(BASE) + r"/onedrive/callback$"))
+    if not page.locator("details[open]").count():
+        page.click("summary")
+    page.fill("input[name=client_id]", "not-a-client-id")
+    page.fill("input[name=client_secret]", "x")
+    page.click("details button[type=submit]")
+    expect(page.locator(".error").first).to_contain_text("Application (client) ID")
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     shot(page, "onedrive-phone")
-    page.locator("input[name^=folder_]").first.fill(before)
-    page.click("text=Save folders")
-    page.wait_for_url(re.compile(r"msg=folders"))
     page.goto(UI + "new")
     expect(page.locator("input[name=invoice_file]")).to_have_attribute("accept", "application/pdf,.pdf")
     shot(page, "form-onedrive-phone")
+
+
+def test_connect_reaches_microsoft(page):
+    """Real Chromium enforces the CSP, so this is where a blocked redirect shows.
+    The request to Microsoft is answered locally and never sent. Runs only when
+    the dev database has an app registration saved."""
+    page.goto(UI + "onedrive")
+    button = page.locator("button:has-text('Connect OneDrive')")
+    if not button.count():
+        print("     (skipped: no app registration saved, or already connected)")
+        return
+    reached = []
+
+    def stub(route):
+        reached.append(route.request.url)
+        route.fulfill(status=200, content_type="text/html", body="<p>stub Microsoft sign-in</p>")
+    page.route("https://login.microsoftonline.com/**", stub)
+    button.click()
+    page.wait_for_url(re.compile(r"^https://login\.microsoftonline\.com/consumers/oauth2/v2\.0/authorize\?"))
+    assert reached and "code_challenge=" in reached[0]
+    page.unroute("https://login.microsoftonline.com/**")
+
+
+def test_folder_browser(page):
+    """Read-only: when the dev stack is connected to a real OneDrive, open the
+    folder browser for the first car. Creates nothing and changes no choice."""
+    page.goto(UI + "onedrive")
+    if not page.locator("button:has-text('Disconnect')").count():
+        print("     (skipped: dev stack isn't connected to OneDrive)")
+        return
+    page.locator("ul.folders a").first.click()
+    expect(page.locator("h1")).to_contain_text("Folder for")
+    expect(page.locator("form.new-folder input[name=name]")).to_be_visible()
+    expect(page.locator("button:has-text('Use ')")).to_be_visible()
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    shot(page, "folder-browser-phone")
 
 
 def test_dashboard(page):
@@ -244,6 +270,8 @@ def main():
         step("header stays tidy on a phone", test_header_stays_tidy_on_a_phone, page)
         step("phone list shows amount, invoice and edit", test_list_shows_key_fields_on_a_phone, page)
         step("OneDrive page and upload field", test_onedrive_page, page)
+        step("Connect OneDrive goes to Microsoft", test_connect_reaches_microsoft, page)
+        step("folder browser (read-only)", test_folder_browser, page)
         # Expected 400s from the deliberate bad submissions above aren't script errors.
         real = [t for t in problems if "400" not in t]
         step("no script or CSP errors", lambda: (_ for _ in ()).throw(AssertionError(real)) if real else None)

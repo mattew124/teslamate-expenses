@@ -22,9 +22,8 @@ services:
       DATABASE_USER: teslamate
       DATABASE_PASS: ${DEV_ADMIN_DB_PASS:-}
       BASE_PATH: ${DEV_BASE_PATH:-/expenses-dev}
-      # Optional: ONEDRIVE_CLIENT_ID in dev.env turns on invoice uploads. The
-      # token key is a throwaway one from .dev/env.
-      ONEDRIVE_CLIENT_ID: ${ONEDRIVE_CLIENT_ID:-}
+      # OneDrive is on in dev, with a throwaway key from .dev/env; the app
+      # registration is entered on its OneDrive page.
       ONEDRIVE_TOKEN_KEY: ${DEV_ONEDRIVE_TOKEN_KEY:-}
       APP_TZ: ${APP_TZ:-UTC}
       TZ: ${APP_TZ:-UTC}

@@ -89,21 +89,20 @@ def test_invoice_pdf():
             v.parse_invoice_pdf(name, data)
 
 
-@pytest.mark.parametrize("raw,expected", [
-    ("", None), ("  ", None), ("/", None),
-    ("Cars/Model 3/Invoices", "Cars/Model 3/Invoices"),
-    (" /Cars//Model 3/ Invoices / ", "Cars/Model 3/Invoices"),
-    ("Documents", "Documents"),
-])
-def test_onedrive_folder_ok(raw, expected):
-    assert v.parse_onedrive_folder(raw) == expected
+def test_client_id():
+    guid = "11111111-2222-3333-4444-555555555555"
+    assert v.parse_client_id(f"  {guid.upper()} ") == guid
+    for bad in ("", "abc", guid + "0", "{" + guid + "}"):
+        with pytest.raises(ValueError, match="Application"):
+            v.parse_client_id(bad)
 
 
-@pytest.mark.parametrize("raw", ["Cars/../Secret", "Cars/./x", "a:b", "a*b", 'a"b', "a<b", "a>b",
-                                 "a?b", "a|b", "Cars\\Model 3", "Cars/trailing.", "x" * 401, "a\tb"])
-def test_onedrive_folder_rejected(raw):
+def test_optional_date():
+    from datetime import date
+    assert v.parse_optional_date("") is None
+    assert v.parse_optional_date("2027-06-30") == date(2027, 6, 30)
     with pytest.raises(ValueError):
-        v.parse_onedrive_folder(raw)
+        v.parse_optional_date("30/06/2027")
 
 
 def test_invoice_filename():
@@ -114,3 +113,11 @@ def test_invoice_filename():
     assert v.invoice_filename(when, "Tyres", 'A/B: "C"*?<>|\\ ') == "2026-11-07 Tyres - A-B- -C-------.pdf"
     long = v.invoice_filename(when, "Tyres", "x" * 500)
     assert len(long) <= 120 and long.endswith(".pdf")
+
+
+def test_folder_name():
+    assert v.parse_folder_name("  2027 invoices ") == "2027 invoices"
+    for bad in ("", "  ", "a/b", "a\\b", "a:b", 'a"b', "a*b", "a?b", "a<b", "a>b", "a|b",
+                "end.", "..", "x" * 256, "tab\there"):
+        with pytest.raises(ValueError):
+            v.parse_folder_name(bad)
