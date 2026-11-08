@@ -25,6 +25,8 @@
         <input type="hidden" name="url_{{ n }}" value="{{ r.url }}">
         <input type="hidden" name="name_{{ n }}" value="{{ r.name }}">
         <input type="hidden" name="folder_{{ n }}" value="{{ r.folder }}">
+        <input type="hidden" name="id_{{ n }}" value="{{ r.id }}">
+        {% for k, v in r.guess.items() %}<input type="hidden" name="guess_{{ k }}_{{ n }}" value="{{ v }}">{% endfor %}
       </div></td>
       <td data-label="Date"><input type="date" name="date_{{ n }}" value="{{ r.date }}"></td>
       <td data-label="Category">
@@ -45,6 +47,9 @@
     <button type="submit" class="button">Import ticked</button>
     <a href="{{ url_for('onedrive_page') }}">Cancel</a>
   </div>
+  <p><small>When you correct a date, amount or odometer, the app remembers the label printed beside it in the
+    PDF (never the value), and which category a vendor's invoices get. After {{ learn_after }} confirmations it uses them for
+    later guesses. <a href="{{ url_for('learned_page') }}">See and remove what it has learned</a>.</small></p>
 </form>
 {% elif not notice %}
 <p class="empty">Every PDF in the folder already has an expense. <a href="{{ url_for('onedrive_page') }}">Back</a></p>

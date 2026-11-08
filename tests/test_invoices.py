@@ -105,3 +105,62 @@ def test_amount_from_amount_paid():
 
 def test_excess_alone_is_not_an_amount():
     assert invoices.propose("", "x.pdf", "Excess   $800.00\nSum insured $60,000.00", CATS)["amount"] is None
+
+
+# ---- learning labels from what the owner typed ----------------------------------
+
+from datetime import date as _date  # noqa: E402
+
+
+def test_find_labels_for_an_amount_in_the_next_column():
+    assert invoices.find_labels(INSURER, "amount", Decimal("1380.36")) == {"annual premium", "pay annually"}
+
+
+def test_find_labels_when_label_and_value_share_a_column():
+    assert invoices.find_labels("  Amount paid: $55.00\n", "amount", Decimal("55.00")) == {"amount paid"}
+
+
+def test_find_labels_for_a_date_in_any_common_format():
+    for text in ("Date of issue:   09/02/2024", "Date of issue:   9 Feb 2024", "Date of issue   2024-02-09",
+                 "Date of issue:   09 February 2024"):
+        assert invoices.find_labels(text, "date", _date(2024, 2, 9)) == {"date of issue"}, text
+
+
+def test_find_labels_for_an_odometer():
+    assert invoices.find_labels("Odometer reading:   45,120 km", "odometer_km", 45120.0) == {"odometer reading"}
+
+
+def test_find_labels_ignores_labels_with_digits_or_a_lone_word():
+    assert invoices.find_labels("Issued at 8.08pm on 09/02/2024\nDue   09/02/2024", "date", _date(2024, 2, 9)) == set()
+
+
+def test_nothing_is_learned_when_the_value_isnt_in_the_text():
+    assert invoices.find_labels(INSURER, "amount", Decimal("12.34")) == set()
+
+
+LEARNED = {"labels": {"amount": {"sum charged"}, "date": {"date of issue"}, "odometer_km": {"odometer reading"}},
+           "vendors": {"example garage pty ltd": "Tyres"}}
+GARAGE = "Example Garage Pty Ltd\nDate of issue:   09/02/2024\nSum charged:   $77.50\nOdometer reading:   45,120 km\n"
+
+
+def test_learned_labels_fill_what_built_in_rules_miss():
+    got = invoices.propose("", "scan.pdf", GARAGE, CATS, LEARNED)
+    assert got["amount"] == Decimal("77.50") and got["date"] == _date(2024, 2, 9) and got["odometer_km"] == "45120"
+
+
+def test_learned_labels_are_unused_when_not_passed():
+    assert invoices.propose("", "scan.pdf", GARAGE, CATS)["amount"] is None
+
+
+def test_a_learned_label_with_two_different_values_leaves_the_field_blank():
+    got = invoices.propose("", "scan.pdf", GARAGE + "Sum charged:   $99.00\n", CATS, LEARNED)
+    assert got["amount"] is None and "amount" in got["missing"]
+
+
+def test_the_filename_date_beats_a_learned_label():
+    assert invoices.propose("", "261024 - x.pdf", GARAGE, CATS, LEARNED)["date"] == _date(2026, 10, 24)
+
+
+def test_learned_vendor_sets_the_category_over_the_folder_but_not_the_filename():
+    assert invoices.propose("Registration", "scan.pdf", GARAGE, CATS, LEARNED)["category"] == "Tyres"
+    assert invoices.propose("Registration", "261024 - Insurance.pdf", GARAGE, CATS, LEARNED)["category"] == "Insurance"

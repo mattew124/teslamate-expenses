@@ -11,7 +11,7 @@ import re
 import shutil
 import subprocess
 import tempfile
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
@@ -20,6 +20,12 @@ OCR_TIMEOUT = 120
 OCR_MAX_PAGES = 3
 # Fewer characters than this per document means a scan with no text layer.
 MIN_TEXT_CHARS = 40
+
+# A label must be confirmed by the owner this many times before it is trusted.
+LEARN_AFTER = 2
+LEARNABLE = ("amount", "date", "odometer_km")
+_LABEL_OK = re.compile(r"[a-z][a-z &/'()-]{1,38}[a-z)]")
+_DATE_FORMATS = ("%d/%m/%Y", "%d/%m/%y", "%d-%m-%Y", "%d.%m.%Y", "%Y-%m-%d", "%d %b %Y", "%d %B %Y")
 
 FILENAME_DATE = re.compile(r"^\s*(?:(\d{4})-(\d{2})-(\d{2})|(\d{4})(\d{2})(\d{2})|(\d{2})(\d{2})(\d{2}))(?!\d)")
 TEXT_DATE = re.compile(r"(?:invoice|tax invoice|issue|issued|statement|payment)?\s*date\s*:?\s*(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})", re.I)
@@ -82,14 +88,10 @@ def _date_from_text(text):
     return _valid(int(m.group(3)), int(m.group(2)), int(m.group(1))) if m else None
 
 
-def _category(folder, name, categories):
-    """The longest category name found in the file name, else in the folder path."""
-    for haystack in (name, folder):
-        low = haystack.lower()
-        hits = [c for c in categories if c.lower() in low]
-        if hits:
-            return max(hits, key=len)
-    return None
+def _category_in(haystack, categories):
+    low = haystack.lower()
+    hits = [c for c in categories if c.lower() in low]
+    return max(hits, key=len) if hits else None
 
 
 def _amount(text):
@@ -124,18 +126,131 @@ def _vendor(name, category, text):
     return None
 
 
-def propose(folder, name, text, categories):
+def norm_label(raw):
+    """A printed label as stored: lower case, no colon. None for anything that isn't
+    plainly a label: digits (dates, policy numbers), or a lone word without a colon
+    (too ambiguous to trust)."""
+    text = " ".join(raw.lower().replace("\u00a0", " ").split())
+    colon = text.endswith(":")
+    text = text.rstrip(":").strip(" -\u2013\u2014.")
+    if not _LABEL_OK.fullmatch(text) or (not colon and " " not in text):
+        return None
+    return text
+
+
+def _parse_date(text):
+    for fmt in _DATE_FORMATS:
+        try:
+            return datetime.strptime(text.strip(), fmt).date()
+        except ValueError:
+            pass
+    return None
+
+
+def _parse_value(field, text):
+    text = text.strip()
+    if field == "amount":
+        m = MONEY.fullmatch(text) or re.fullmatch(r"([\d,]+\.\d{2})", text)
+        return Decimal(m.group(1).replace(",", "")) if m else None
+    if field == "date":
+        return _parse_date(text)
+    m = re.fullmatch(r"([\d,]+)(?:\s*km)?", text, re.I)
+    return float(m.group(1).replace(",", "")) if m else None
+
+
+def _variants(field, value):
+    """Every way the PDF might print this value."""
+    if field == "amount":
+        return {f"{value:,.2f}", f"{value:.2f}"}
+    if field == "date":
+        d = value
+        return {d.strftime(f) for f in ("%d/%m/%Y", "%d/%m/%y", "%d-%m-%Y", "%d.%m.%Y", "%Y-%m-%d", "%d %b %Y", "%d %B %Y")} | {
+            f"{d.day}/{d.month}/{d.year}", f"{d.day} {d.strftime('%b %Y')}", f"{d.day} {d.strftime('%B %Y')}"}
+    n = int(round(float(value)))
+    return {f"{n:,}", str(n)}
+
+
+def find_labels(text, field, value):
+    """Labels printed next to `value` in the PDF text: the previous layout column, or
+    the words before it in the same column. Only labels, never values, are returned."""
+    variants = {v.lower() for v in _variants(field, value)}
+    found = set()
+    for line in text.splitlines():
+        columns = [c.strip() for c in re.split(r"\s{2,}", line.strip()) if c.strip()]
+        for i, col in enumerate(columns):
+            bare = re.sub(r"\s*km$", "", col.lower()).strip()
+            bare = bare.lstrip("$ ") if field == "amount" and bare.startswith("$") else bare
+            if bare in variants:
+                label = norm_label(columns[i - 1]) if i else None
+            else:
+                label = None
+                for v in variants:
+                    if bare.endswith(v) and len(bare) > len(v):
+                        label = norm_label(bare[:-len(v)].rstrip("$ "))
+                        break
+            if label:
+                found.add(label)
+    return found
+
+
+def _by_labels(text, field, labels):
+    """-> ('none' | 'one' | 'many', value). The value(s) that follow any learned label."""
+    values = set()
+    for line in text.splitlines():
+        columns = [c.strip() for c in re.split(r"\s{2,}", line.strip()) if c.strip()]
+        for i, col in enumerate(columns):
+            low = " ".join(col.lower().split())
+            for label in labels:
+                if norm_label(low) == label and i + 1 < len(columns):
+                    got = _parse_value(field, columns[i + 1])
+                elif low.startswith(label) and len(low) > len(label) and low[len(label):].lstrip(": ")[:1]:
+                    rest = col[len(label):] if col.lower().startswith(label) else ""
+                    got = _parse_value(field, rest.lstrip(": "))
+                else:
+                    continue
+                if got is not None:
+                    values.add(got)
+    if not values:
+        return "none", None
+    return ("one", next(iter(values))) if len(values) == 1 else ("many", None)
+
+
+def propose(folder, name, text, categories, learned=None):
     """-> {date, category, vendor, amount, odometer_km, missing}. `missing` names the
-    required fields (date, category, amount) that couldn't be worked out."""
-    when = _date_from_filename(name) or _date_from_text(text)
-    category = _category(folder, name, categories)
-    odo = ODOMETER.search(text)
-    out = {
-        "date": when,
-        "category": category,
-        "vendor": _vendor(name, category, text),
-        "amount": _amount(text),
-        "odometer_km": odo.group(1).replace(",", "") if odo else None,
-    }
+    required fields (date, category, amount) that couldn't be worked out. `learned` is
+    {"labels": {field: {label}}, "vendors": {vendor lower-case: category}}: what the
+    owner's earlier corrections taught (see db.learned)."""
+    labels = (learned or {}).get("labels", {})
+    vendors = (learned or {}).get("vendors", {})
+
+    def learned_value(field):
+        return _by_labels(text, field, labels[field]) if labels.get(field) else ("none", None)
+
+    # Date: the owner's file name, then a learned label, then the built-in text rules.
+    when = _date_from_filename(name)
+    if when is None:
+        kind, value = learned_value("date")
+        when = value if kind != "none" else _date_from_text(text)
+
+    kind, amount = learned_value("amount")
+    if kind == "none":
+        amount = _amount(text)
+
+    kind, odo_value = learned_value("odometer_km")
+    if kind == "none":
+        odo = ODOMETER.search(text)
+        odometer = odo.group(1).replace(",", "") if odo else None
+    else:
+        odometer = str(int(odo_value)) if odo_value is not None else None
+
+    # Category: a name in the file name, else the vendor the owner has taught, else the folder.
+    category = _category_in(name, categories)
+    vendor = _vendor(name, category, text)
+    if category is None and vendor and vendors.get(vendor.lower()) in categories:
+        category = vendors[vendor.lower()]
+    if category is None:
+        category = _category_in(folder, categories)
+
+    out = {"date": when, "category": category, "vendor": vendor, "amount": amount, "odometer_km": odometer}
     out["missing"] = [f for f in ("date", "category", "amount") if out[f] is None]
     return out

@@ -45,6 +45,23 @@ BEGIN
     END IF;
 END $$;
 
+-- What the invoice importer has learned from the owner's corrections. Labels only (the
+-- words printed beside a value, e.g. 'annual premium'), never amounts or document text.
+-- A label is trusted once it has been confirmed `hits` >= 2 times.
+CREATE TABLE IF NOT EXISTS expenses.learned_label (
+    field text NOT NULL CHECK (field IN ('amount', 'date', 'odometer_km')),
+    label text NOT NULL CHECK (length(label) BETWEEN 3 AND 40),
+    hits  integer NOT NULL DEFAULT 1,
+    PRIMARY KEY (field, label)
+);
+-- Vendor (lower case) -> the category the owner gave its invoices.
+CREATE TABLE IF NOT EXISTS expenses.learned_vendor (
+    vendor      text NOT NULL CHECK (length(vendor) BETWEEN 1 AND 100),
+    category_id smallint NOT NULL REFERENCES expenses.category (id) ON DELETE CASCADE,
+    hits        integer NOT NULL DEFAULT 1,
+    PRIMARY KEY (vendor, category_id)
+);
+
 -- Settings, saved from the app's Settings page (the same idea as TeslaMate's own).
 -- A single row. Both are optional, and http(s) only: they are rendered as links.
 --   expenses_url  where this app is published; the Grafana dashboard links back to it

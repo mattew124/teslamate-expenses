@@ -176,6 +176,51 @@ def insert_expense(conn, v):
     ).fetchone()["id"]
 
 
+def learned(conn, after):
+    """What the importer trusts: labels confirmed `after`+ times, and for each vendor
+    its clear-cut category. -> {"labels": {field: {label}}, "vendors": {vendor: category}}."""
+    labels = {}
+    for r in conn.execute("SELECT field, label FROM expenses.learned_label WHERE hits >= %s", (after,)):
+        labels.setdefault(r["field"], set()).add(r["label"])
+    vendors, seen = {}, {}
+    for r in conn.execute(
+            "SELECT l.vendor, c.name, l.hits FROM expenses.learned_vendor l "
+            "JOIN expenses.category c ON c.id = l.category_id WHERE l.hits >= %s "
+            "ORDER BY l.vendor, l.hits DESC", (after,)):
+        if r["vendor"] not in seen:
+            seen[r["vendor"]] = r["hits"]
+            vendors[r["vendor"]] = r["name"]
+        elif seen[r["vendor"]] == r["hits"]:
+            vendors.pop(r["vendor"], None)   # two categories tied: no clear answer
+    return {"labels": labels, "vendors": vendors}
+
+
+def record_label(conn, field, label):
+    conn.execute("INSERT INTO expenses.learned_label (field, label) VALUES (%s, %s) "
+                 "ON CONFLICT (field, label) DO UPDATE SET hits = expenses.learned_label.hits + 1",
+                 (field, label))
+
+
+def record_vendor(conn, vendor, category_id):
+    conn.execute("INSERT INTO expenses.learned_vendor (vendor, category_id) VALUES (%s, %s) "
+                 "ON CONFLICT (vendor, category_id) DO UPDATE SET hits = expenses.learned_vendor.hits + 1",
+                 (vendor, category_id))
+
+
+def learned_rows(conn):
+    return (conn.execute("SELECT field, label, hits FROM expenses.learned_label ORDER BY field, label").fetchall(),
+            conn.execute("SELECT l.vendor, c.name AS category, l.hits FROM expenses.learned_vendor l "
+                         "JOIN expenses.category c ON c.id = l.category_id ORDER BY l.vendor, c.name").fetchall())
+
+
+def delete_label(conn, field, label):
+    conn.execute("DELETE FROM expenses.learned_label WHERE field = %s AND label = %s", (field, label))
+
+
+def delete_vendor(conn, vendor):
+    conn.execute("DELETE FROM expenses.learned_vendor WHERE vendor = %s", (vendor,))
+
+
 def known_invoice_urls(conn, urls):
     """Which of these invoice links an expense already has."""
     if not urls:

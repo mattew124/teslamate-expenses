@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Learned from your corrections{% endblock %}
+{% block content %}
+<h1>Learned from your corrections</h1>
+<p>When you correct a guess on the invoice import page, the app remembers the label printed beside the
+  value in the PDF, and which category a vendor's invoices get. Only labels and vendor names are kept,
+  never amounts or document text. A label or vendor is used for later guesses once it has been
+  confirmed {{ after }} times.</p>
+
+<h2>Labels</h2>
+{% if labels %}
+<ul class="plain learned-list">
+  {% for l in labels %}
+  <li><span><strong>{{ l.label }}</strong> <small>{{ {'amount': 'amount', 'date': 'date', 'odometer_km': 'odometer'}[l.field] }} · confirmed {{ l.hits }}×{{ '' if l.hits >= after else ' (not used yet)' }}</small></span>
+    <form method="post" action="{{ url_for('learned_label_delete') }}">
+      <input type="hidden" name="field" value="{{ l.field }}"><input type="hidden" name="label" value="{{ l.label }}">
+      <button type="submit" class="linklike">Remove</button></form></li>
+  {% endfor %}
+</ul>
+{% else %}<p class="empty">Nothing yet.</p>{% endif %}
+
+<h2>Vendors</h2>
+{% if vendors %}
+<ul class="plain learned-list">
+  {% for v in vendors %}
+  <li><span><strong>{{ v.vendor }}</strong> → {{ v.category }} <small>confirmed {{ v.hits }}×{{ '' if v.hits >= after else ' (not used yet)' }}</small></span>
+    <form method="post" action="{{ url_for('learned_vendor_delete') }}">
+      <input type="hidden" name="vendor" value="{{ v.vendor }}"><button type="submit" class="linklike">Remove</button></form></li>
+  {% endfor %}
+</ul>
+{% else %}<p class="empty">Nothing yet.</p>{% endif %}
+{% endblock %}
