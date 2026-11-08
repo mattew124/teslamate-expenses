@@ -198,17 +198,6 @@ PDF leaves the field blank rather than guessing. Nothing is learned if your valu
 PDF text. **Import page → See and remove what it has learned** lists everything and lets you
 delete it. This stores only short labels and vendor names, in the `expenses` schema.
 
-## Logs
-
-The app logs to docker's own logs (stdout/stderr), so whatever collects those keeps them across
-container recreates. `LOG_LEVEL` (`debug`, `info` by default, `warning`, `error`) sets how much it
-says. At `debug` every invoice read is described in one line: the file name, size, a short hash,
-how its text was read (text layer or OCR), which fields were found and which weren't, and how long it
-took, for example `prefill file="261024 - Tyres.pdf" bytes=122032 sha256=ab12cd34ef56 found=date,category,amount
-missing=- ms=310`. Document text, amounts and dates are never logged. Problems that change a result (a
-missing poppler/tesseract, a failed rename, a refused upload) are warnings at any level. The dev stack
-runs at `debug`.
-
 ## What the dashboard counts
 
 All of it lives in the `expenses.ownership` view (`tmexpenses/schema.sql`), one row per car:

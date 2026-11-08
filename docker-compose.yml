@@ -20,7 +20,6 @@ services:
       FQDN_TM: ${FQDN_TM:-}
       APP_TZ: ${APP_TZ:-UTC}
       TZ: ${APP_TZ:-UTC}
-      LOG_LEVEL: ${LOG_LEVEL:-info}
     ports:
       # Loopback only; docker-compose.traefik.yml publishes it behind forward-auth.
       - "127.0.0.1:${HOST_PORT:-8088}:8080"

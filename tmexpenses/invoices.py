@@ -16,7 +16,7 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-from .logs import Timer
+from .docinfo import Timer
 
 log = logging.getLogger("tmexpenses.invoices")
 

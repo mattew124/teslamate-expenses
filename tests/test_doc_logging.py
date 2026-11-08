@@ -1,6 +1,7 @@
 """Debug logging per document: enough to see what happened to a file, never its contents.
 
-Logs go to stdout/stderr (docker's own logging, picked up by whatever collects those).
+The level and handlers belong to the logging setup (LOG_LEVEL); here the records are read straight
+from the "tmexpenses" logger and its children.
 """
 
 import io
@@ -8,7 +9,7 @@ import logging
 
 import pytest
 
-from tmexpenses import invoices, create_app
+from tmexpenses import invoices
 from tests.test_app import ORIGIN
 from tests.test_import import TEXT, app_for, client, cat, ms, post_rows  # noqa: F401  (fixtures)
 from tests.test_onedrive import choose_folder, sign_in, with_pdf  # noqa: F401
@@ -16,8 +17,7 @@ from tests.test_app import form
 
 
 @pytest.fixture(autouse=True)
-def debug_level(monkeypatch, caplog):
-    monkeypatch.setenv("LOG_LEVEL", "debug")
+def debug_level(caplog):
     caplog.set_level(logging.DEBUG, logger="tmexpenses")
 
 
@@ -96,21 +96,3 @@ def test_upload_logs_name_folder_and_size(client, ms, admin, caplog):
     sign_in_done.post("/new", data=with_pdf(form(admin, invoice_url="")), headers=ORIGIN)
     (line,) = lines(caplog, "upload")
     assert "subfolder=Maintenance" in line and 'name="261107 Tyres - Tyre Shop.pdf"' in line and "bytes=" in line
-
-
-@pytest.mark.parametrize("env, want", [("debug", logging.DEBUG), ("INFO", logging.INFO), ("warning", logging.WARNING),
-                                       ("nonsense", logging.INFO), ("", logging.INFO)])
-def test_log_level_comes_from_the_environment(monkeypatch, pg, admin, env, want, caplog):
-    import psycopg
-    from psycopg.rows import dict_row
-    monkeypatch.setenv("LOG_LEVEL", env)
-    create_app(connect=lambda: psycopg.connect(pg.app_url, row_factory=dict_row))
-    assert logging.getLogger("tmexpenses").level == want
-
-
-def test_building_the_app_twice_doesnt_duplicate_output(pg, admin):
-    import psycopg
-    from psycopg.rows import dict_row
-    for _ in range(3):
-        create_app(connect=lambda: psycopg.connect(pg.app_url, row_factory=dict_row))
-    assert sum(1 for h in logging.getLogger("tmexpenses").handlers if getattr(h, "_tmexpenses", False)) == 1
