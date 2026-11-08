@@ -135,10 +135,46 @@ def test_folder_name():
             v.parse_folder_name(bad)
 
 
-def test_import_filename_follows_the_owners_convention():
-    from datetime import datetime
-    from tmexpenses.validation import import_filename
-    when = datetime(2026, 10, 24, 12, 0)
-    assert import_filename(when, "Tyres", "Example Tyres") == "261024 - Tyres - Example Tyres.pdf"
-    assert import_filename(when, "Tyres", None) == "261024 - Tyres.pdf"
-    assert import_filename(when, "Tyres", "A/B: Co", "yyyy-mm-dd") == "2026-10-24 - Tyres - A-B- Co.pdf"
+from datetime import datetime as _dt  # noqa: E402
+
+WHEN = _dt(2026, 10, 24, 12, 0)
+DASHED = "%date - %category - %vendor"
+
+
+def test_name_template_aliases():
+    f = lambda tpl, **kw: v.invoice_filename(WHEN, "Tyres", kw.get("vendor", "Tyre Shop"), None, tpl,
+                                                       car=kw.get("car", "Tessy"), amount=kw.get("amount"))
+    assert f(DASHED) == "261024 - Tyres - Tyre Shop.pdf"
+    assert f("%car %date %category") == "Tessy 261024 Tyres.pdf"
+    assert f("%date %vendor $%amount", amount=Decimal("1234.5")) == "261024 Tyre Shop $1234.50.pdf"
+    assert f("%date 100%% %category") == "261024 100% Tyres.pdf"
+
+
+def test_an_empty_alias_takes_its_separator_with_it():
+    f = lambda tpl, vendor: v.invoice_filename(WHEN, "Tyres", vendor, None, tpl)
+    assert f(DASHED, None) == "261024 - Tyres.pdf"
+    assert f("%date %category - %vendor", "") == "261024 Tyres.pdf"
+    assert f("%vendor - %date", None) == "261024.pdf"
+
+
+def test_template_values_cant_break_the_file_name():
+    got = v.invoice_filename(WHEN, "Tyres", 'A/B: "C"', None, DASHED, car="x")
+    assert got == "261024 - Tyres - A-B- -C-.pdf"
+
+
+def test_the_default_template_is_the_original_style():
+    assert v.invoice_filename(WHEN, "Tyres", "Tyre Shop") == "261024 Tyres - Tyre Shop.pdf"
+    assert v.invoice_filename(WHEN, "Tyres", "Tyre Shop", None, None) == "261024 Tyres - Tyre Shop.pdf"
+
+
+def test_parse_name_format():
+    p = v.parse_name_format
+    assert p("") is None and p("   ") is None
+    assert p("  %date - %category - %vendor ") == DASHED
+    assert p("%date %vendor") == "%date %vendor"          # category is optional if there's a vendor
+    for bad, why in (("%category %vendor", "%date"), ("%date", "%category"), ("%date %colour %category", "%colour"),
+                     ("%date %category %", "%%"), ("%date/%category", "/"), ("%date %category " + "x" * 100, "100"),
+                     ("%date %carpet", "%carpet")):
+        with pytest.raises(ValueError) as exc:
+            p(bad)
+        assert why in str(exc.value), bad

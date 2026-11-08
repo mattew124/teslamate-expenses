@@ -192,12 +192,15 @@ def create_app(connect=None, onedrive_transport=None):
             category_row = next(c for c in db.categories(conn) if c["id"] == values["category_id"])
             category = category_row["name"]
             connected = (db.onedrive_account(conn) or {}).get("refresh_token")
-            date_pattern = db.get_settings(conn)["invoice_date_format"]
+            settings_row = db.get_settings(conn)
+            car_name = next((c["name"] for c in db.cars(conn) if c["id"] == values["car_id"]), None)
         if not connected:
             raise onedrive.NotConnected()
         if not folder:
             raise onedrive.OneDriveError("Choose a OneDrive folder for this car on the OneDrive page first.")
-        name = validation.invoice_filename(values["occurred_at"], category, values["vendor"], date_pattern)
+        name = validation.invoice_filename(
+            values["occurred_at"], category, values["vendor"], settings_row["invoice_date_format"],
+            settings_row["invoice_name_format"], car=car_name, amount=values["amount"])
         token = access_token()
         subfolder = validation.safe_folder_name(category_row["upload_folder"] or category)
         return drive.upload(token, drive.ensure_subfolder(token, folder["folder_id"], subfolder), name, pdf)
@@ -544,7 +547,7 @@ def create_app(connect=None, onedrive_transport=None):
             folder = db.car_folders(conn).get(car_id)
             categories = db.categories(conn)
             learned = db.learned(conn, invoices.LEARN_AFTER)
-            date_pattern = db.get_settings(conn)["invoice_date_format"]
+            settings_row = db.get_settings(conn)
         if not folder:
             return redirect(url_for("onedrive_page"), 303)
         by_name = {c["name"]: c["id"] for c in categories}
@@ -579,8 +582,10 @@ def create_app(connect=None, onedrive_transport=None):
                         row["odometer_km"] = f"{reading:.1f}".rstrip("0").rstrip(".")
                         row["odo_note"] = "from TeslaMate"
                 if guess["date"] and guess["category"]:
-                    target = validation.import_filename(datetime.combine(guess["date"], dtime(12)),
-                                                        guess["category"], guess["vendor"], date_pattern)
+                    target = validation.invoice_filename(
+                        datetime.combine(guess["date"], dtime(12)), guess["category"], guess["vendor"],
+                        settings_row["invoice_date_format"], settings_row["invoice_name_format"],
+                        car=car["name"], amount=guess["amount"])
                     row["new_name"] = "" if target == f["name"] else target
                 # What was proposed, sent back with the form so confirming can tell what the owner changed.
                 row["guess"] = {k: row[k] for k in LEARN_FIELDS}
@@ -637,7 +642,7 @@ def create_app(connect=None, onedrive_transport=None):
             car_ids = {c["id"] for c in db.cars(conn)}
             cat_rows = db.categories(conn)
             cat_ids = {c["id"] for c in cat_rows}
-            date_pattern = db.get_settings(conn)["invoice_date_format"]
+            settings_row = db.get_settings(conn)
         cat_names = {c["id"]: c["name"] for c in cat_rows}
         count = min(request.form.get("count", type=int) or 0, 200)
         rows, chosen, errors = [], [], {}
@@ -670,8 +675,10 @@ def create_app(connect=None, onedrive_transport=None):
         for row, values in chosen:
             if values["invoice_url"] in known:   # a double submit imports once
                 continue
-            target = validation.import_filename(values["occurred_at"].astimezone(ZoneInfo(tz)), cat_names[values["category_id"]],
-                                                values["vendor"], date_pattern)
+            target = validation.invoice_filename(
+                values["occurred_at"].astimezone(ZoneInfo(tz)), cat_names[values["category_id"]], values["vendor"],
+                settings_row["invoice_date_format"], settings_row["invoice_name_format"],
+                car=car["name"], amount=values["amount"])
             if row["rename"] and row["id"] and target != row["name"]:
                 try:
                     token = token or access_token()
@@ -685,6 +692,16 @@ def create_app(connect=None, onedrive_transport=None):
         learn_from(imported)
         return redirect(url_for("index", msg="imported", n=len(imported), renamed=renamed,
                                 rename_failed=rename_failed), 303)
+
+    def name_example(values):
+        """What an uploaded file would be called under the saved (or just-typed, if valid) settings."""
+        try:
+            date_pattern = validation.parse_date_pattern(values.get("invoice_date_format"))
+            template = validation.parse_name_format(values.get("invoice_name_format"))
+        except ValueError:
+            date_pattern = template = None
+        return validation.invoice_filename(datetime(2026, 11, 7, 12, 0), "Tyres", "Tyre Shop", date_pattern, template,
+                                           car="Model Y", amount=Decimal("1234.50"))
 
     @app.route("/settings", methods=["GET", "POST"])
     def settings():
@@ -703,15 +720,22 @@ def create_app(connect=None, onedrive_transport=None):
                 values["invoice_date_format"] = validation.parse_date_pattern(raw)
             except ValueError as exc:
                 errors["invoice_date_format"] = str(exc)
+            raw = request.form.get("invoice_name_format", "")
+            values["invoice_name_format"] = raw
+            try:
+                values["invoice_name_format"] = validation.parse_name_format(raw)
+            except ValueError as exc:
+                errors["invoice_name_format"] = str(exc)
             if not errors:
                 with connect() as conn:
                     db.save_settings(conn, values["expenses_url"], values["grafana_url"],
-                                     values["invoice_date_format"])
+                                     values["invoice_date_format"], values["invoice_name_format"])
                 return redirect(url_for("settings", msg="settings"), 303)
         else:
             with connect() as conn:
                 values = db.get_settings(conn)
-        return render_template("settings.html", values=values, errors=errors,
+        return render_template("settings.html", values=values, errors=errors, aliases=validation.NAME_ALIASES,
+                               example=name_example(values),
                                message=MESSAGES.get(request.args.get("msg", ""))), (400 if errors else 200)
 
     @app.post("/api/prefill")

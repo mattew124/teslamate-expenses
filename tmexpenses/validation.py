@@ -159,27 +159,78 @@ def parse_date_pattern(raw):
     return pattern
 
 
-def invoice_filename(occurred_at, category, vendor, date_pattern=None):
-    """'261107 Tyres - Tyre Shop.pdf': sorts by date in the folder, and is a legal
-    OneDrive name whatever the vendor field holds. `date_pattern` is as parse_date_pattern."""
+# The file name template: %aliases for what is known about an expense, anything else as typed.
+NAME_ALIASES = {
+    "date": "the invoice date, in the date format above",
+    "category": "the category, e.g. Tyres",
+    "vendor": "the vendor or shop (left out when blank)",
+    "car": "the car's name",
+    "amount": "the amount paid, e.g. 1234.50",
+}
+DEFAULT_NAME_FORMAT = "%date %category - %vendor"
+MAX_NAME_FORMAT_LEN = 100
+_NAME_TOKEN = re.compile(r"(%%|%[a-z]+|%)")
+_SEPARATOR_ONLY = re.compile(r"[\s\-_.,()]*")
+
+
+def parse_name_format(raw):
+    """The Settings 'Invoice file name' line. Blank -> None (the default). Raises
+    ValueError saying what is wrong, naming the aliases that are allowed."""
+    text = (raw or "").strip()
+    if not text:
+        return None
+    allowed = ", ".join("%" + a for a in NAME_ALIASES)
+    if len(text) > MAX_NAME_FORMAT_LEN:
+        raise ValueError(f"Keep it under {MAX_NAME_FORMAT_LEN} characters.")
+    used = set()
+    for part in _NAME_TOKEN.split(text):
+        if part == "%":
+            raise ValueError("A lone % isn't allowed: write %% for a percent sign, or use an alias (" + allowed + ").")
+        if part.startswith("%") and part != "%%":
+            if part[1:] not in NAME_ALIASES:
+                raise ValueError(f"Unknown alias {part}. Use {allowed}.")
+            used.add(part[1:])
+        elif not part.startswith("%") and any(ch in ONEDRIVE_FORBIDDEN or ord(ch) < 32 for ch in part):
+            raise ValueError('File names can\'t contain \\ / : * ? " < > | here: remove "'
+                             + next(ch for ch in part if ch in ONEDRIVE_FORBIDDEN or ord(ch) < 32) + '".')
+    if "date" not in used:
+        raise ValueError("Include %date so files sort by date.")
+    if not used & {"category", "vendor"}:
+        raise ValueError("Include %category or %vendor so files can be told apart.")
+    return text
+
+
+def invoice_filename(occurred_at, category, vendor, date_pattern=None, name_format=None, car=None, amount=None):
+    """'261107 Tyres - Tyre Shop.pdf' by default; the Settings template (`name_format`, see
+    parse_name_format) otherwise. A blank alias is dropped together with the separator just
+    before it, so '%date - %category - %vendor' without a vendor is '261107 - Tyres.pdf'. Values
+    are made legal OneDrive names whatever they hold. `date_pattern` is as parse_date_pattern."""
     fmt = date_pattern or DEFAULT_DATE_PATTERN
     for token, code in _DATE_TOKENS:
         fmt = fmt.replace(token, code)
-    stem = f"{occurred_at.strftime(fmt)} {category}" + (f" - {vendor}" if vendor else "")
+    values = {"date": occurred_at.strftime(fmt), "category": category or "", "vendor": vendor or "",
+              "car": car or "", "amount": "" if amount is None else f"{amount:.2f}"}
+    parts = _NAME_TOKEN.split(name_format or DEFAULT_NAME_FORMAT)   # literal, token, literal, ...
+    out = []
+    for i, part in enumerate(parts):
+        if part == "%%":
+            out.append("%")
+        elif part.startswith("%") and part[1:] in values:
+            value = values[part[1:]]
+            if not value:
+                while out and out[-1] == "":
+                    out.pop()
+                if out and _SEPARATOR_ONLY.fullmatch(out[-1]):
+                    out.pop()        # the separator before an empty alias goes with it
+                elif not out and i + 1 < len(parts) and _SEPARATOR_ONLY.fullmatch(parts[i + 1]):
+                    parts[i + 1] = ""    # ...or the one after it, when it comes first
+            out.append(value)
+        else:
+            out.append(part)
+    stem = "".join(out)
     stem = "".join("-" if ch in ONEDRIVE_FORBIDDEN or ord(ch) < 32 else ch for ch in stem)
     stem = stem[:MAX_FILENAME_LEN - 4].rstrip(" .")
     return stem + ".pdf"
-
-
-def import_filename(occurred_at, category, vendor, date_pattern=None):
-    """'261024 - Tyres - Example Tyres.pdf': the owner's own convention for files already in
-    OneDrive (date, category, vendor, each after ' - '). Legal OneDrive name whatever the vendor holds."""
-    fmt = date_pattern or DEFAULT_DATE_PATTERN
-    for token, code in _DATE_TOKENS:
-        fmt = fmt.replace(token, code)
-    stem = f"{occurred_at.strftime(fmt)} - {category}" + (f" - {vendor}" if vendor else "")
-    stem = "".join("-" if ch in ONEDRIVE_FORBIDDEN or ord(ch) < 32 else ch for ch in stem)
-    return stem[:MAX_FILENAME_LEN - 4].rstrip(" .") + ".pdf"
 
 
 def parse_local_datetime(date_raw, time_raw, tz):

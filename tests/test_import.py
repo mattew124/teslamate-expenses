@@ -171,18 +171,23 @@ def test_odometer_stays_blank_when_teslamate_has_nothing(client, admin):
     assert 'name="odometer_km_2"' in client.get("/onedrive/import/1").data.decode()
 
 
+@pytest.fixture()
+def dashed(admin):
+    admin.execute("UPDATE expenses.setting SET invoice_name_format = '%date - %category - %vendor'")
+
+
 def renames(ms):
     import json
     return [(c[1], json.loads(c[2])) for c in ms.calls if c[0] == "PATCH"]
 
 
-def test_preview_offers_the_new_name_without_renaming(client, ms, admin):
+def test_preview_offers_the_new_name_without_renaming(client, ms, admin, dashed):
     page = client.get("/onedrive/import/1").data.decode()
     assert 'name="rename_0"' in page and "261024 - Tyres - Example Tyres Pty Ltd.pdf" in page
     assert renames(ms) == []
 
 
-def test_ticked_rename_renames_and_stores_the_new_link(client, ms, admin):
+def test_ticked_rename_renames_and_stores_the_new_link(client, ms, admin, dashed):
     resp = client.post("/onedrive/import/1", data=post_rows(admin, rename_1="on"), headers=ORIGIN)
     assert resp.status_code == 303 and "renamed=1" in resp.headers["Location"]
     ((url, body),) = renames(ms)
@@ -206,7 +211,7 @@ def test_a_failed_rename_still_imports_with_the_old_link(client, ms, admin):
     assert "couldn" in client.get(resp.headers["Location"]).data.decode().lower()
 
 
-def test_a_file_already_named_right_isnt_renamed(client, ms, admin):
+def test_a_file_already_named_right_isnt_renamed(client, ms, admin, dashed):
     data = post_rows(admin, rename_1="on", vendor_1="")      # -> "261024 - Tyres.pdf", the file's own name
     client.post("/onedrive/import/1", data=data, headers=ORIGIN)
     assert renames(ms) == []
@@ -234,13 +239,19 @@ def test_add_form_wires_up_prefill(client):
     assert b"data-prefill-url" in client.get("/new").data
 
 
+def test_rename_follows_the_settings_template_by_default(client, ms, admin):
+    client.post("/onedrive/import/1", data=post_rows(admin, rename_1="on"), headers=ORIGIN)
+    ((_, body),) = renames(ms)
+    assert body["name"] == "261024 Tyres - Example Tyres.pdf"      # the default template
+
+
 def test_rename_is_offered_even_when_nothing_could_be_guessed(client):
     page = client.get("/onedrive/import/1").data.decode()
     assert page.count('name="rename_') == 3          # every row, including the unreadable scan
     assert "yymmdd - category - vendor" in page
 
 
-def test_rename_uses_the_values_the_owner_typed(client, ms, admin):
+def test_rename_uses_the_values_the_owner_typed(client, ms, admin, dashed):
     data = {"count": "1", "include_0": "on", "rename_0": "on", "id_0": "P2", "url_0": "https://od.example/P2",
             "name_0": "scan.pdf", "date_0": "2026-11-09", "category_id_0": cat(admin, "Tyres"),
             "amount_0": "1.00", "vendor_0": "Typed Vendor"}

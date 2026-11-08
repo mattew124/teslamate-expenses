@@ -356,6 +356,15 @@ def test_upload_name_follows_the_date_format_setting(client, ms, admin):
     assert unquote(urlparse(put[1]).path).endswith(":/2026-11-07 Tyres - Tyre Shop.pdf:/content")
 
 
+def test_upload_name_follows_the_name_template(client, ms, admin):
+    sign_in(client, ms)
+    choose_folder(client)
+    admin.execute("UPDATE expenses.setting SET invoice_name_format = '%date - %category - %vendor'")
+    client.post("/new", data=with_pdf(form(admin, invoice_url="")), headers=ORIGIN)
+    (put,) = ms.uploads()
+    assert unquote(urlparse(put[1]).path).endswith(":/261107 - Tyres - Tyre Shop.pdf:/content")
+
+
 def test_upload_on_create(client, ms, admin):
     sign_in(client, ms)
     choose_folder(client)
