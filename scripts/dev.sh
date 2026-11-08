@@ -83,7 +83,22 @@ compose() {
 }
 dev_psql() { compose exec -T dev-db psql -X -q -v ON_ERROR_STOP=1 -U teslamate -d teslamate "$@"; }
 
+# CLAUDE_LOCAL_SOURCE (dev.env): keep CLAUDE.local.md a plain copy of a file kept
+# elsewhere. A copy, not a symlink, so .worktreeinclude carries it into new
+# worktrees and it loads there at session start.
+sync_local_notes() {
+    local src="${CLAUDE_LOCAL_SOURCE:-}"
+    [ -n "$src" ] || return 0
+    [ -f "$src" ] || { echo "dev: CLAUDE_LOCAL_SOURCE $src not found" >&2; return 0; }
+    if [ -L CLAUDE.local.md ] || ! cmp -s "$src" CLAUDE.local.md; then
+        rm -f CLAUDE.local.md
+        cp "$src" CLAUDE.local.md
+        echo "dev: CLAUDE.local.md refreshed from $src"
+    fi
+}
+
 ensure_env() {
+    sync_local_notes
     mkdir -p .dev/dashboards .dev/screenshots
     if [ ! -f "$ENVF" ]; then
         ( umask 077
@@ -253,6 +268,7 @@ INFO
 }
 
 setup() {
+    sync_local_notes
     if [ ! -x .venv/bin/python ]; then
         python3 -m venv .venv
         .venv/bin/pip install -q -r requirements-dev.txt
