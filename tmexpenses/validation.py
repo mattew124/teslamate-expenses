@@ -171,6 +171,17 @@ def invoice_filename(occurred_at, category, vendor, date_pattern=None):
     return stem + ".pdf"
 
 
+def import_filename(occurred_at, category, vendor, date_pattern=None):
+    """'261024 - Tyres - Example Tyres.pdf': the owner's own convention for files already in
+    OneDrive (date, category, vendor, each after ' - '). Legal OneDrive name whatever the vendor holds."""
+    fmt = date_pattern or DEFAULT_DATE_PATTERN
+    for token, code in _DATE_TOKENS:
+        fmt = fmt.replace(token, code)
+    stem = f"{occurred_at.strftime(fmt)} - {category}" + (f" - {vendor}" if vendor else "")
+    stem = "".join("-" if ch in ONEDRIVE_FORBIDDEN or ord(ch) < 32 else ch for ch in stem)
+    return stem[:MAX_FILENAME_LEN - 4].rstrip(" .") + ".pdf"
+
+
 def parse_local_datetime(date_raw, time_raw, tz):
     """'2026-11-07' + '14:05' in tz -> aware datetime."""
     date_raw, time_raw = (date_raw or "").strip(), (time_raw or "").strip()

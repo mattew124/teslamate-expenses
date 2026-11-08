@@ -8,7 +8,7 @@ cost of ownership.
 import hmac
 import os
 from decimal import Decimal
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time as dtime, timedelta, timezone
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
@@ -225,7 +225,18 @@ def create_app(connect=None, onedrive_transport=None):
                 "category_id": category_id,
                 "message": MESSAGES.get(request.args.get("msg", "")),
             }
+        if request.args.get("msg") == "imported":
+            ctx["message"] = import_message()
         return render_template("index.html", **ctx)
+
+    def import_message():
+        n, renamed, failed = (request.args.get(k, 0, type=int) for k in ("n", "renamed", "rename_failed"))
+        text = f"Imported {n} invoice{'' if n == 1 else 's'}." if n else MESSAGES["imported"]
+        if renamed:
+            text += f" Renamed {renamed} in OneDrive."
+        if failed:
+            text += f" Couldn't rename {failed} (a file with that name may already exist): imported with the old name."
+        return text
 
     @app.get("/new")
     def new():
@@ -516,7 +527,7 @@ def create_app(connect=None, onedrive_transport=None):
     def import_row(n, **fields):
         return {"n": n, "include": False, "date": "", "category_id": "", "vendor": "",
                 "amount": "", "odometer_km": "", "url": "", "name": "", "folder": "",
-                "note": "", "id": "", "guess": {}, **fields}
+                "note": "", "id": "", "guess": {}, "new_name": "", "rename": False, "odo_note": "", **fields}
 
     def render_import(car, rows, remaining=0, errors=None, status=200, notice=None):
         with connect() as conn:
@@ -533,6 +544,7 @@ def create_app(connect=None, onedrive_transport=None):
             folder = db.car_folders(conn).get(car_id)
             categories = db.categories(conn)
             learned = db.learned(conn, invoices.LEARN_AFTER)
+            date_pattern = db.get_settings(conn)["invoice_date_format"]
         if not folder:
             return redirect(url_for("onedrive_page"), 303)
         by_name = {c["name"]: c["id"] for c in categories}
@@ -560,6 +572,16 @@ def create_app(connect=None, onedrive_transport=None):
                     include=not guess["missing"],
                     note=("Couldn't read the " + ", ".join(guess["missing"]) + ": fill in to import."
                           if guess["missing"] else ""))
+                if guess["date"] and not row["odometer_km"]:
+                    with connect() as conn:
+                        reading = db.odometer_at(conn, car_id, datetime.combine(guess["date"], dtime(12), ZoneInfo(tz)))
+                    if reading is not None:
+                        row["odometer_km"] = f"{reading:.1f}".rstrip("0").rstrip(".")
+                        row["odo_note"] = "from TeslaMate"
+                if guess["date"] and guess["category"]:
+                    target = validation.import_filename(datetime.combine(guess["date"], dtime(12)),
+                                                        guess["category"], guess["vendor"], date_pattern)
+                    row["new_name"] = "" if target == f["name"] else target
                 # What was proposed, sent back with the form so confirming can tell what the owner changed.
                 row["guess"] = {k: row[k] for k in LEARN_FIELDS}
                 rows.append(row)
@@ -613,12 +635,15 @@ def create_app(connect=None, onedrive_transport=None):
         car = car_or_404(car_id)
         with connect() as conn:
             car_ids = {c["id"] for c in db.cars(conn)}
-            cat_ids = {c["id"] for c in db.categories(conn)}
+            cat_rows = db.categories(conn)
+            cat_ids = {c["id"] for c in cat_rows}
+            date_pattern = db.get_settings(conn)["invoice_date_format"]
+        cat_names = {c["id"]: c["name"] for c in cat_rows}
         count = min(request.form.get("count", type=int) or 0, 200)
         rows, chosen, errors = [], [], {}
         for n in range(count):
             f = lambda key: request.form.get(f"{key}_{n}", "")
-            row = import_row(n, include=bool(f("include")), date=f("date"), category_id=f("category_id"),
+            row = import_row(n, include=bool(f("include")), rename=bool(f("rename")), date=f("date"), category_id=f("category_id"),
                              vendor=f("vendor"), amount=f("amount"), odometer_km=f("odometer_km"),
                              url=f("url"), name=f("name"), folder=f("folder"), id=f("id"),
                              guess={k: f(f"guess_{k}") for k in LEARN_FIELDS})
@@ -638,15 +663,28 @@ def create_app(connect=None, onedrive_transport=None):
         if errors or not chosen:
             return render_import(car, rows, errors=errors, status=400,
                                  notice=None if errors else "Tick at least one invoice to import.")
-        imported = []
+        imported, renamed, rename_failed = [], 0, 0
         with connect() as conn:
             known = db.known_invoice_urls(conn, [v["invoice_url"] for _, v in chosen])
-            for row, values in chosen:
-                if values["invoice_url"] not in known:  # a double submit imports once
-                    db.insert_expense(conn, values)
-                    imported.append((row, values))
+        token = None
+        for row, values in chosen:
+            if values["invoice_url"] in known:   # a double submit imports once
+                continue
+            target = validation.import_filename(values["occurred_at"].astimezone(ZoneInfo(tz)), cat_names[values["category_id"]],
+                                                values["vendor"], date_pattern)
+            if row["rename"] and row["id"] and target != row["name"]:
+                try:
+                    token = token or access_token()
+                    values["invoice_url"] = drive.rename(token, row["id"], target)
+                    renamed += 1
+                except onedrive.OneDriveError:
+                    rename_failed += 1           # import it anyway, still pointing at the old name
+            with connect() as conn:
+                db.insert_expense(conn, values)
+            imported.append((row, values))
         learn_from(imported)
-        return redirect(url_for("index", msg="imported"), 303)
+        return redirect(url_for("index", msg="imported", n=len(imported), renamed=renamed,
+                                rename_failed=rename_failed), 303)
 
     @app.route("/settings", methods=["GET", "POST"])
     def settings():
@@ -675,6 +713,27 @@ def create_app(connect=None, onedrive_transport=None):
                 values = db.get_settings(conn)
         return render_template("settings.html", values=values, errors=errors,
                                message=MESSAGES.get(request.args.get("msg", ""))), (400 if errors else 200)
+
+    @app.post("/api/prefill")
+    def api_prefill():
+        """Read a chosen invoice PDF and propose the form's fields, for the Add page."""
+        upload = request.files.get("invoice_file")
+        try:
+            pdf = validation.parse_invoice_pdf(upload and upload.filename, upload.read() if upload else b"")
+        except ValueError as exc:
+            return jsonify(error=str(exc)), 400
+        if pdf is None:
+            return jsonify(error="Choose a PDF first."), 400
+        with connect() as conn:
+            categories = db.categories(conn)
+            learned = db.learned(conn, invoices.LEARN_AFTER)
+        guess = invoices.propose("", upload.filename, invoices.extract_text(pdf), [c["name"] for c in categories], learned)
+        by_name = {c["name"]: c["id"] for c in categories}
+        return jsonify(
+            date=guess["date"].isoformat() if guess["date"] else None,
+            category_id=by_name.get(guess["category"]), vendor=guess["vendor"],
+            amount=f"{guess['amount']:.2f}" if guess["amount"] is not None else None,
+            odometer_km=guess["odometer_km"])
 
     @app.get("/api/odometer")
     def api_odometer():

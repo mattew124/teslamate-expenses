@@ -5,7 +5,7 @@
 <h1>{{ 'Edit expense' if expense_id else 'Add expense' }}</h1>
 {% if errors %}<p class="notice bad">Please fix the highlighted fields.</p>{% endif %}
 <form method="post" class="stack" id="expense-form" enctype="multipart/form-data"
-      data-odometer-url="{{ url_for('api_odometer') }}">
+      data-odometer-url="{{ url_for('api_odometer') }}" {% if not expense_id %}data-prefill-url="{{ url_for('api_prefill') }}"{% endif %}>
   <label>Car
     <select name="car_id" required>
       {% if cars|length != 1 %}<option value="">Choose…</option>{% endif %}
@@ -41,6 +41,7 @@
   {% if onedrive_enabled %}
   <label>Invoice PDF
     <input type="file" name="invoice_file" accept="application/pdf,.pdf">{{ err('invoice_file') }}
+    <small id="prefill-hint">Choosing a PDF fills in the fields it can read; check them before saving.</small>
     {% if onedrive_connected %}
     <small>Uploaded to the car's OneDrive folder, and the link below is filled in for you.{% if values.invoice_url %} Replaces the current link; the old file stays in OneDrive.{% endif %}</small>
     {% else %}

@@ -133,3 +133,12 @@ def test_folder_name():
                 "end.", "..", "x" * 256, "tab\there"):
         with pytest.raises(ValueError):
             v.parse_folder_name(bad)
+
+
+def test_import_filename_follows_the_owners_convention():
+    from datetime import datetime
+    from tmexpenses.validation import import_filename
+    when = datetime(2026, 10, 24, 12, 0)
+    assert import_filename(when, "Tyres", "Example Tyres") == "261024 - Tyres - Example Tyres.pdf"
+    assert import_filename(when, "Tyres", None) == "261024 - Tyres.pdf"
+    assert import_filename(when, "Tyres", "A/B: Co", "yyyy-mm-dd") == "2026-10-24 - Tyres - A-B- Co.pdf"
