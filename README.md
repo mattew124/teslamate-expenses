@@ -184,6 +184,11 @@ Currency is shown as `$` and distance in km.
   refused). Whoever opens one needs access to it, and it lasts as long as its sharing settings.
   An uploaded invoice's link is its plain OneDrive address, not a share link: it opens for you,
   signed in to that Microsoft account, and for nobody else.
+- **Logs.** `docker logs` shows gunicorn's request lines plus the app's own events. `LOG_LEVEL`
+  (`debug`, `info` the default, `warning`, `error`; set in `.env`, restart to change) sets both.
+  `info` records startup, schema changes, expenses saved, updated or deleted, and OneDrive
+  sign-in and upload results. `debug` adds detail such as retries. Tokens, secrets, vendors,
+  notes and amounts are never logged.
 - **Timezone.** Date and time are entered in `APP_TZ` and stored as `timestamptz`.
   TeslaMate's `positions.date` is naive UTC; the odometer lookup converts before comparing.
 - POSTs must carry a same-origin `Origin`/`Referer` header (CSRF guard). Plain `curl` needs
