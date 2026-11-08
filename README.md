@@ -175,9 +175,12 @@ them in a table to check, correct and untick. **Nothing is saved until you press
 file already linked to an expense never appears again, so you can work through a big folder in
 rounds.
 
-The guesses come from the file name (a leading `yymmdd`, `yyyymmdd` or `yyyy-mm-dd`, and a
-category name in it or in its folder name, as in `Tyres/261024 - Tyres - Tyre Shop.pdf`), then
-the PDF's text (`Invoice Date`, a `Total` line, `Odometer`). Scanned PDFs with no text are read
+The guesses come from **the PDF itself first**, because file names are often arbitrary: its text
+(`Invoice Date`, a `Total` line, `Odometer`, the company or trading name, and which category it is about:
+named in its heading, or mentioned most). The folder you filed it in comes next for the category, and the
+file name is only the fallback for what the PDF doesn't say: a leading or trailing `yymmdd` date, a category
+name, and the vendor in `Tyres - Tyre Shop`. A file name the PDF contradicts (it says Tyres, the PDF is a
+registration notice) isn't used for the vendor. Scanned PDFs with no text are read
 by OCR, which is slower and rougher. When a `Total due` line offers several amounts (a registration renewal for 6 or 12 months), **Settings →
 When an invoice offers several amounts** picks the largest (the default), the smallest, or leaves it blank for
 you. An amount is never guessed without a clear total, and
