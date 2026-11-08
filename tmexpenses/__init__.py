@@ -91,7 +91,7 @@ def create_app(connect=None, onedrive_transport=None):
     def security_headers(resp):
         resp.headers["Content-Security-Policy"] = (
             "default-src 'none'; style-src 'self'; script-src 'self'; "
-            "connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
+            "img-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
         )
         resp.headers["X-Content-Type-Options"] = "nosniff"
         resp.headers["Referrer-Policy"] = "same-origin"
