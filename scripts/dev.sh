@@ -105,6 +105,9 @@ ensure_env() {
           printf 'DEV_ADMIN_DB_PASS=%s\nDEV_GRAFANA_PASS=%s\n' \
               "$(openssl rand -hex 24)" "$(openssl rand -hex 24)" > "$ENVF" )
     fi
+    # Added later than the passwords, so older .dev/env files get it too.
+    grep -q '^DEV_ONEDRIVE_TOKEN_KEY=' "$ENVF" ||
+        printf 'DEV_ONEDRIVE_TOKEN_KEY=%s\n' "$(openssl rand -base64 32 | tr '+/' '-_')" >> "$ENVF"
     # Dashboard copy with the app link's fallback kept inside dev and the timezone defaulted.
     sed -e "s#, '/expenses/')#, '$DEV_BASE_PATH/')#" \
         -e "s#\"\(query\|text\|value\)\": \"UTC\"#\"\1\": \"$APP_TZ\"#" \

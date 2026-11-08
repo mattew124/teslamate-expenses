@@ -46,3 +46,13 @@ ul.plain li { padding: .3rem 0; border-bottom: 1px solid var(--line); }
   td[data-label]::before { content: attr(data-label); opacity: .7; text-align: left; }
   td.actions { justify-content: flex-end; }
 }
+
+h2 { font-size: 1.1rem; margin: 1.5rem 0 0; }
+section.stack { margin-bottom: 1rem; }
+button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+button:disabled { opacity: .6; cursor: progress; }
+ol.steps { margin: 0; padding-left: 1.25rem; display: grid; gap: .4rem; }
+ol.steps a { overflow-wrap: anywhere; }
+code.user-code { font-size: 1.3rem; font-weight: 700; letter-spacing: .1em; padding: .1rem .4rem;
+  border: 1px solid var(--line); border-radius: .3rem; user-select: all; }
+input[type=file] { padding: .4rem; }

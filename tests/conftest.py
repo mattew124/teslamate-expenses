@@ -88,6 +88,7 @@ def pg():
 def admin(pg):
     """Superuser connection with a clean slate of expenses + TeslaMate stub data."""
     with pg.admin() as conn:
-        conn.execute("TRUNCATE expenses.expense, positions, charging_processes RESTART IDENTITY")
+        conn.execute("TRUNCATE expenses.expense, expenses.car_folder, expenses.onedrive_account,"
+                     " positions, charging_processes RESTART IDENTITY")
         conn.execute("DELETE FROM expenses.category WHERE sort_order = 100")
         yield conn
