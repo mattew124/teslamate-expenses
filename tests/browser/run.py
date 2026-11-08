@@ -12,8 +12,9 @@ import sys
 
 from playwright.sync_api import expect, sync_playwright
 
-UI = "http://expenses-dev:8080/expenses-dev/"
-GRAFANA = "http://dev-grafana:3000/expenses-dev/grafana/"
+BASE = os.environ.get("BASE_PATH", "/expenses-dev")
+UI = f"http://expenses-dev:8080{BASE}/"
+GRAFANA = f"http://dev-grafana:3000{BASE}/grafana/"
 OUT = os.environ.get("OUT", "/out")
 MARKER = "BROWSER-TEST"
 INVOICE = "https://example.com/invoice-browser-test.pdf"

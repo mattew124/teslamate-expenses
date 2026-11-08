@@ -2,13 +2,14 @@
 # TeslaMate network, so nothing here can touch live data. Drive it with
 # scripts/dev.sh, which generates the --env-file. Published on loopback only;
 # docker-compose.dev.traefik.yml replaces that with the reverse proxy.
+# scripts/dev.sh sets the project name, path and ports per checkout (worktree).
 name: teslamate-expenses-dev
 
 services:
   expenses-dev:
     build: .
     # EXPENSES_IMAGE: test a released image rather than this working tree.
-    image: ${EXPENSES_IMAGE:-teslamate-expenses:dev}
+    image: ${EXPENSES_IMAGE:-teslamate-expenses:${DEV_TAG:-dev}}
     restart: unless-stopped
     read_only: true
     cap_drop: [ALL]
@@ -19,7 +20,7 @@ services:
       DATABASE_NAME: teslamate
       DATABASE_USER: expenses_app
       DATABASE_PASS: ${DEV_APP_DB_PASS:-}
-      BASE_PATH: /expenses-dev
+      BASE_PATH: ${DEV_BASE_PATH:-/expenses-dev}
       APP_TZ: ${APP_TZ:-UTC}
       TZ: ${APP_TZ:-UTC}
     depends_on:
@@ -61,7 +62,7 @@ services:
       DATABASE_PASS: ${DEV_ADMIN_DB_PASS:-}
       DATABASE_SSL_MODE: disable
       GF_SECURITY_ADMIN_PASSWORD: ${DEV_GRAFANA_PASS:-}
-      GF_SERVER_ROOT_URL: http://localhost:${DEV_GRAFANA_PORT:-8090}/expenses-dev/grafana
+      GF_SERVER_ROOT_URL: http://localhost:${DEV_GRAFANA_PORT:-8090}${DEV_BASE_PATH:-/expenses-dev}/grafana
       GF_SERVER_SERVE_FROM_SUB_PATH: "true"
       # View without a Grafana login: this stack is only on loopback or behind
       # the proxy's forward-auth.

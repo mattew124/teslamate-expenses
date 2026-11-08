@@ -1,4 +1,4 @@
-# Publishes the dev stack through Traefik at https://$PUBLIC_HOST/expenses-dev/,
+# Publishes the dev stack through Traefik at https://$PUBLIC_HOST$DEV_BASE_PATH/,
 # behind a forward-auth middleware. scripts/dev.sh adds this when PUBLIC_HOST is set.
 services:
   expenses-dev:
@@ -7,32 +7,33 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${PROXY_NETWORK:-proxy}"
-      - "traefik.http.services.tm-expenses-dev.loadbalancer.server.port=8080"
+      - "traefik.http.services.tm-expenses-dev${DEV_ROUTER_SUFFIX:-}.loadbalancer.server.port=8080"
       # Priority above the production /expenses router, which would otherwise
-      # also match /expenses-dev as a plain string prefix.
-      - "traefik.http.routers.tm-expenses-dev-secure.rule=Host(`${PUBLIC_HOST:?}`) && PathPrefix(`/expenses-dev`)"
-      - "traefik.http.routers.tm-expenses-dev-secure.priority=110"
-      - "traefik.http.routers.tm-expenses-dev-secure.entrypoints=${PROXY_ENTRYPOINT:-websecure}"
-      - "traefik.http.routers.tm-expenses-dev-secure.tls=true"
-      - "traefik.http.routers.tm-expenses-dev-secure.service=tm-expenses-dev"
-      - "traefik.http.routers.tm-expenses-dev-secure.middlewares=${AUTH_MIDDLEWARE:?the app has no login of its own: set a forward-auth middleware}"
+      # also match this path as a plain string prefix. Rules end in "/" so one
+      # worktree's path (/expenses-dev/foo/) never matches another's (foobar).
+      - "traefik.http.routers.tm-expenses-dev${DEV_ROUTER_SUFFIX:-}-secure.rule=Host(`${PUBLIC_HOST:?}`) && PathPrefix(`${DEV_BASE_PATH:-/expenses-dev}/`)"
+      - "traefik.http.routers.tm-expenses-dev${DEV_ROUTER_SUFFIX:-}-secure.priority=${DEV_UI_PRIORITY:-110}"
+      - "traefik.http.routers.tm-expenses-dev${DEV_ROUTER_SUFFIX:-}-secure.entrypoints=${PROXY_ENTRYPOINT:-websecure}"
+      - "traefik.http.routers.tm-expenses-dev${DEV_ROUTER_SUFFIX:-}-secure.tls=true"
+      - "traefik.http.routers.tm-expenses-dev${DEV_ROUTER_SUFFIX:-}-secure.service=tm-expenses-dev${DEV_ROUTER_SUFFIX:-}"
+      - "traefik.http.routers.tm-expenses-dev${DEV_ROUTER_SUFFIX:-}-secure.middlewares=${AUTH_MIDDLEWARE:?the app has no login of its own: set a forward-auth middleware}"
 
   dev-grafana:
     ports: !reset []
     networks: [dev, proxy]
     environment:
       GF_SERVER_DOMAIN: ${PUBLIC_HOST:?}
-      GF_SERVER_ROOT_URL: https://${PUBLIC_HOST:?}/expenses-dev/grafana
+      GF_SERVER_ROOT_URL: https://${PUBLIC_HOST:?}${DEV_BASE_PATH:-/expenses-dev}/grafana
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${PROXY_NETWORK:-proxy}"
-      - "traefik.http.services.tm-expenses-dev-grafana.loadbalancer.server.port=3000"
-      - "traefik.http.routers.tm-expenses-dev-grafana.rule=Host(`${PUBLIC_HOST:?}`) && PathPrefix(`/expenses-dev/grafana`)"
-      - "traefik.http.routers.tm-expenses-dev-grafana.priority=120"
-      - "traefik.http.routers.tm-expenses-dev-grafana.entrypoints=${PROXY_ENTRYPOINT:-websecure}"
-      - "traefik.http.routers.tm-expenses-dev-grafana.tls=true"
-      - "traefik.http.routers.tm-expenses-dev-grafana.service=tm-expenses-dev-grafana"
-      - "traefik.http.routers.tm-expenses-dev-grafana.middlewares=${AUTH_MIDDLEWARE:?the app has no login of its own: set a forward-auth middleware}"
+      - "traefik.http.services.tm-expenses-dev${DEV_ROUTER_SUFFIX:-}-grafana.loadbalancer.server.port=3000"
+      - "traefik.http.routers.tm-expenses-dev${DEV_ROUTER_SUFFIX:-}-grafana.rule=Host(`${PUBLIC_HOST:?}`) && PathPrefix(`${DEV_BASE_PATH:-/expenses-dev}/grafana/`)"
+      - "traefik.http.routers.tm-expenses-dev${DEV_ROUTER_SUFFIX:-}-grafana.priority=${DEV_GRAFANA_PRIORITY:-120}"
+      - "traefik.http.routers.tm-expenses-dev${DEV_ROUTER_SUFFIX:-}-grafana.entrypoints=${PROXY_ENTRYPOINT:-websecure}"
+      - "traefik.http.routers.tm-expenses-dev${DEV_ROUTER_SUFFIX:-}-grafana.tls=true"
+      - "traefik.http.routers.tm-expenses-dev${DEV_ROUTER_SUFFIX:-}-grafana.service=tm-expenses-dev${DEV_ROUTER_SUFFIX:-}-grafana"
+      - "traefik.http.routers.tm-expenses-dev${DEV_ROUTER_SUFFIX:-}-grafana.middlewares=${AUTH_MIDDLEWARE:?the app has no login of its own: set a forward-auth middleware}"
 
 networks:
   proxy:

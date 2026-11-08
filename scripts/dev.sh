@@ -2,18 +2,27 @@
 # =============================================================================
 # dev.sh — run the dev stack on its own test database.
 #
+#   scripts/dev.sh setup             first run in a new checkout: venv + local files check
+#   scripts/dev.sh info              this checkout's stack: name, URL path, ports
 #   scripts/dev.sh up [--image REF]  start; first run creates and seeds the test DB.
 #                                    --image runs a released image instead of
 #                                    building this working tree (test a candidate)
 #   scripts/dev.sh refresh           re-copy TeslaMate data, keeping test expenses
 #   scripts/dev.sh reset             wipe the test DB, test expenses included
 #   scripts/dev.sh down              stop, keeping the test DB
+#   scripts/dev.sh destroy           remove this checkout's stack, test DB and image
+#   scripts/dev.sh list              every dev stack on this machine
 #   scripts/dev.sh test-browser      run the browser tests against the dev stack
 #   scripts/dev.sh schema            regenerate db/teslamate-schema.sql from TeslaMate
 #   scripts/dev.sh psql [args]       psql on the test database
 #   scripts/dev.sh logs              follow the app's logs
 #
 # Settings come from ./dev.env (gitignored; see dev.env.example).
+#
+# Each git worktree gets its own stack, test DB and URL path
+# (/expenses-dev/<worktree>/), so parallel sessions can't replace each other's
+# running code. The main checkout keeps /expenses-dev/. DEV_INSTANCE overrides
+# the name.
 #
 # The seed only READS TeslaMate (pg_dump, COPY TO STDOUT). It copies the full
 # cars and charging_processes tables and one positions row per hour, with
@@ -36,11 +45,41 @@ SEED_FROM="${SEED_FROM:-teslamate-database-1}"
 SCHEMA=db/teslamate-schema.sql
 ENVF=.dev/env
 
+# ---- which dev stack this checkout owns ----------------------------------------
+
+instance_name() {
+    if [ -n "${DEV_INSTANCE:-}" ]; then
+        printf '%s' "$DEV_INSTANCE"
+    elif [ "$(git rev-parse --git-dir 2>/dev/null)" != "$(git rev-parse --git-common-dir 2>/dev/null)" ]; then
+        basename "$ROOT"   # a linked worktree: named after its folder
+    fi
+}
+
+INSTANCE="$(instance_name | tr 'A-Z_' 'a-z-' | tr -c 'a-z0-9-' '-' | sed 's/^-*//; s/-*$//' | cut -c1-30)"
+if [ -n "$(instance_name)" ] && { [ -z "$INSTANCE" ] || [ "$INSTANCE" = grafana ]; }; then
+    echo "dev: can't derive a usable stack name from '$(instance_name)'; set DEV_INSTANCE" >&2
+    exit 2
+fi
+if [ -z "$INSTANCE" ]; then
+    PROJECT=teslamate-expenses-dev
+    export DEV_BASE_PATH=/expenses-dev DEV_ROUTER_SUFFIX= DEV_TAG=dev
+    export DEV_UI_PRIORITY=110 DEV_GRAFANA_PRIORITY=120
+    export DEV_UI_PORT="${DEV_UI_PORT:-8089}" DEV_GRAFANA_PORT="${DEV_GRAFANA_PORT:-8090}"
+else
+    PROJECT="teslamate-expenses-dev-$INSTANCE"
+    export DEV_BASE_PATH="/expenses-dev/$INSTANCE" DEV_ROUTER_SUFFIX="-$INSTANCE" DEV_TAG="dev-$INSTANCE"
+    # Above the main stack's routes: /expenses-dev/ is a prefix of this path.
+    export DEV_UI_PRIORITY=130 DEV_GRAFANA_PRIORITY=140
+    # A stable pair of loopback ports per name, clear of the main stack's.
+    slot=$(( $(printf '%s' "$INSTANCE" | cksum | cut -d' ' -f1) % 400 ))
+    export DEV_UI_PORT=$((18100 + 2 * slot)) DEV_GRAFANA_PORT=$((18101 + 2 * slot))
+fi
+
 compose() {
     local files=(-f docker-compose.dev.yml)
     # PUBLIC_HOST set: publish through the reverse proxy instead of on loopback.
     [ -z "${PUBLIC_HOST:-}" ] || files+=(-f docker-compose.dev.traefik.yml)
-    docker compose "${files[@]}" --env-file "$ENVF" "$@"
+    docker compose -p "$PROJECT" "${files[@]}" --env-file "$ENVF" "$@"
 }
 dev_psql() { compose exec -T dev-db psql -X -q -v ON_ERROR_STOP=1 -U teslamate -d teslamate "$@"; }
 
@@ -52,7 +91,7 @@ ensure_env() {
               "$(openssl rand -hex 24)" "$(openssl rand -hex 24)" "$(openssl rand -hex 24)" > "$ENVF" )
     fi
     # Dashboard copy with the app link kept inside dev and the timezone defaulted.
-    sed -e 's#"url": "/expenses/"#"url": "/expenses-dev/"#' \
+    sed -e "s#\"url\": \"/expenses/\"#\"url\": \"$DEV_BASE_PATH/\"#" \
         -e "s#\"\(query\|text\|value\)\": \"UTC\"#\"\1\": \"$APP_TZ\"#" \
         grafana/cost-of-ownership.json > .dev/dashboards/cost-of-ownership.json
 }
@@ -188,21 +227,48 @@ start() {
         compose up -d --build --wait
     fi
     if docker inspect "$SEED_FROM" >/dev/null 2>&1; then warn_if_schema_drifted; fi
-    if [ -n "${PUBLIC_HOST:-}" ]; then
-        echo "dev: UI      https://$PUBLIC_HOST/expenses-dev/"
-        echo "dev: Grafana https://$PUBLIC_HOST/expenses-dev/grafana/"
-    else
-        echo "dev: UI      http://localhost:${DEV_UI_PORT:-8089}/expenses-dev/"
-        echo "dev: Grafana http://localhost:${DEV_GRAFANA_PORT:-8090}/expenses-dev/grafana/"
+    urls
+}
+
+urls() {
+    local base
+    if [ -n "${PUBLIC_HOST:-}" ]; then base="https://$PUBLIC_HOST"; else base="http://localhost:$DEV_UI_PORT"; fi
+    echo "dev: UI      $base$DEV_BASE_PATH/"
+    [ -n "${PUBLIC_HOST:-}" ] || base="http://localhost:$DEV_GRAFANA_PORT"
+    echo "dev: Grafana $base$DEV_BASE_PATH/grafana/"
+}
+
+info() {
+    cat <<INFO
+project=$PROJECT
+instance=${INSTANCE:-main}
+base_path=$DEV_BASE_PATH
+ui_port=$DEV_UI_PORT
+grafana_port=$DEV_GRAFANA_PORT
+image=${EXPENSES_IMAGE:-teslamate-expenses:$DEV_TAG}
+router_suffix=${DEV_ROUTER_SUFFIX:-none}
+ui_priority=$DEV_UI_PRIORITY
+grafana_priority=$DEV_GRAFANA_PRIORITY
+INFO
+}
+
+setup() {
+    if [ ! -x .venv/bin/python ]; then
+        python3 -m venv .venv
+        .venv/bin/pip install -q -r requirements-dev.txt
     fi
+    echo "dev: .venv ready"
+    [ -f dev.env ] || echo "dev: no dev.env, so this stack is on localhost with defaults (see dev.env.example)"
+    [ -e CLAUDE.local.md ] || echo "dev: no CLAUDE.local.md here (optional, local notes for Claude)"
+    urls
 }
 
 test_browser() {
     ensure_env
     docker build -q -t teslamate-expenses:browser-tests tests/browser >/dev/null
     # Straight to the containers on the dev network, past the proxy's login.
-    docker run --rm --network teslamate-expenses-dev_dev --user "$(id -u):$(id -g)" \
-        -e HOME=/tmp -e OUT=/out \
+    docker run --rm --network "${PROJECT}_dev" --user "$(id -u):$(id -g)" \
+        -e HOME=/tmp -e OUT=/out -e "BASE_PATH=$DEV_BASE_PATH" \
         -v "$ROOT/tests/browser:/tests:ro" -v "$ROOT/.dev/screenshots:/out" \
         teslamate-expenses:browser-tests python3 /tests/run.py
 }
@@ -214,6 +280,14 @@ case "${1:-}" in
     refresh) ensure_env; warn_if_schema_drifted; copy_data ;;
     reset) ensure_env; compose down -v; start "" ;;
     down) ensure_env; compose down ;;
+    destroy)
+        ensure_env
+        compose down -v --remove-orphans
+        docker image rm "teslamate-expenses:$DEV_TAG" >/dev/null 2>&1 || true
+        echo "dev: removed $PROJECT" ;;
+    list) docker compose ls -a --filter name=teslamate-expenses-dev ;;
+    setup) setup ;;
+    info) info ;;
     test-browser) test_browser ;;
     schema)
         require_source
@@ -224,5 +298,5 @@ case "${1:-}" in
         git --no-pager diff --stat -- "$SCHEMA" || true ;;
     psql) ensure_env; shift; dev_psql "$@" ;;
     logs) ensure_env; compose logs -f expenses-dev ;;
-    *) sed -n '3,13p' "$0" >&2; exit 2 ;;
+    *) sed -n '3,17p' "$0" >&2; exit 2 ;;
 esac

@@ -43,16 +43,23 @@ def test_host_ports_are_loopback_only():
 
 def test_every_router_requires_a_forward_auth_middleware():
     for text in (DEV_PROXY, PROD_PROXY):
-        routers = set(re.findall(r"routers\.([\w-]+)\.rule", text))
+        routers = set(re.findall(r"routers\.(\S+?)\.rule=", text))
         assert routers
         for router in routers:
-            assert re.search(rf"routers\.{router}\.middlewares=\$\{{AUTH_MIDDLEWARE:\?", text), router
+            assert re.search(rf"routers\.{re.escape(router)}\.middlewares=\$\{{AUTH_MIDDLEWARE:\?", text), router
 
 
-def test_dev_routes_outrank_production_and_each_other():
-    prio = lambda text, r: int(re.search(rf"routers\.{r}\.priority=(\d+)", text).group(1))
-    assert prio(PROD_PROXY, "tm-expenses-secure") < prio(DEV_PROXY, "tm-expenses-dev-secure") \
-        < prio(DEV_PROXY, "tm-expenses-dev-grafana")
+def test_dev_routes_outrank_production():
+    prod = int(re.search(r"tm-expenses-secure\.priority=(\d+)", PROD_PROXY).group(1))
+    dev = [int(p) for p in re.findall(r"\.priority=\$\{DEV_\w+_PRIORITY:-(\d+)\}", DEV_PROXY)]
+    assert len(dev) == 2 and prod < min(dev)
+    # Worktree priorities come from dev.sh; tests/test_worktrees.py checks their order.
+
+
+def test_dev_routes_end_in_a_slash():
+    """Otherwise /expenses-dev/foo would also serve /expenses-dev/foobar."""
+    rules = re.findall(r"PathPrefix\(`([^`]+)`\)", DEV_PROXY)
+    assert rules and all(r.endswith("/") for r in rules)
 
 
 def test_only_reads_from_the_seed_source():

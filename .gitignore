@@ -1,4 +1,5 @@
 CLAUDE.local.md
+.claude/worktrees/
 .dev/
 dev.env
 .env
