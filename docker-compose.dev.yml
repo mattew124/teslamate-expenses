@@ -24,7 +24,7 @@ services:
       BASE_PATH: ${DEV_BASE_PATH:-/expenses-dev}
       # OneDrive is on in dev, with a throwaway key from .dev/env; the app
       # registration is entered on its OneDrive page.
-      ONEDRIVE_TOKEN_KEY: ${DEV_ONEDRIVE_TOKEN_KEY:-}
+      EXPENSES_ENCRYPTION_KEY: ${DEV_ENCRYPTION_KEY:-}
       APP_TZ: ${APP_TZ:-UTC}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       TZ: ${APP_TZ:-UTC}

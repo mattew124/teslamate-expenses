@@ -73,10 +73,12 @@ def create_app(connect=None, onedrive_transport=None):
             log.warning("Could not write the Grafana dashboard to %s: %s", dashboard_dir, exc)
     # Room for the largest PDF plus the rest of the form.
     app.config["MAX_CONTENT_LENGTH"] = validation.MAX_PDF_BYTES + 1024 * 1024
-    # ONEDRIVE_TOKEN_KEY turns OneDrive on; everything else is set up in the UI.
+    # EXPENSES_ENCRYPTION_KEY turns OneDrive on; everything else is set up in the UI.
     drive = None
-    if os.environ.get("ONEDRIVE_TOKEN_KEY"):
-        drive = onedrive.OneDrive(os.environ["ONEDRIVE_TOKEN_KEY"], onedrive_transport)
+    if os.environ.get("EXPENSES_ENCRYPTION_KEY"):
+        drive = onedrive.OneDrive(os.environ["EXPENSES_ENCRYPTION_KEY"], onedrive_transport)
+    elif os.environ.get("ONEDRIVE_TOKEN_KEY"):
+        log.warning("ONEDRIVE_TOKEN_KEY was renamed EXPENSES_ENCRYPTION_KEY; OneDrive stays off until it is set.")
     base_path = os.environ.get("BASE_PATH", "")
     if base_path:
         app.wsgi_app = PrefixMiddleware(app.wsgi_app, base_path)

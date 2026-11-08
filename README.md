@@ -109,7 +109,7 @@ The date part is `yymmdd` unless you change it under **Settings → Invoice file
    and restart the app:
 
    ```bash
-   ONEDRIVE_TOKEN_KEY=<output of: openssl rand -base64 32 | tr '+/' '-_'>
+   EXPENSES_ENCRYPTION_KEY=<output of: openssl rand -base64 32 | tr '+/' '-_'>
    ```
 
    The key encrypts the client secret and the saved sign-in (a refresh token for your whole
