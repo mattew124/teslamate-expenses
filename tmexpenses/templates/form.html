@@ -4,8 +4,24 @@
 {% block content %}
 <h1>{{ 'Edit expense' if expense_id else 'Add expense' }}</h1>
 {% if errors %}<p class="notice bad">Please fix the highlighted fields.</p>{% endif %}
+{% if not expense_id %}
+<div id="duplicate-warning" class="notice bad" role="alert" {{ '' if duplicates else 'hidden' }}>
+  <p><strong>This looks like an expense you've already recorded</strong> (same car and amount, within two weeks):</p>
+  <ul class="plain" id="duplicate-list">{% for d in duplicates or [] %}
+    <li>{{ d.date }} · {{ d.category }}{% if d.vendor %} · {{ d.vendor }}{% endif %} · {{ d.amount_text }}
+      — <a href="{{ d.edit_url }}" target="_blank" rel="noopener noreferrer">open it</a></li>{% endfor %}
+  </ul>
+  {% if duplicates %}<p>If this is a separate expense, press <strong>Save anyway</strong> below{% if had_file %}
+    (choose the PDF again first: a page can't keep a chosen file){% endif %}.</p>
+  {% else %}<div class="row">
+    <button type="button" id="duplicate-save" class="button">Save anyway</button>
+    <button type="button" id="duplicate-cancel" class="linklike">Go back and check</button>
+  </div>{% endif %}
+</div>
+{% endif %}
 <form method="post" class="stack" id="expense-form" enctype="multipart/form-data"
-      data-odometer-url="{{ url_for('api_odometer') }}" {% if not expense_id %}data-prefill-url="{{ url_for('api_prefill') }}"{% endif %}>
+      data-odometer-url="{{ url_for('api_odometer') }}" {% if not expense_id %}data-prefill-url="{{ url_for('api_prefill') }}" data-duplicates-url="{{ url_for('api_duplicates') }}"{% endif %}>
+  <input type="hidden" name="confirm_duplicate" value="{{ '1' if duplicates }}">
   <label>Car
     <select name="car_id" required>
       {% if cars|length != 1 %}<option value="">Choose…</option>{% endif %}
@@ -58,7 +74,7 @@
   <label>Notes <textarea name="notes" rows="3" maxlength="2000">{{ values.notes }}</textarea>{{ err('notes') }}</label>
 
   <div class="row">
-    <button type="submit" class="button">Save</button>
+    <button type="submit" class="button">{{ 'Save anyway' if duplicates else 'Save' }}</button>
     <a href="{{ url_for('index') }}">Cancel</a>
   </div>
 </form>

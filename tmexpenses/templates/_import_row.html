@@ -5,6 +5,7 @@
         {% if r.folder %}<br><small>{{ r.folder }}</small>{% endif %}
 <br><label class="inline"><input type="checkbox" name="rename_{{ n }}" {{ 'checked' if r.rename }}>
           <small>Rename in OneDrive to {% if r.new_name %}<em>{{ r.new_name }}</em> (from the values below){% else %}<em>yymmdd - category - vendor</em>{% endif %}</small></label>
+        {% for d in r.duplicates %}<br><small class="dup">Possible duplicate: <a href="{{ d.edit_url }}" target="_blank" rel="noopener noreferrer">{{ d.date }} · {{ d.category }}{% if d.vendor %} · {{ d.vendor }}{% endif %} · {{ d.amount_text }}</a></small>{% endfor %}
         {% if errors.get(n) %}<br><span class="error">{{ errors[n] }}</span>{% elif r.note %}<br><small>{{ r.note }}</small>{% endif %}
         <input type="hidden" name="url_{{ n }}" value="{{ r.url }}">
         <input type="hidden" name="name_{{ n }}" value="{{ r.name }}">

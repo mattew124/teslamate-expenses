@@ -47,6 +47,41 @@ def add_expense(page, amount="123.45", category="Tyres"):
     page.wait_for_url(re.compile(r"msg=saved"))
 
 
+def test_duplicate_is_asked_about_before_saving(page):
+    """Adding the same car/amount/date twice: the page asks first (inline, nothing sent), and
+    Save anyway saves the second."""
+    def fill():
+        page.goto(UI + "new")
+        page.select_option("select[name=category_id]", label="Tyres")
+        page.fill("input[name=amount]", "246.81")
+        page.fill("input[name=vendor]", MARKER)
+        page.click("button[type=submit].button")
+    fill()
+    page.wait_for_url(re.compile(r"msg=saved"))                 # nothing like it yet: saves straight away
+    fill()
+    expect(page.locator("#duplicate-warning")).to_be_visible()
+    expect(page.locator("#duplicate-list li")).to_have_count(1)
+    assert "246.81" in page.inner_text("#duplicate-list")
+    assert "/new" in page.url and "msg=" not in page.url        # still on the form, nothing saved
+    shot(page, "duplicate-warning")
+    page.click("#duplicate-save")
+    page.wait_for_url(re.compile(r"msg=saved"))
+    page.goto(UI)
+    assert page.locator("tbody tr", has_text=MARKER).count() == 2
+
+
+def test_duplicate_warning_can_be_dismissed(page):
+    page.goto(UI + "new")
+    page.select_option("select[name=category_id]", label="Tyres")
+    page.fill("input[name=amount]", "246.81")
+    page.fill("input[name=vendor]", MARKER)
+    page.click("button[type=submit].button")
+    expect(page.locator("#duplicate-warning")).to_be_visible()
+    page.click("#duplicate-cancel")
+    expect(page.locator("#duplicate-warning")).to_be_hidden()
+    assert page.input_value("input[name=vendor]") == MARKER      # the form is untouched
+
+
 def test_large_pdf_is_accepted(page):
     """Uploads over 500 KB are spooled to a temp file. The container's root is read-only, so
     this fails with 'No usable temporary directory' unless TMPDIR points at the tmpfs."""
@@ -299,6 +334,8 @@ def main():
         step("no sideways scroll on a phone", test_phone_layout_has_no_sideways_scroll, page)
         step("header stays tidy on a phone", test_header_stays_tidy_on_a_phone, page)
         step("phone list shows amount, invoice and edit", test_list_shows_key_fields_on_a_phone, page)
+        step("a likely duplicate is asked about, then saved anyway", test_duplicate_is_asked_about_before_saving, page)
+        step("the duplicate warning can be dismissed", test_duplicate_warning_can_be_dismissed, page)
         step("a PDF over 500 KB uploads (read-only container)", test_large_pdf_is_accepted, page)
         step("OneDrive page and upload field", test_onedrive_page, page)
         step("Connect OneDrive goes to Microsoft", test_connect_reaches_microsoft, page)

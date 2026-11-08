@@ -222,6 +222,21 @@ def delete_vendor(conn, vendor):
     conn.execute("DELETE FROM expenses.learned_vendor WHERE vendor = %s", (vendor,))
 
 
+DUPLICATE_WINDOW_DAYS = 14
+
+
+def find_duplicates(conn, car_id, occurred_at, amount, window_days=DUPLICATE_WINDOW_DAYS, exclude_id=None):
+    """Expenses that look like this one: same car, exactly the same amount, within `window_days`
+    either side. Closest first, at most five. Category and vendor are shown, not required to match:
+    the same bill is often filed under a different category or vendor spelling."""
+    return conn.execute(
+        f"{_SELECT} WHERE e.car_id = %(car)s AND e.amount = %(amount)s "
+        "AND e.occurred_at BETWEEN %(when)s - make_interval(days => %(days)s) AND %(when)s + make_interval(days => %(days)s) "
+        "AND (%(skip)s::bigint IS NULL OR e.id <> %(skip)s) "
+        "ORDER BY abs(extract(epoch FROM e.occurred_at - %(when)s)), e.id LIMIT 5",
+        {"car": car_id, "amount": amount, "when": occurred_at, "days": window_days, "skip": exclude_id}).fetchall()
+
+
 def known_invoice_urls(conn, urls):
     """Which of these invoice links an expense already has."""
     if not urls:

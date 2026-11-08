@@ -156,11 +156,27 @@ def create_app(connect=None, onedrive_transport=None):
                 "onedrive_connected": bool(account and account["refresh_token"]),
             }
 
-    def parse(form):
+    def dup_view(matches):
+        """Possible duplicates as the page and the JSON endpoint show them."""
+        return [{"id": m["id"], "date": m["occurred_at"].astimezone(ZoneInfo(tz)).strftime("%d %b %Y"),
+                 "category": m["category"], "vendor": m["vendor"] or "", "amount": f"{m['amount']:.2f}",
+                 "amount_text": f"${m['amount']:,.2f}", "edit_url": url_for("edit", expense_id=m["id"])}
+                for m in matches]
+
+    def parse(form, check_duplicates=False):
+        """-> (values, errors). With check_duplicates, a likely duplicate is reported as
+        errors["_duplicates"] (before anything is uploaded) unless the owner has said to save anyway."""
         with connect() as conn:
             car_ids = {c["id"] for c in db.cars(conn)}
             cat_ids = {c["id"] for c in db.categories(conn)}
         values, errors = validation.parse_expense_form(form, tz, car_ids, cat_ids)
+        if check_duplicates and not errors and not form.get("confirm_duplicate"):
+            with connect() as conn:
+                matches = db.find_duplicates(conn, values["car_id"], values["occurred_at"], values["amount"])
+            if matches:
+                log.debug("duplicate check: %d possible duplicate(s) of car=%d, held for confirmation", len(matches),
+                          values["car_id"])
+                return values, {"_duplicates": dup_view(matches)}
         if drive is None:
             return values, errors
         upload = request.files.get("invoice_file")
@@ -262,7 +278,12 @@ def create_app(connect=None, onedrive_transport=None):
 
     @app.post("/new")
     def create():
-        values, errors = parse(request.form)
+        values, errors = parse(request.form, check_duplicates=True)
+        if "_duplicates" in errors:
+            upload = request.files.get("invoice_file")
+            ctx = form_context(form_values(request.form), {})
+            return render_template("form.html", **ctx, duplicates=errors["_duplicates"],
+                                   had_file=bool(upload and upload.filename)), 409
         if errors:
             return render_template("form.html", **form_context(form_values(request.form), errors)), 400
         with connect() as conn:
@@ -540,7 +561,7 @@ def create_app(connect=None, onedrive_transport=None):
     def import_row(n, **fields):
         return {"n": n, "include": False, "date": "", "category_id": "", "vendor": "",
                 "amount": "", "odometer_km": "", "url": "", "name": "", "folder": "",
-                "note": "", "id": "", "guess": {}, "new_name": "", "rename": False, "odo_note": "", **fields}
+                "note": "", "id": "", "guess": {}, "new_name": "", "rename": False, "odo_note": "", "duplicates": [], **fields}
 
     def render_import(car, rows, remaining=0, errors=None, status=200, notice=None):
         with connect() as conn:
@@ -594,6 +615,13 @@ def create_app(connect=None, onedrive_transport=None):
             if reading is not None:
                 row["odometer_km"] = f"{reading:.1f}".rstrip("0").rstrip(".")
                 row["odo_note"] = "from TeslaMate"
+        if guess["date"] and guess["amount"] is not None:
+            with connect() as conn:
+                same = db.find_duplicates(conn, car["id"], datetime.combine(guess["date"], dtime(12), ZoneInfo(tz)),
+                                          guess["amount"])
+            if same:
+                row["duplicates"] = dup_view(same)
+                row["include"] = False          # the owner decides, not the default
         if guess["date"] and guess["category"]:
             target = validation.invoice_filename(
                 datetime.combine(guess["date"], dtime(12)), guess["category"], guess["vendor"],
@@ -862,6 +890,20 @@ def create_app(connect=None, onedrive_transport=None):
             category_id=by_name.get(guess["category"]), vendor=guess["vendor"],
             amount=f"{guess['amount']:.2f}" if guess["amount"] is not None else None,
             odometer_km=guess["odometer_km"])
+
+    @app.get("/api/duplicates")
+    def api_duplicates():
+        """Likely duplicates of the expense being entered: the Add page asks before it submits."""
+        car_id = request.args.get("car_id", type=int)
+        if car_id is None:
+            return jsonify(error="car_id required"), 400
+        try:
+            when = validation.parse_local_datetime(request.args.get("date"), request.args.get("time"), tz)
+            amount = validation.parse_amount(request.args.get("amount"))
+        except ValueError as exc:
+            return jsonify(error=str(exc)), 400
+        with connect() as conn:
+            return jsonify(matches=dup_view(db.find_duplicates(conn, car_id, when, amount)))
 
     @app.get("/api/odometer")
     def api_odometer():

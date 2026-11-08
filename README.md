@@ -191,6 +191,12 @@ On **+ Add**, choosing the invoice PDF
 fills in the date, amount, vendor, category (when the file name or a learned vendor says) and
 odometer it can read, without touching anything you've already typed.
 
+**Possible duplicates** are flagged. Saving a new expense (the Add form) that has the same car and exactly
+the same amount as one within 14 days either side asks first: it lists the match with a link to open it, and
+**Save anyway** saves the new one regardless. The question comes before anything is uploaded to OneDrive, and the
+server asks again if the page's own check was skipped. The import preview does the same per file, leaving a
+likely duplicate unticked with a link to the expense it resembles.
+
 The importer **learns from your corrections**. When you change or fill in a date, amount or
 odometer, it re-reads that PDF and finds your value in the text: the label printed beside it
 (for example `Annual premium` or `Date of issue`) is remembered, never the value itself. It also
