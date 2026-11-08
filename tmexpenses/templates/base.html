@@ -11,7 +11,7 @@
 </head>
 <body>
   <header>
-    <a class="brand" href="{{ url_for('index') }}">Expenses</a>
+    <a class="brand" href="{{ url_for('index') }}"><img src="{{ url_for('static', filename='icon.svg') }}" alt="" width="28" height="28">Expenses</a>
     <a class="button add" href="{{ url_for('new') }}">+ Add</a>
     <nav>
       <a href="{{ url_for('index') }}">All</a>
