@@ -1,10 +1,18 @@
-FROM python:3.13-slim
+FROM python:3.15-slim
+
+# Debian security fixes that landed after the base image was built (a scanner gates releases on these).
+RUN apt-get update \
+ && apt-get upgrade -y --no-install-recommends \
+ && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PIP_NO_CACHE_DIR=1
 
 WORKDIR /srv
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+RUN pip install -r requirements.txt \
+ # The app never runs pip. Removing it also drops pip's vendored copies of urllib3 and
+ # msgpack, which vulnerability scanners flag in the image.
+ && pip uninstall -y pip
 
 COPY gunicorn.conf.py .
 COPY tmexpenses ./tmexpenses
