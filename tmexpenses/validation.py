@@ -127,10 +127,33 @@ def parse_folder_name(raw):
     return name
 
 
-def invoice_filename(occurred_at, category, vendor):
-    """'2026-11-07 Tyres - Tyre Shop.pdf': sorts by date in the folder, and is a
-    legal OneDrive name whatever the vendor field holds."""
-    stem = f"{occurred_at:%Y-%m-%d} {category}" + (f" - {vendor}" if vendor else "")
+MAX_DATE_PATTERN_LEN = 20
+_DATE_TOKENS = (("yyyy", "%Y"), ("yy", "%y"), ("mm", "%m"), ("dd", "%d"))
+DEFAULT_DATE_PATTERN = "yymmdd"
+
+
+def parse_date_pattern(raw):
+    """The date part of uploaded invoice names, as typed on the Settings page: yyyy, yy, mm
+    and dd with - _ . or a space between. Blank means the default (None)."""
+    pattern = (raw or "").strip().lower()
+    if not pattern:
+        return None
+    rest = pattern
+    for token, _ in _DATE_TOKENS:
+        rest = rest.replace(token, "")
+    if (len(pattern) > MAX_DATE_PATTERN_LEN or rest.strip("-_. ") or len(rest) == len(pattern)
+            or pattern == rest):
+        raise ValueError("Use yyyy, yy, mm and dd, with - _ . or a space between, e.g. yymmdd or yyyy-mm-dd.")
+    return pattern
+
+
+def invoice_filename(occurred_at, category, vendor, date_pattern=None):
+    """'261107 Tyres - Tyre Shop.pdf': sorts by date in the folder, and is a legal
+    OneDrive name whatever the vendor field holds. `date_pattern` is as parse_date_pattern."""
+    fmt = date_pattern or DEFAULT_DATE_PATTERN
+    for token, code in _DATE_TOKENS:
+        fmt = fmt.replace(token, code)
+    stem = f"{occurred_at.strftime(fmt)} {category}" + (f" - {vendor}" if vendor else "")
     stem = "".join("-" if ch in ONEDRIVE_FORBIDDEN or ord(ch) < 32 else ch for ch in stem)
     stem = stem[:MAX_FILENAME_LEN - 4].rstrip(" .")
     return stem + ".pdf"

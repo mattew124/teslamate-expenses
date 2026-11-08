@@ -108,11 +108,23 @@ def test_optional_date():
 def test_invoice_filename():
     from datetime import datetime
     when = datetime(2026, 11, 7, 14, 5)
-    assert v.invoice_filename(when, "Tyres", "Tyre Shop") == "2026-11-07 Tyres - Tyre Shop.pdf"
-    assert v.invoice_filename(when, "Insurance", None) == "2026-11-07 Insurance.pdf"
-    assert v.invoice_filename(when, "Tyres", 'A/B: "C"*?<>|\\ ') == "2026-11-07 Tyres - A-B- -C-------.pdf"
+    assert v.invoice_filename(when, "Tyres", "Tyre Shop") == "261107 Tyres - Tyre Shop.pdf"
+    assert v.invoice_filename(when, "Insurance", None) == "261107 Insurance.pdf"
+    assert v.invoice_filename(when, "Tyres", 'A/B: "C"*?<>|\\ ') == "261107 Tyres - A-B- -C-------.pdf"
+    assert v.invoice_filename(when, "Tyres", "Tyre Shop", "yyyy-mm-dd") == "2026-11-07 Tyres - Tyre Shop.pdf"
+    assert v.invoice_filename(when, "Tyres", None, "dd.mm.yy") == "07.11.26 Tyres.pdf"
     long = v.invoice_filename(when, "Tyres", "x" * 500)
     assert len(long) <= 120 and long.endswith(".pdf")
+
+
+def test_date_pattern():
+    assert v.parse_date_pattern("") is None and v.parse_date_pattern("  ") is None   # default
+    assert v.parse_date_pattern(" YYYY-MM-DD ") == "yyyy-mm-dd"
+    assert v.parse_date_pattern("yymmdd") == "yymmdd"
+    assert v.parse_date_pattern("yyyy_mm_dd") == "yyyy_mm_dd"
+    for bad in ("hello", "yy/mm/dd", "yy:mm", "../yy", "y", "m", "yymmdd" * 5, "%Y%m%d"):
+        with pytest.raises(ValueError):
+            v.parse_date_pattern(bad)
 
 
 def test_folder_name():

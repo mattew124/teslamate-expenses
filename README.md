@@ -64,9 +64,11 @@ can write expenses and read only `cars` and `positions(car_id, date, odometer)`.
 ## OneDrive uploads
 
 With this on, the expense form takes the invoice PDF itself. The app uploads it to the folder
-you chose for that car, names it `2026-11-07 Tyres - Tyre Shop.pdf` (date, category, vendor;
+you chose for that car, names it `261107 Tyres - Tyre Shop.pdf` (date, category, vendor;
 an existing name gets a suffix, never overwritten) and stores the file's OneDrive link as the
 expense's invoice link. It works with a personal Microsoft account (OneDrive Personal).
+The date part is `yymmdd` unless you change it under **Settings → Invoice file name date**
+(for example `yyyy-mm-dd`).
 
 1. **Turn it on.** Add a key to `.env`, re-run `scripts/provision-db.sh` (it adds two tables)
    and restart the app:

@@ -231,6 +231,20 @@ def test_settings_rejects_non_http_urls(client, admin):
     assert admin.execute("SELECT grafana_url FROM expenses.setting").fetchone()["grafana_url"] is None
 
 
+def test_settings_invoice_date_format(client, admin):
+    q = lambda: admin.execute("SELECT invoice_date_format AS f FROM expenses.setting").fetchone()["f"]
+    assert q() is None and b"yymmdd" in client.get("/settings").data      # default is shown
+    ok = client.post("/settings", data={"expenses_url": "", "grafana_url": "", "invoice_date_format": " YYYY-MM-DD "},
+                     headers=ORIGIN)
+    assert ok.status_code == 303 and q() == "yyyy-mm-dd"
+    assert b'value="yyyy-mm-dd"' in client.get("/settings").data
+    bad = client.post("/settings", data={"expenses_url": "", "grafana_url": "", "invoice_date_format": "yy/mm/dd"},
+                      headers=ORIGIN)
+    assert bad.status_code == 400 and q() == "yyyy-mm-dd"
+    client.post("/settings", data={"expenses_url": "", "grafana_url": "", "invoice_date_format": ""}, headers=ORIGIN)
+    assert q() is None                                                   # blank = back to the default
+
+
 # ---- the app sets up its own schema on start ---------------------------------
 
 @pytest.fixture()
