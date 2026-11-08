@@ -206,13 +206,26 @@ def test_ownership_view_without_purchase_or_data(admin):
     assert r["distance_km"] is None and r["owned_since"] is None
 
 
-def test_dashboards_link_comes_from_teslamate_settings(client, admin):
-    """The Grafana URL is set in TeslaMate's own Settings page; this app reads it from there."""
-    admin.execute("DELETE FROM settings")
+def test_settings_page_saves_urls_and_header_links_to_dashboards(client, admin):
+    """Like TeslaMate's own Settings page: the URLs are set in this app's UI, not in compose."""
+    admin.execute("UPDATE expenses.setting SET expenses_url = NULL, grafana_url = NULL")
     assert b"Dashboards" not in client.get("/").data          # nothing set, so no dead link
-    admin.execute("INSERT INTO settings (id, inserted_at, updated_at, grafana_url) "
-                  "VALUES (1, now(), now(), 'https://grafana.example.test/')")
-    page = client.get("/").data
-    assert b'href="https://grafana.example.test/"' in page and b"Dashboards" in page
-    admin.execute("UPDATE settings SET grafana_url = 'javascript:alert(1)'")
-    assert b"javascript:" not in client.get("/").data         # only http(s) is linked
+    assert b'name="grafana_url"' in client.get("/settings").data
+    ok = client.post("/settings", data={"expenses_url": "https://tm.example.test/expenses/",
+                                        "grafana_url": " https://tm.example.test/grafana/d/tco "},
+                     headers=ORIGIN)
+    assert ok.status_code == 303
+    row = admin.execute("SELECT expenses_url, grafana_url FROM expenses.setting").fetchone()
+    assert row == {"expenses_url": "https://tm.example.test/expenses/",
+                   "grafana_url": "https://tm.example.test/grafana/d/tco"}
+    assert b'href="https://tm.example.test/grafana/d/tco"' in client.get("/").data
+    # blank clears a URL
+    client.post("/settings", data={"expenses_url": "", "grafana_url": ""}, headers=ORIGIN)
+    assert b"Dashboards" not in client.get("/").data
+
+
+def test_settings_rejects_non_http_urls(client, admin):
+    for bad in ("javascript:alert(1)", "ftp://x.test/", "not a url", "https://a b.test/"):
+        r = client.post("/settings", data={"expenses_url": "", "grafana_url": bad}, headers=ORIGIN)
+        assert r.status_code == 400 and b"http" in r.data, bad
+    assert admin.execute("SELECT grafana_url FROM expenses.setting").fetchone()["grafana_url"] is None

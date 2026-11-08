@@ -105,8 +105,8 @@ ensure_env() {
           printf 'DEV_APP_DB_PASS=%s\nDEV_ADMIN_DB_PASS=%s\nDEV_GRAFANA_PASS=%s\n' \
               "$(openssl rand -hex 24)" "$(openssl rand -hex 24)" "$(openssl rand -hex 24)" > "$ENVF" )
     fi
-    # Dashboard copy with the app link (built from settings.base_url) kept inside dev and the timezone defaulted.
-    sed -e "s#|| '/expenses/'#|| '$DEV_BASE_PATH/'#" \
+    # Dashboard copy with the app link's fallback kept inside dev and the timezone defaulted.
+    sed -e "s#, '/expenses/')#, '$DEV_BASE_PATH/')#" \
         -e "s#\"\(query\|text\|value\)\": \"UTC\"#\"\1\": \"$APP_TZ\"#" \
         grafana/cost-of-ownership.json > .dev/dashboards/cost-of-ownership.json
 }
@@ -138,7 +138,7 @@ dump_schema() {
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
 
 HEADER
-        docker exec "$SEED_FROM" sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --schema-only --no-owner --no-privileges -t public.cars -t public.positions -t public.charging_processes -t public.settings' \
+        docker exec "$SEED_FROM" sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --schema-only --no-owner --no-privileges -t public.cars -t public.positions -t public.charging_processes' \
             | awk -f scripts/filter-schema-dump.awk
     }
 }
@@ -228,20 +228,20 @@ prepare_database() {
     pass="$(. "$ENVF"; printf '%s' "$DEV_APP_DB_PASS")"
     DB_CONTAINER="$(compose ps -q dev-db)" EXPENSES_DB_PASS="$pass" scripts/provision-db.sh
     [ "$first_run" = no ] || copy_data
-    seed_settings
+    [ "$first_run" = no ] || seed_settings
 }
 
-# TeslaMate keeps the two URLs in its Settings page (public.settings). The live
-# values point at the live stack, so the test database gets this stack's own.
+# What you would type on the app's Settings page, for this stack's own addresses.
 seed_settings() {
     local app graf
-    if [ -n "${PUBLIC_HOST:-}" ]; then app="https://$PUBLIC_HOST"; graf="$app$DEV_BASE_PATH/grafana/"
-    else app="http://localhost:$DEV_UI_PORT"; graf="http://localhost:$DEV_GRAFANA_PORT$DEV_BASE_PATH/grafana/"; fi
-    [ "$(dev_psql -At -c "SELECT to_regclass('public.settings') IS NULL")" = f ] || return 0
+    if [ -n "${PUBLIC_HOST:-}" ]; then
+        app="https://$PUBLIC_HOST$DEV_BASE_PATH/"; graf="https://$PUBLIC_HOST$DEV_BASE_PATH/grafana/"
+    else
+        app="http://localhost:$DEV_UI_PORT$DEV_BASE_PATH/"
+        graf="http://localhost:$DEV_GRAFANA_PORT$DEV_BASE_PATH/grafana/"
+    fi
     dev_psql -q -v "app=$app" -v "graf=$graf" <<'SQL'
-INSERT INTO public.settings (id, inserted_at, updated_at, base_url, grafana_url)
-VALUES (1, now(), now(), :'app', :'graf')
-ON CONFLICT (id) DO UPDATE SET base_url = :'app', grafana_url = :'graf', updated_at = now();
+UPDATE expenses.setting SET expenses_url = :'app', grafana_url = :'graf' WHERE id = 1;
 SQL
 }
 

@@ -19,6 +19,7 @@ MESSAGES = {
     "updated": "Expense updated.",
     "deleted": "Expense deleted.",
     "category": "Category added.",
+    "settings": "Settings saved.",
 }
 
 
@@ -89,14 +90,12 @@ def create_app(connect=None):
 
     @app.context_processor
     def dashboards_link():
-        """Link to Grafana, from the URL set in TeslaMate's Settings. Only http(s) is
-        linked, and a failure to read it must not take the page down."""
+        """The header's link to Grafana. A failure to read it must not take the page down."""
         try:
             with connect() as conn:
-                url = db.grafana_url(conn)
+                return {"grafana_url": db.get_settings(conn)["grafana_url"]}
         except Exception:
             return {"grafana_url": None}
-        return {"grafana_url": url if url and urlparse(url).scheme in ("http", "https") else None}
 
     def form_context(values=None, errors=None, expense_id=None):
         with connect() as conn:
@@ -212,6 +211,27 @@ def create_app(connect=None):
             cats = db.categories(conn)
         return render_template("categories.html", categories=cats, error=error,
                                message=MESSAGES.get(request.args.get("msg", ""))), (400 if error else 200)
+
+    @app.route("/settings", methods=["GET", "POST"])
+    def settings():
+        values, errors = {}, {}
+        if request.method == "POST":
+            for field in ("expenses_url", "grafana_url"):
+                raw = request.form.get(field, "")
+                values[field] = raw
+                try:
+                    values[field] = validation.parse_url_setting(raw)
+                except ValueError as exc:
+                    errors[field] = str(exc)
+            if not errors:
+                with connect() as conn:
+                    db.save_settings(conn, values["expenses_url"], values["grafana_url"])
+                return redirect(url_for("settings", msg="settings"), 303)
+        else:
+            with connect() as conn:
+                values = db.get_settings(conn)
+        return render_template("settings.html", values=values, errors=errors,
+                               message=MESSAGES.get(request.args.get("msg", ""))), (400 if errors else 200)
 
     @app.get("/api/odometer")
     def api_odometer():

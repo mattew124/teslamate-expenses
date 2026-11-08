@@ -28,6 +28,17 @@ INSERT INTO expenses.category (name, kind, sort_order) VALUES
     ('Tyre rotation',     'running',   80)
 ON CONFLICT (name) DO NOTHING;
 
+-- Settings, saved from the app's Settings page (the same idea as TeslaMate's own).
+-- A single row. Both are optional, and http(s) only: they are rendered as links.
+--   expenses_url  where this app is published; the Grafana dashboard links back to it
+--   grafana_url   the Grafana dashboard for this app; the app's header links to it
+CREATE TABLE IF NOT EXISTS expenses.setting (
+    id            smallint PRIMARY KEY CHECK (id = 1),
+    expenses_url  text CHECK (expenses_url IS NULL OR expenses_url ~* '^https?://[^[:space:]]+$'),
+    grafana_url   text CHECK (grafana_url IS NULL OR grafana_url ~* '^https?://[^[:space:]]+$')
+);
+INSERT INTO expenses.setting (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
 CREATE TABLE IF NOT EXISTS expenses.expense (
     id           bigserial PRIMARY KEY,
     car_id       smallint NOT NULL REFERENCES public.cars (id),

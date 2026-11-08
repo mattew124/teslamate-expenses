@@ -29,10 +29,14 @@ def cars(conn):
     return conn.execute("SELECT id, name FROM public.cars ORDER BY id").fetchall()
 
 
-def grafana_url(conn):
-    """The Grafana URL saved in TeslaMate's Settings page, or None."""
-    row = conn.execute("SELECT grafana_url FROM public.settings LIMIT 1").fetchone()
-    return (row["grafana_url"] or "").strip() or None if row else None
+def get_settings(conn):
+    row = conn.execute("SELECT expenses_url, grafana_url FROM expenses.setting WHERE id = 1").fetchone()
+    return row or {"expenses_url": None, "grafana_url": None}
+
+
+def save_settings(conn, expenses_url, grafana_url):
+    conn.execute("UPDATE expenses.setting SET expenses_url = %s, grafana_url = %s WHERE id = 1",
+                 (expenses_url, grafana_url))
 
 
 def categories(conn):
