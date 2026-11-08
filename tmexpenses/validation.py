@@ -146,6 +146,19 @@ def parse_category_name(raw):
     return name
 
 
+def parse_url_setting(raw):
+    """A blank clears the setting (None). Otherwise an http(s) URL with no spaces."""
+    url = (raw or "").strip()
+    if not url:
+        return None
+    parts = urlparse(url)
+    if parts.scheme not in ("http", "https") or not parts.netloc or any(c.isspace() for c in url):
+        raise ValueError("Enter a full address starting with http:// or https://")
+    if len(url) > MAX_URL_LEN:
+        raise ValueError("That address is too long.")
+    return url
+
+
 def parse_expense_form(form, tz, valid_car_ids, valid_category_ids):
     """-> (values, errors). `values` is only meaningful when `errors` is empty."""
     values, errors = {}, {}

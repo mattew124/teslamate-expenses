@@ -18,8 +18,9 @@ services:
     environment:
       DATABASE_HOST: dev-db
       DATABASE_NAME: teslamate
-      DATABASE_USER: expenses_app
-      DATABASE_PASS: ${DEV_APP_DB_PASS:-}
+      # Same as the live setup: the TeslaMate database user. The app creates its own schema.
+      DATABASE_USER: teslamate
+      DATABASE_PASS: ${DEV_ADMIN_DB_PASS:-}
       BASE_PATH: ${DEV_BASE_PATH:-/expenses-dev}
       # Optional: ONEDRIVE_CLIENT_ID in dev.env turns on invoice uploads. The
       # token key is a throwaway one from .dev/env.

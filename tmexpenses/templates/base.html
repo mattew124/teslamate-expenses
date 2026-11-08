@@ -10,11 +10,13 @@
 <body>
   <header>
     <a class="brand" href="{{ url_for('index') }}">Expenses</a>
+    <a class="button add" href="{{ url_for('new') }}">+ Add</a>
     <nav>
       <a href="{{ url_for('index') }}">All</a>
       <a href="{{ url_for('categories') }}">Categories</a>
+      {% if grafana_url %}<a href="{{ grafana_url }}" target="_blank" rel="noopener noreferrer">Dashboards ↗</a>{% endif %}
       {% if onedrive_enabled %}<a href="{{ url_for('onedrive_page') }}">OneDrive</a>{% endif %}
-      <a class="button" href="{{ url_for('new') }}">+ Add</a>
+      <a href="{{ url_for('settings') }}">Settings</a>
     </nav>
   </header>
   <main>
