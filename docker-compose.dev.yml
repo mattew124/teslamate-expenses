@@ -26,6 +26,7 @@ services:
       # registration is entered on its OneDrive page.
       ONEDRIVE_TOKEN_KEY: ${DEV_ONEDRIVE_TOKEN_KEY:-}
       APP_TZ: ${APP_TZ:-UTC}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
       TZ: ${APP_TZ:-UTC}
     depends_on:
       dev-db:
