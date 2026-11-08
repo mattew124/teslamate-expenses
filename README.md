@@ -1,6 +1,24 @@
-# teslamate-expenses
+<p align="center"><img src="tmexpenses/static/icon.svg" alt="" width="96" height="96"></p>
 
-Track what your Tesla costs to own, next to [TeslaMate](https://github.com/teslamate-org/teslamate).
+<h1 align="center">teslamate-expenses</h1>
+
+<p align="center">Track what your Tesla costs to own, next to <a href="https://github.com/teslamate-org/teslamate">TeslaMate</a>.</p>
+
+<p align="center">
+  <a href="https://github.com/mattew124/teslamate-expenses/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/mattew124/teslamate-expenses/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/mattew124/teslamate-expenses/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/mattew124/teslamate-expenses?include_prereleases&sort=semver"></a>
+  <a href="https://github.com/mattew124/teslamate-expenses/pkgs/container/teslamate-expenses"><img alt="Container image" src="https://img.shields.io/badge/ghcr.io-teslamate--expenses-blue?logo=docker&logoColor=white"></a>
+  <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/github/license/mattew124/teslamate-expenses"></a>
+  <img alt="Vibe coded" src="https://img.shields.io/badge/vibe-coded-ff69b4">
+</p>
+
+> **Vibe coded.** This project was written with an AI coding assistant (Claude Code), directed
+> and tested by a person, not hand-written or audited line by line. It has tests, runs in a
+> read-only, non-root container and keeps its database role least-privilege, but treat it as you
+> would any young, unreviewed software: back up your TeslaMate database before first use, and
+> read the code before you trust it with anything you care about.
+>
+> Not affiliated with TeslaMate or Tesla. It's an unofficial add-on that reads TeslaMate's data.
 
 - **Web UI** (Flask) to add/edit expenses: category, date, time, amount, odometer, vendor,
   notes and a link to the PDF invoice in your cloud storage. The odometer can be filled in from
