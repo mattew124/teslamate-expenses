@@ -91,16 +91,16 @@ def cars(conn):
 
 
 def get_settings(conn):
-    row = conn.execute("SELECT expenses_url, grafana_url, invoice_date_format, invoice_name_format "
+    row = conn.execute("SELECT expenses_url, grafana_url, invoice_date_format, invoice_name_format, multi_amount "
                        "FROM expenses.setting WHERE id = 1").fetchone()
     return row or {"expenses_url": None, "grafana_url": None, "invoice_date_format": None,
-                   "invoice_name_format": None}
+                   "invoice_name_format": None, "multi_amount": None}
 
 
-def save_settings(conn, expenses_url, grafana_url, invoice_date_format, invoice_name_format=None):
+def save_settings(conn, expenses_url, grafana_url, invoice_date_format, invoice_name_format=None, multi_amount=None):
     conn.execute("UPDATE expenses.setting SET expenses_url = %s, grafana_url = %s, "
-                 "invoice_date_format = %s, invoice_name_format = %s WHERE id = 1",
-                 (expenses_url, grafana_url, invoice_date_format, invoice_name_format))
+                 "invoice_date_format = %s, invoice_name_format = %s, multi_amount = %s WHERE id = 1",
+                 (expenses_url, grafana_url, invoice_date_format, invoice_name_format, multi_amount))
 
 
 def categories(conn):

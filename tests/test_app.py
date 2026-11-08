@@ -243,6 +243,21 @@ def test_settings_invoice_name_format(client, admin):
     assert q() is None
 
 
+def test_settings_multi_amount_choice(client, admin):
+    q = lambda: admin.execute("SELECT multi_amount AS f FROM expenses.setting").fetchone()["f"]
+    base = {"expenses_url": "", "grafana_url": "", "invoice_date_format": "", "invoice_name_format": ""}
+    assert q() is None
+    page = client.get("/settings").data.decode()
+    assert 'name="multi_amount"' in page and "largest" in page and "smallest" in page and "blank" in page.lower()
+    assert '<option value="max" selected>' in page                      # the default, until a choice is saved
+    for choice in ("min", "blank", "max"):
+        assert client.post("/settings", data={**base, "multi_amount": choice}, headers=ORIGIN).status_code == 303
+        assert q() == choice
+        assert f'<option value="{choice}" selected>' in client.get("/settings").data.decode()
+    assert client.post("/settings", data={**base, "multi_amount": "median"}, headers=ORIGIN).status_code == 400
+    assert q() == "max"
+
+
 def test_settings_page_describes_every_alias(client):
     page = client.get("/settings").data.decode()
     for alias in ("%date", "%category", "%vendor", "%car", "%amount", "%%"):

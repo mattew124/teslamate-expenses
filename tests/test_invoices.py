@@ -219,8 +219,31 @@ def test_placeholder_figures_are_not_amounts():
     assert invoices.propose("", "x.pdf", "Total for Example   $XXX   $XXX", CATS)["amount"] is None
 
 
-def test_several_options_on_a_total_due_line_are_left_for_the_owner():
-    assert invoices.propose("", "notice.pdf", RENEWAL, CATS)["amount"] is None
+def test_several_options_on_a_total_line_default_to_the_largest():
+    # 6 months or 12 months: the 12-month figure, not the late-payment surcharge lines
+    assert invoices.propose("", "notice.pdf", RENEWAL, CATS)["amount"] == Decimal("749.05")
+
+
+def test_the_option_choice_can_be_smallest_or_blank():
+    amount = lambda choice: invoices.propose("", "notice.pdf", RENEWAL, CATS, multi_amount=choice)["amount"]
+    assert amount("max") == Decimal("749.05") and amount(None) == Decimal("749.05")
+    assert amount("min") == Decimal("384.30")
+    assert amount("blank") is None
+
+
+def test_the_option_choice_beats_other_bigger_totals():
+    text = RENEWAL + "   Total premium including levies         $2,000.00\n"
+    assert invoices.propose("", "n.pdf", text, CATS, multi_amount="min")["amount"] == Decimal("384.30")
+
+
+def test_a_single_figure_total_ignores_the_option_choice():
+    for choice in ("max", "min", "blank"):
+        assert invoices.propose("Maintenance", "261024 - Tyres.pdf", TYRES, CATS, multi_amount=choice)["amount"] == Decimal("1234.50")
+
+
+def test_figures_on_a_line_that_is_not_a_total_are_not_options():
+    text = "   ON or BEFORE due date   $384.30   $749.05\n   AFTER due date   $458.45   $823.20\n"
+    assert invoices.propose("", "n.pdf", text, CATS)["amount"] is None
 
 
 def test_category_from_what_the_document_keeps_talking_about():

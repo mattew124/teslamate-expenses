@@ -541,10 +541,11 @@ def test_new_folder_is_guarded(client, ms):
 
 # ---- the PDF comes first on the Add form -------------------------------------------------
 
-def test_the_pdf_field_is_the_first_thing_on_the_add_form(client, ms, admin):
+def test_the_pdf_field_follows_the_car_choice_and_leads_the_rest(client, ms, admin):
     sign_in(client, ms)
     page = client.get("/new").data.decode()
-    assert page.index('name="invoice_file"') < page.index('name="car_id"') < page.index('name="amount"')
+    assert page.index('name="car_id"') < page.index('name="invoice_file"') < page.index('name="category_id"')
+    assert page.index('name="invoice_file"') < page.index('name="amount"')
     assert 'id="prefill-hint"' in page and "filled in from what can be read" in page
 
 
@@ -554,7 +555,7 @@ def test_the_edit_page_has_the_pdf_field_too_but_doesnt_promise_prefill(client, 
     client.post("/new", data=form(admin), headers=ORIGIN)
     page = client.get("/1/edit").data.decode()
     assert 'name="invoice_file"' in page and 'id="prefill-hint"' not in page and "data-prefill-url" not in page
-    assert page.index('name="invoice_file"') < page.index('name="car_id"')
+    assert page.index('name="car_id"') < page.index('name="invoice_file"') < page.index('name="category_id"')
 
 
 def test_without_onedrive_the_add_form_has_no_pdf_field(app_for, ms):

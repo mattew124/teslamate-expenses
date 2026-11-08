@@ -178,7 +178,9 @@ rounds.
 The guesses come from the file name (a leading `yymmdd`, `yyyymmdd` or `yyyy-mm-dd`, and a
 category name in it or in its folder name, as in `Tyres/261024 - Tyres - Tyre Shop.pdf`), then
 the PDF's text (`Invoice Date`, a `Total` line, `Odometer`). Scanned PDFs with no text are read
-by OCR, which is slower and rougher. An amount is never guessed without a clear total, and
+by OCR, which is slower and rougher. When a `Total due` line offers several amounts (a registration renewal for 6 or 12 months), **Settings →
+When an invoice offers several amounts** picks the largest (the default), the smallest, or leaves it blank for
+you. An amount is never guessed without a clear total, and
 rows missing a date, category or amount start unticked. The image includes `poppler-utils` and
 `tesseract-ocr` for this; without them the app still runs and simply proposes less.
 

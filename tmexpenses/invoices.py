@@ -167,7 +167,28 @@ def _table_totals(text):
     return found
 
 
-def _amount(text):
+# A "Total ..." (or amount due) label, for lines that carry several figures at once.
+TOTAL_LABEL = re.compile(r"(?:grand\s+)?total\b.*|amount\s+(?:due|payable)|balance\s+due", re.I)
+
+
+def _option_figures(text):
+    """Figures on 'Total Due  $384.30  $749.05' lines: one line, several amounts, i.e. options
+    (a registration renewal for 6 or 12 months). Surcharge lines that aren't totals don't count."""
+    options = []
+    for line in text.splitlines():
+        columns = [c.strip() for c in re.split(r"\s{2,}", line.strip()) if c.strip()]
+        if len(columns) >= 3 and TOTAL_LABEL.fullmatch(columns[0]):
+            money = [MONEY.fullmatch(c) for c in columns[1:]]
+            if len(money) >= 2 and all(money):
+                options.append([Decimal(m.group(1).replace(",", "")) for m in money])
+    return options
+
+
+def _amount(text, multi="max"):
+    options = _option_figures(text)
+    if options:      # the Settings choice decides, whatever other totals the document shows
+        figures = [f for line in options for f in line]
+        return {"max": max, "min": min}[multi](figures) if multi in ("max", "min") else None
     totals = []
     for line in text.splitlines():
         m = TOTAL_LINE.match(line.strip())
@@ -291,7 +312,7 @@ def _by_labels(text, field, labels):
     return ("one", next(iter(values))) if len(values) == 1 else ("many", None)
 
 
-def propose(folder, name, text, categories, learned=None):
+def propose(folder, name, text, categories, learned=None, multi_amount=None):
     """-> {date, category, vendor, amount, odometer_km, missing}. `missing` names the
     required fields (date, category, amount) that couldn't be worked out. `learned` is
     {"labels": {field: {label}}, "vendors": {vendor lower-case: category}}: what the
@@ -310,7 +331,7 @@ def propose(folder, name, text, categories, learned=None):
 
     kind, amount = learned_value("amount")
     if kind == "none":
-        amount = _amount(text)
+        amount = _amount(text, multi_amount or "max")
 
     kind, odo_value = learned_value("odometer_km")
     if kind == "none":

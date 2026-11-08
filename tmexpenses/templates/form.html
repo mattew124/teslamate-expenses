@@ -6,10 +6,17 @@
 {% if errors %}<p class="notice bad">Please fix the highlighted fields.</p>{% endif %}
 <form method="post" class="stack" id="expense-form" enctype="multipart/form-data"
       data-odometer-url="{{ url_for('api_odometer') }}" {% if not expense_id %}data-prefill-url="{{ url_for('api_prefill') }}"{% endif %}>
+  <label>Car
+    <select name="car_id" required>
+      {% if cars|length != 1 %}<option value="">Choose…</option>{% endif %}
+      {% for c in cars %}<option value="{{ c.id }}" {{ 'selected' if values.car_id|string == c.id|string }}>{{ c.name or ('Car ' ~ c.id) }}</option>{% endfor %}
+    </select>{{ err('car_id') }}
+  </label>
+
   {% if onedrive_enabled %}
   <label>Invoice PDF
     <input type="file" name="invoice_file" accept="application/pdf,.pdf">{{ err('invoice_file') }}
-    {% if not expense_id %}<small id="prefill-hint">Choose the PDF first: the fields below are filled in from what can be read in it. Check them before saving.</small>{% endif %}
+    {% if not expense_id %}<small id="prefill-hint">Choose the PDF next: the fields below are filled in from what can be read in it. Check them before saving.</small>{% endif %}
     {% if onedrive_connected %}
     <small>It's uploaded to the car's OneDrive folder when you save, and the invoice link is filled in for you.{% if values.invoice_url %} Replaces the current link; the old file stays in OneDrive.{% endif %}</small>
     {% else %}
@@ -17,13 +24,6 @@
     {% endif %}
   </label>
   {% endif %}
-
-  <label>Car
-    <select name="car_id" required>
-      {% if cars|length != 1 %}<option value="">Choose…</option>{% endif %}
-      {% for c in cars %}<option value="{{ c.id }}" {{ 'selected' if values.car_id|string == c.id|string }}>{{ c.name or ('Car ' ~ c.id) }}</option>{% endfor %}
-    </select>{{ err('car_id') }}
-  </label>
 
   <label>Category
     <select name="category_id" required>

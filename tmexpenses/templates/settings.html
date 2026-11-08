@@ -31,6 +31,14 @@
   </dl>
   <small>A blank alias is left out together with the separator before it, so <code>%date - %category - %vendor</code>
     without a vendor gives <code>261107 - Tyres.pdf</code>. Files already in OneDrive keep their names.</small>
+  <label>When an invoice offers several amounts
+    <select name="multi_amount">
+      {% for key, text in multi_choices.items() %}<option value="{{ key }}" {{ 'selected' if (values.multi_amount or 'max') == key }}>{{ text }}</option>
+      {% endfor %}
+    </select>
+    {% if errors.multi_amount %}<span class="error">{{ errors.multi_amount }}</span>{% endif %}
+    <small>Some invoices give a choice, such as a registration renewal for 6 or 12 months. This picks which
+      figure is read from a <em>Total due</em> line that shows more than one. Choose “blank” to type it in yourself.</small></label>
   <button type="submit" class="button">Save</button>
 </form>
 {% endblock %}

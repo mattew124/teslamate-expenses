@@ -173,6 +173,21 @@ _NAME_TOKEN = re.compile(r"(%%|%[a-z]+|%)")
 _SEPARATOR_ONLY = re.compile(r"[\s\-_.,()]*")
 
 
+# Which figure to take when an invoice offers several, e.g. a registration renewal for 6 or 12 months.
+MULTI_AMOUNT_CHOICES = {
+    "max": "Use the largest (e.g. the 12-month figure)",
+    "min": "Use the smallest (e.g. the 6-month figure)",
+    "blank": "Leave it blank for me to choose",
+}
+
+
+def parse_multi_amount(raw):
+    choice = (raw or "").strip().lower()
+    if choice not in MULTI_AMOUNT_CHOICES:
+        raise ValueError("Choose one of the options.")
+    return choice
+
+
 def parse_name_format(raw):
     """The Settings 'Invoice file name' line. Blank -> None (the default). Raises
     ValueError saying what is wrong, naming the aliases that are allowed."""
