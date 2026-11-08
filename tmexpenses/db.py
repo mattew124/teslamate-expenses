@@ -2,12 +2,15 @@
 person entering the odd invoice, a pool would be machinery for nothing."""
 
 import os
+import re
 import time
 from pathlib import Path
 
 import psycopg
 from psycopg.conninfo import make_conninfo
 from psycopg.rows import dict_row
+
+from . import validation
 
 
 def dsn():
@@ -21,6 +24,25 @@ def dsn():
         user=os.environ["DATABASE_USER"],
         password=os.environ["DATABASE_PASS"],
     )
+
+
+DASHBOARD_UID = "tm-expenses-tco"   # uid in grafana/cost-of-ownership.json
+
+
+def default_urls(env=os.environ):
+    """What to put on the Settings page the first time, from FQDN_TM: the same compose
+    variable TeslaMate uses for its own address. (None, None) if it is unset or not a bare
+    host name. Only ever used once; after that the Settings page is the source of truth."""
+    fqdn = (env.get("FQDN_TM") or "").strip()
+    if not fqdn or not re.fullmatch(r"[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?(:\d{1,5})?", fqdn):
+        return None, None
+    base = "/" + env.get("BASE_PATH", "").strip("/")
+    graf = "/" + env.get("GRAFANA_PATH", "/grafana").strip("/")
+    try:
+        return (validation.parse_url_setting(f"https://{fqdn}{base.rstrip('/')}/"),
+                validation.parse_url_setting(f"https://{fqdn}{graf}/d/{DASHBOARD_UID}"))
+    except ValueError:
+        return None, None
 
 
 SCHEMA_SQL = Path(__file__).with_name("schema.sql")
@@ -45,7 +67,12 @@ def migrate(wait=60):
             conn.execute("SELECT pg_advisory_lock(%s)", (MIGRATE_LOCK,))
             try:
                 with conn.transaction():
+                    fresh = conn.execute("SELECT to_regclass('expenses.setting') IS NULL").fetchone()[0]
                     conn.execute(SCHEMA_SQL.read_text())
+                    if fresh:   # first start on this database: pre-fill from FQDN_TM
+                        expenses_url, grafana_url = default_urls()
+                        conn.execute("UPDATE expenses.setting SET expenses_url = %s, grafana_url = %s "
+                                     "WHERE id = 1", (expenses_url, grafana_url))
             finally:
                 conn.execute("SELECT pg_advisory_unlock(%s)", (MIGRATE_LOCK,))
     except psycopg.errors.InsufficientPrivilege as exc:

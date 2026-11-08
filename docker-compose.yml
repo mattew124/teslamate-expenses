@@ -16,6 +16,8 @@ services:
     environment:
       DATABASE_HOST: database
       BASE_PATH: ${BASE_PATH:-/expenses}
+      # TeslaMate's own variable: this host's name. Pre-fills the Settings page on first start.
+      FQDN_TM: ${FQDN_TM:-}
       APP_TZ: ${APP_TZ:-UTC}
       TZ: ${APP_TZ:-UTC}
     ports:

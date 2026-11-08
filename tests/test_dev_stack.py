@@ -137,6 +137,12 @@ def test_dashboard_expenses_link_comes_from_the_apps_own_settings():
     assert "expenses.setting" in var["query"]
 
 
+def test_seeded_grafana_link_points_at_this_dashboards_uid():
+    from tmexpenses import db
+    dash = json.loads((ROOT / "grafana" / "cost-of-ownership.json").read_text())
+    assert dash["uid"] == db.DASHBOARD_UID
+
+
 def test_dashboard_units_never_auto_scale():
     """Grafana's km and currency units rescale: 57,197 km became "57 Mm", $1,359 became "$1K"."""
     raw = (ROOT / "grafana" / "cost-of-ownership.json").read_text()

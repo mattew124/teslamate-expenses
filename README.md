@@ -39,10 +39,13 @@ Authentik or Authelia with Traefik. `docker-compose.traefik.yml` refuses to star
 3. **Grafana.** Dashboards → New → Import → upload `grafana/cost-of-ownership.json`
    (datasource `TeslaMate`, tested on Grafana 13). Set the **Timezone** box to your IANA zone and
    save the dashboard, so months line up with your local calendar.
-4. **Link the two.** Open the app's **Settings** page (the same idea as TeslaMate's) and enter the
-   Grafana dashboard's address and this app's own address. They add a *Dashboards ↗* link to the
-   app's header and make the dashboard's *Add / edit expenses* link go to the right place. Neither
-   is set in compose.
+4. **Link the two.** Set `FQDN_TM` in `.env` to the same value as TeslaMate's compose variable. On
+   first start the app uses it to pre-fill its **Settings** page (the same idea as TeslaMate's): this
+   app at `https://$FQDN_TM$BASE_PATH/` and the dashboard at `https://$FQDN_TM/grafana/d/tm-expenses-tco`
+   (change the `/grafana` part with `GRAFANA_PATH`). Those addresses add a *Dashboards ↗* link to the
+   app's header and make the dashboard's *Add / edit expenses* link go to the right place. After
+   that, the Settings page is the only place to change them, and restarts never overwrite it.
+   Without `FQDN_TM` they start empty, and you fill them in there.
 
 ### The database
 

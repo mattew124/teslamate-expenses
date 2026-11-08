@@ -292,3 +292,52 @@ def test_migration_failure_is_explained(pg, blank_db, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", blank_db.replace("postgres:" + pg.admin_pass, "cannot_create:cannot-create-1234"))
     with pytest.raises(RuntimeError, match="SKIP_MIGRATE"):
         create_app()
+
+
+# ---- first-start URLs come from FQDN_TM, like TeslaMate's own compose variable --
+
+def stored_urls(url):
+    with psycopg.connect(url) as conn:
+        return conn.execute("SELECT expenses_url, grafana_url FROM expenses.setting").fetchone()
+
+
+def test_first_start_seeds_urls_from_fqdn(blank_db, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", blank_db)
+    monkeypatch.setenv("FQDN_TM", "tm.example.test")
+    monkeypatch.setenv("BASE_PATH", "/expenses")
+    create_app()
+    assert stored_urls(blank_db) == ("https://tm.example.test/expenses/",
+                                     "https://tm.example.test/grafana/d/tm-expenses-tco")
+
+
+def test_fqdn_seeds_only_once_so_clearing_a_url_sticks(blank_db, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", blank_db)
+    monkeypatch.setenv("FQDN_TM", "tm.example.test")
+    create_app()
+    with psycopg.connect(blank_db, autocommit=True) as conn:
+        conn.execute("UPDATE expenses.setting SET grafana_url = NULL, expenses_url = 'https://other.test/x/'")
+    create_app()                                   # a restart
+    assert stored_urls(blank_db) == ("https://other.test/x/", None)
+
+
+def test_grafana_path_can_be_changed(blank_db, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", blank_db)
+    monkeypatch.setenv("FQDN_TM", "tm.example.test")
+    monkeypatch.setenv("GRAFANA_PATH", "/dash")
+    create_app()
+    assert stored_urls(blank_db)[1] == "https://tm.example.test/dash/d/tm-expenses-tco"
+
+
+def test_no_fqdn_or_a_bad_one_leaves_urls_empty(blank_db, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", blank_db)
+    monkeypatch.delenv("FQDN_TM", raising=False)
+    create_app()
+    assert stored_urls(blank_db) == (None, None)
+    with psycopg.connect(blank_db, autocommit=True) as conn:
+        conn.execute("DROP SCHEMA expenses CASCADE")
+    for bad in ("evil.test/x y", "http://tm.example.test", "tm example"):
+        monkeypatch.setenv("FQDN_TM", bad)
+        create_app()                               # must not crash
+        assert stored_urls(blank_db) == (None, None), bad
+        with psycopg.connect(blank_db, autocommit=True) as conn:
+            conn.execute("DROP SCHEMA expenses CASCADE")
