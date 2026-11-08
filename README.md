@@ -197,8 +197,8 @@ the same amount as one within 14 days either side asks first: it lists the match
 server asks again if the page's own check was skipped. The import preview does the same per file, leaving a
 likely duplicate unticked with a link to the expense it resembles.
 
-The vendor is the name the document trades under: a line such as `Insurance Australia Limited ABN … trading as
-NRMA Insurance` gives `NRMA Insurance`, not the legal company (only when the words before "trading as" read as a
+The vendor is the name the document trades under: a line such as `Example Insurer Limited ABN … trading as
+Brand Cover` gives `Brand Cover`, not the legal company (only when the words before "trading as" read as a
 company name, so a footnote about someone else's insurer doesn't count). A vendor in the file name
 (`261030 - Wheel Alignment - Tesla.pdf`) still comes first, and without a trading name the company named at the
 start of a line is used.
