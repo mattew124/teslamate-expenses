@@ -127,6 +127,22 @@ def test_dashboard_has_no_hardcoded_timezone():
     assert not any(re.search(r"AT TIME ZONE '[A-Z][a-z]+/", s) for s in sql)
 
 
+def test_dashboard_expenses_link_comes_from_the_apps_own_settings():
+    """A bare "/expenses/" resolves against Grafana's own host. The link is read from the
+    URL saved on the app's Settings page instead."""
+    dash = json.loads((ROOT / "grafana" / "cost-of-ownership.json").read_text())
+    (link,) = [l for l in dash["links"] if l.get("title") == "Add / edit expenses"]
+    assert link["url"] == "${expenses_url}"
+    var = next(v for v in dash["templating"]["list"] if v["name"] == "expenses_url")
+    assert "expenses.setting" in var["query"]
+
+
+def test_seeded_grafana_link_points_at_this_dashboards_uid():
+    from tmexpenses import db
+    dash = json.loads((ROOT / "grafana" / "cost-of-ownership.json").read_text())
+    assert dash["uid"] == db.DASHBOARD_UID
+
+
 def test_dashboard_units_never_auto_scale():
     """Grafana's km and currency units rescale: 57,197 km became "57 Mm", $1,359 became "$1K"."""
     raw = (ROOT / "grafana" / "cost-of-ownership.json").read_text()

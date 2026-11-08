@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+<form method="post" class="stack">
+  <label>Grafana dashboard URL
+    <input type="url" name="grafana_url" maxlength="2048" value="{{ values.grafana_url or '' }}"
+           placeholder="https://teslamate.example.com/grafana/d/tm-expenses-tco">
+    {% if errors.grafana_url %}<span class="error">{{ errors.grafana_url }}</span>{% endif %}
+    <small>Adds a Dashboards link to the header. Leave blank to hide it.</small></label>
+  <label>This app's URL
+    <input type="url" name="expenses_url" maxlength="2048" value="{{ values.expenses_url or '' }}"
+           placeholder="https://teslamate.example.com/expenses/">
+    {% if errors.expenses_url %}<span class="error">{{ errors.expenses_url }}</span>{% endif %}
+    <small>Where you open this app. The Grafana dashboard's “Add / edit expenses” link goes here.</small></label>
+  <button type="submit" class="button">Save</button>
+</form>
+{% endblock %}
