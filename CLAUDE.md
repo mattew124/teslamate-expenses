@@ -32,6 +32,19 @@ First-time setup: `python3 -m venv .venv && .venv/bin/pip install -r requirement
 Run both test suites before calling a change done, and look at the screenshots
 after any UI or dashboard change.
 
+## Working in a worktree
+
+Parallel sessions each get a git worktree under `.claude/worktrees/<name>/`, and
+`scripts/dev.sh` gives each worktree its own dev stack and test database at
+`/expenses-dev/<name>/`, so you never test another session's code.
+
+1. Start with `scripts/dev.sh setup` (creates `.venv`), then `scripts/dev.sh up`.
+   `scripts/dev.sh info` shows this checkout's stack, path and ports.
+2. One feature or fix per worktree. Commit on its branch, push it, and open a pull
+   request so CI runs. Merging and releasing happen from the main checkout.
+3. When the branch is merged or abandoned, run `scripts/dev.sh destroy` before the
+   worktree is removed. `scripts/dev.sh list` shows every dev stack still running.
+
 ## Releasing
 
 A `v*` tag publishes the image to ghcr.io. Test with a candidate tag first, by digest:

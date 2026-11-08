@@ -95,7 +95,13 @@ scripts/dev.sh test-browser   # Playwright in a container; screenshots in .dev/s
 scripts/dev.sh refresh        # re-copy TeslaMate data, keeping your test expenses
 scripts/dev.sh reset          # wipe the test database
 scripts/dev.sh schema         # regenerate db/teslamate-schema.sql after a TeslaMate upgrade
+scripts/dev.sh setup          # in a new worktree: create .venv
 ```
+
+Each git worktree gets its own stack and test database at `/expenses-dev/<worktree>/`, so
+parallel branches never share running code. `scripts/dev.sh info` shows a checkout's path and
+ports, `list` shows every running dev stack, and `destroy` removes one. `.worktreeinclude`
+copies your `dev.env` into new Claude Code worktrees.
 
 The seed only reads from TeslaMate. It copies all of `cars` and `charging_processes`, and one
 `positions` row per hour with latitude, longitude and elevation blanked. `up` warns if
