@@ -26,7 +26,8 @@
         choose <strong>New registration</strong>. Supported account types: <strong>Personal Microsoft accounts only</strong>.</li>
       <li>Redirect URI: platform <strong>Web</strong>, address:
         <code class="copy">{{ callback_url }}</code></li>
-      <li>Under <strong>Certificates &amp; secrets</strong>, add a <strong>New client secret</strong> and copy its <strong>Value</strong>.</li>
+      <li>Under <strong>Authentication</strong>, leave <strong>Allow public client flows</strong> at <strong>No</strong>.</li>
+      <li>Under <strong>Certificates &amp; secrets</strong>, add a <strong>New client secret</strong> and copy its <strong>Value</strong> (shown only once; not the Secret ID).</li>
       <li>Paste the Application (client) ID from the <strong>Overview</strong> page, and the secret, here:</li>
     </ol>
     <form method="post" action="{{ url_for('onedrive_credentials') }}" class="stack">
