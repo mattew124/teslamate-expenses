@@ -108,11 +108,36 @@ CREATE SEQUENCE public.positions_id_seq
 
 ALTER SEQUENCE public.positions_id_seq OWNED BY public.positions.id;
 
+CREATE TABLE public.settings (
+    id bigint NOT NULL,
+    inserted_at timestamp(0) without time zone NOT NULL,
+    updated_at timestamp(0) without time zone NOT NULL,
+    unit_of_length text DEFAULT 'km'::text NOT NULL,
+    unit_of_temperature text DEFAULT 'C'::text NOT NULL,
+    preferred_range text DEFAULT 'rated'::text NOT NULL,
+    base_url character varying(255),
+    grafana_url character varying(255),
+    language text DEFAULT 'en'::text NOT NULL,
+    unit_of_pressure text DEFAULT 'bar'::text NOT NULL,
+    theme_mode text DEFAULT 'system'::text NOT NULL
+);
+
+CREATE SEQUENCE public.settings_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.settings_id_seq OWNED BY public.settings.id;
+
 ALTER TABLE ONLY public.cars ALTER COLUMN id SET DEFAULT nextval('public.cars_id_seq'::regclass);
 
 ALTER TABLE ONLY public.charging_processes ALTER COLUMN id SET DEFAULT nextval('public.charging_processes_id_seq'::regclass);
 
 ALTER TABLE ONLY public.positions ALTER COLUMN id SET DEFAULT nextval('public.positions_id_seq'::regclass);
+
+ALTER TABLE ONLY public.settings ALTER COLUMN id SET DEFAULT nextval('public.settings_id_seq'::regclass);
 
 ALTER TABLE ONLY public.cars
     ADD CONSTRAINT cars_pkey PRIMARY KEY (id);
@@ -120,6 +145,8 @@ ALTER TABLE ONLY public.charging_processes
     ADD CONSTRAINT charging_processes_pkey PRIMARY KEY (id);
 ALTER TABLE ONLY public.positions
     ADD CONSTRAINT positions_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.settings
+    ADD CONSTRAINT settings_pkey PRIMARY KEY (id);
 CREATE UNIQUE INDEX cars_eid_index ON public.cars USING btree (eid);
 
 CREATE UNIQUE INDEX cars_settings_id_index ON public.cars USING btree (settings_id);

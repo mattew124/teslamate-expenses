@@ -87,6 +87,17 @@ def create_app(connect=None):
         if not source or urlparse(source).netloc != request.host:
             abort(403)
 
+    @app.context_processor
+    def dashboards_link():
+        """Link to Grafana, from the URL set in TeslaMate's Settings. Only http(s) is
+        linked, and a failure to read it must not take the page down."""
+        try:
+            with connect() as conn:
+                url = db.grafana_url(conn)
+        except Exception:
+            return {"grafana_url": None}
+        return {"grafana_url": url if url and urlparse(url).scheme in ("http", "https") else None}
+
     def form_context(values=None, errors=None, expense_id=None):
         with connect() as conn:
             return {

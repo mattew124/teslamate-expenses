@@ -36,7 +36,7 @@
       "title": "Add / edit expenses",
       "type": "link",
       "icon": "doc",
-      "url": "/expenses/",
+      "url": "${expenses_url}",
       "targetBlank": true,
       "tooltip": "Open the expenses app"
     },
@@ -67,6 +67,24 @@
         "regex": "",
         "query": "SELECT id AS __value, COALESCE(name, RIGHT(vin, 6)) AS __text FROM cars ORDER BY display_priority ASC, name ASC, vin ASC;",
         "definition": "SELECT id AS __value, COALESCE(name, RIGHT(vin, 6)) AS __text FROM cars ORDER BY display_priority ASC, name ASC, vin ASC;",
+        "current": {}
+      },
+      {
+        "name": "expenses_url",
+        "label": "Expenses URL",
+        "type": "query",
+        "hide": 2,
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "TeslaMate"
+        },
+        "refresh": 1,
+        "includeAll": false,
+        "multi": false,
+        "options": [],
+        "regex": "",
+        "query": "SELECT COALESCE(rtrim(base_url, '/'), '') || '/expenses/' FROM settings ORDER BY id LIMIT 1;",
+        "definition": "SELECT COALESCE(rtrim(base_url, '/'), '') || '/expenses/' FROM settings ORDER BY id LIMIT 1;",
         "current": {}
       },
       {

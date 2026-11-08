@@ -127,6 +127,16 @@ def test_dashboard_has_no_hardcoded_timezone():
     assert not any(re.search(r"AT TIME ZONE '[A-Z][a-z]+/", s) for s in sql)
 
 
+def test_dashboard_expenses_link_comes_from_teslamate_base_url():
+    """A bare "/expenses/" resolves against Grafana's own host. The link is built from the
+    base URL saved in TeslaMate's Settings instead."""
+    dash = json.loads((ROOT / "grafana" / "cost-of-ownership.json").read_text())
+    (link,) = [l for l in dash["links"] if l.get("title") == "Add / edit expenses"]
+    assert link["url"] == "${expenses_url}"
+    var = next(v for v in dash["templating"]["list"] if v["name"] == "expenses_url")
+    assert "base_url" in var["query"] and "settings" in var["query"]
+
+
 def test_dashboard_units_never_auto_scale():
     """Grafana's km and currency units rescale: 57,197 km became "57 Mm", $1,359 became "$1K"."""
     raw = (ROOT / "grafana" / "cost-of-ownership.json").read_text()

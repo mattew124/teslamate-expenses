@@ -29,6 +29,12 @@ def cars(conn):
     return conn.execute("SELECT id, name FROM public.cars ORDER BY id").fetchall()
 
 
+def grafana_url(conn):
+    """The Grafana URL saved in TeslaMate's Settings page, or None."""
+    row = conn.execute("SELECT grafana_url FROM public.settings LIMIT 1").fetchone()
+    return (row["grafana_url"] or "").strip() or None if row else None
+
+
 def categories(conn):
     return conn.execute(
         "SELECT id, name, kind FROM expenses.category ORDER BY sort_order, name"

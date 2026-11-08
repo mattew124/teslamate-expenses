@@ -204,3 +204,15 @@ def test_ownership_view_without_purchase_or_data(admin):
     admin.execute("TRUNCATE positions")
     r = admin.execute("SELECT * FROM expenses.ownership").fetchone()
     assert r["distance_km"] is None and r["owned_since"] is None
+
+
+def test_dashboards_link_comes_from_teslamate_settings(client, admin):
+    """The Grafana URL is set in TeslaMate's own Settings page; this app reads it from there."""
+    admin.execute("DELETE FROM settings")
+    assert b"Dashboards" not in client.get("/").data          # nothing set, so no dead link
+    admin.execute("INSERT INTO settings (id, inserted_at, updated_at, grafana_url) "
+                  "VALUES (1, now(), now(), 'https://grafana.example.test/')")
+    page = client.get("/").data
+    assert b'href="https://grafana.example.test/"' in page and b"Dashboards" in page
+    admin.execute("UPDATE settings SET grafana_url = 'javascript:alert(1)'")
+    assert b"javascript:" not in client.get("/").data         # only http(s) is linked

@@ -47,6 +47,11 @@ Authentik or Authelia with Traefik. `docker-compose.traefik.yml` refuses to star
 4. **Grafana.** Dashboards → New → Import → upload `grafana/cost-of-ownership.json`
    (datasource `TeslaMate`, tested on Grafana 13). Set the **Timezone** box to your IANA zone and
    save the dashboard, so months line up with your local calendar.
+5. **Links between the two.** Neither URL lives in this project's config: both come from
+   TeslaMate's **Settings → URLs** page. The app's *Dashboards ↗* link is the **Grafana URL**
+   (it is hidden until you set one), and the dashboard's *Add / edit expenses* link is the
+   **Web App** (base) URL plus `/expenses/`. An existing install needs
+   `./scripts/provision-db.sh` re-run once, to grant the app read access to that one column.
 
 ## What the dashboard counts
 
