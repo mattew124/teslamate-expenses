@@ -229,3 +229,66 @@ def test_settings_rejects_non_http_urls(client, admin):
         r = client.post("/settings", data={"expenses_url": "", "grafana_url": bad}, headers=ORIGIN)
         assert r.status_code == 400 and b"http" in r.data, bad
     assert admin.execute("SELECT grafana_url FROM expenses.setting").fetchone()["grafana_url"] is None
+
+
+# ---- the app sets up its own schema on start ---------------------------------
+
+@pytest.fixture()
+def blank_db(pg):
+    """A TeslaMate database as TeslaMate leaves it: its own tables, no `expenses` schema."""
+    import secrets
+    from tests.conftest import STUBS
+    name = f"blank_{secrets.token_hex(4)}"
+    with pg.admin() as conn:
+        conn.execute(f'CREATE DATABASE "{name}"')
+    url = f"postgresql://postgres:{pg.admin_pass}@127.0.0.1:{pg.port}/{name}"
+    with psycopg.connect(url, autocommit=True) as conn:
+        conn.execute(STUBS)
+    yield url
+    with pg.admin() as conn:
+        conn.execute(f'DROP DATABASE "{name}" WITH (FORCE)')
+
+
+def tables(url):
+    with psycopg.connect(url) as conn:
+        return {r[0] for r in conn.execute(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'expenses'")}
+
+
+def test_first_start_creates_the_schema(blank_db, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", blank_db)
+    monkeypatch.delenv("SKIP_MIGRATE", raising=False)
+    assert tables(blank_db) == set()
+    client = create_app().test_client()           # no scripts, no injected connection
+    assert {"expense", "category", "setting", "ownership"} <= tables(blank_db)
+    assert client.get("/").status_code == 200 and client.get("/settings").status_code == 200
+
+
+def test_restart_keeps_data_and_is_idempotent(blank_db, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", blank_db)
+    create_app()
+    with psycopg.connect(blank_db, autocommit=True) as conn:
+        conn.execute("INSERT INTO expenses.category (name) VALUES ('Car wash')")
+        conn.execute("UPDATE expenses.setting SET grafana_url = 'https://g.example.test/'")
+    create_app()
+    with psycopg.connect(blank_db) as conn:
+        assert conn.execute("SELECT count(*) FROM expenses.category WHERE name = 'Car wash'").fetchone()[0] == 1
+        assert conn.execute("SELECT grafana_url FROM expenses.setting").fetchone()[0] == "https://g.example.test/"
+        assert conn.execute("SELECT count(*) FROM expenses.category WHERE sort_order < 100").fetchone()[0] == 8
+
+
+def test_skip_migrate_for_a_restricted_role(blank_db, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", blank_db)
+    monkeypatch.setenv("SKIP_MIGRATE", "1")
+    create_app()
+    assert tables(blank_db) == set()
+
+
+def test_migration_failure_is_explained(pg, blank_db, monkeypatch):
+    """A role that cannot create the schema gets a message saying what to do, not a stack trace."""
+    with pg.admin() as conn:
+        conn.execute("DROP ROLE IF EXISTS cannot_create")
+        conn.execute("CREATE ROLE cannot_create LOGIN PASSWORD 'cannot-create-1234'")
+    monkeypatch.setenv("DATABASE_URL", blank_db.replace("postgres:" + pg.admin_pass, "cannot_create:cannot-create-1234"))
+    with pytest.raises(RuntimeError, match="SKIP_MIGRATE"):
+        create_app()

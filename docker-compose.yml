@@ -1,7 +1,7 @@
 # TeslaMate expenses — runs *beside* the TeslaMate stack, not inside it.
 # It joins TeslaMate's own compose network (external) to reach the `database`
-# service, and talks to it as a dedicated least-privilege role, never as the
-# TeslaMate superuser. See README.md for first-time setup (provision-db.sh).
+# service, using the same database user and password as TeslaMate. The app creates
+# its own `expenses` schema when it starts. See README.md.
 services:
   expenses:
     build: .

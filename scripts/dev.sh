@@ -102,8 +102,8 @@ ensure_env() {
     mkdir -p .dev/dashboards .dev/screenshots
     if [ ! -f "$ENVF" ]; then
         ( umask 077
-          printf 'DEV_APP_DB_PASS=%s\nDEV_ADMIN_DB_PASS=%s\nDEV_GRAFANA_PASS=%s\n' \
-              "$(openssl rand -hex 24)" "$(openssl rand -hex 24)" "$(openssl rand -hex 24)" > "$ENVF" )
+          printf 'DEV_ADMIN_DB_PASS=%s\nDEV_GRAFANA_PASS=%s\n' \
+              "$(openssl rand -hex 24)" "$(openssl rand -hex 24)" > "$ENVF" )
     fi
     # Dashboard copy with the app link's fallback kept inside dev and the timezone defaulted.
     sed -e "s#, '/expenses/')#, '$DEV_BASE_PATH/')#" \
@@ -217,18 +217,22 @@ SQL
         || (SELECT count(*) FROM expenses.expense) || ' test expense(s)'"
 }
 
+# TeslaMate's own tables, as TeslaMate would have created them. Our schema is not
+# loaded here: the app creates it when it starts, exactly as it does in production.
+# Sets FIRST_RUN for seed_data.
 prepare_database() {
     compose up -d --wait dev-db
-    local first_run=no pass
+    FIRST_RUN=no
     if [ "$(dev_psql -At -c "SELECT to_regclass('public.cars') IS NULL")" = t ]; then
-        first_run=yes
+        FIRST_RUN=yes
         dev_psql < "$SCHEMA"
     fi
-    # shellcheck disable=SC1090
-    pass="$(. "$ENVF"; printf '%s' "$DEV_APP_DB_PASS")"
-    DB_CONTAINER="$(compose ps -q dev-db)" EXPENSES_DB_PASS="$pass" scripts/provision-db.sh
-    [ "$first_run" = no ] || copy_data
-    [ "$first_run" = no ] || seed_settings
+}
+
+seed_data() {
+    [ "$FIRST_RUN" = yes ] || return 0
+    copy_data
+    seed_settings
 }
 
 # What you would type on the app's Settings page, for this stack's own addresses.
@@ -256,6 +260,7 @@ start() {
     else
         compose up -d --build --wait
     fi
+    seed_data
     if docker inspect "$SEED_FROM" >/dev/null 2>&1; then warn_if_schema_drifted; fi
     urls
 }

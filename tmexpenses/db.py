@@ -2,6 +2,8 @@
 person entering the odd invoice, a pool would be machinery for nothing."""
 
 import os
+import time
+from pathlib import Path
 
 import psycopg
 from psycopg.conninfo import make_conninfo
@@ -19,6 +21,38 @@ def dsn():
         user=os.environ["DATABASE_USER"],
         password=os.environ["DATABASE_PASS"],
     )
+
+
+SCHEMA_SQL = Path(__file__).with_name("schema.sql")
+MIGRATE_LOCK = 7_265_171   # arbitrary; stops two workers starting at once from racing
+
+
+def migrate(wait=60):
+    """Create or update the `expenses` schema. schema.sql is idempotent, so this is safe on
+    every start. Waits for the database to come up (TeslaMate may start after us), but
+    gives up straight away on a permissions problem and says what to do about it."""
+    deadline = time.monotonic() + wait
+    while True:
+        try:
+            conn = psycopg.connect(dsn(), connect_timeout=5, autocommit=True)
+            break
+        except psycopg.OperationalError:
+            if time.monotonic() > deadline:
+                raise
+            time.sleep(2)
+    try:
+        with conn:
+            conn.execute("SELECT pg_advisory_lock(%s)", (MIGRATE_LOCK,))
+            try:
+                with conn.transaction():
+                    conn.execute(SCHEMA_SQL.read_text())
+            finally:
+                conn.execute("SELECT pg_advisory_unlock(%s)", (MIGRATE_LOCK,))
+    except psycopg.errors.InsufficientPrivilege as exc:
+        raise RuntimeError(
+            "The database user cannot create the 'expenses' schema. Use TeslaMate's own database "
+            "user, or create the schema yourself (scripts/provision-db.sh) and set SKIP_MIGRATE=1. "
+            f"({exc})") from exc
 
 
 def connect():

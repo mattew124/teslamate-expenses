@@ -46,7 +46,10 @@ def create_app(connect=None):
     """`connect` is injectable so tests can hand in a connection to a scratch DB."""
     app = Flask(__name__)
     tz = os.environ.get("APP_TZ", "UTC")
-    connect = connect or db.connect
+    if connect is None:
+        connect = db.connect
+        if os.environ.get("SKIP_MIGRATE") != "1":
+            db.migrate()
     base_path = os.environ.get("BASE_PATH", "")
     if base_path:
         app.wsgi_app = PrefixMiddleware(app.wsgi_app, base_path)
