@@ -13,6 +13,7 @@
     <nav>
       <a href="{{ url_for('index') }}">All</a>
       <a href="{{ url_for('categories') }}">Categories</a>
+      {% if onedrive_enabled %}<a href="{{ url_for('onedrive_page') }}">OneDrive</a>{% endif %}
       <a class="button" href="{{ url_for('new') }}">+ Add</a>
     </nav>
   </header>

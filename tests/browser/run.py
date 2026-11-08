@@ -141,6 +141,36 @@ def test_list_shows_key_fields_on_a_phone(page):
     remove_marked(page)
 
 
+def test_onedrive_page(page):
+    """Works whether or not the stack has ONEDRIVE_CLIENT_ID. When it has, the
+    folder of the first car is saved and put back, and the form offers an upload."""
+    page.goto(UI + "onedrive")
+    expect(page.locator("h1")).to_have_text("OneDrive")
+    if not page.locator("input[name^=folder_]").count():
+        expect(page.locator("main")).to_contain_text("ONEDRIVE_CLIENT_ID")
+        page.goto(UI + "new")
+        expect(page.locator("input[name=invoice_file]")).to_have_count(0)
+        shot(page, "onedrive-off-phone")
+        return
+    field = page.locator("input[name^=folder_]").first
+    before = field.input_value()
+    field.fill(" /Bad/../Folder ")
+    page.click("text=Save folders")
+    expect(page.locator(".error").first).to_contain_text("can't be a OneDrive folder name")
+    page.locator("input[name^=folder_]").first.fill(f"/{MARKER}//Invoices/")
+    page.click("text=Save folders")
+    page.wait_for_url(re.compile(r"msg=folders"))
+    expect(page.locator("input[name^=folder_]").first).to_have_value(f"{MARKER}/Invoices")
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    shot(page, "onedrive-phone")
+    page.locator("input[name^=folder_]").first.fill(before)
+    page.click("text=Save folders")
+    page.wait_for_url(re.compile(r"msg=folders"))
+    page.goto(UI + "new")
+    expect(page.locator("input[name=invoice_file]")).to_have_attribute("accept", "application/pdf,.pdf")
+    shot(page, "form-onedrive-phone")
+
+
 def test_dashboard(page):
     add_expense(page, "62000", "Initial purchase")
     add_expense(page, "1500", "Tyres")
@@ -185,7 +215,8 @@ def main():
         step("delete can be cancelled", test_delete_can_be_cancelled, page)
         step("no sideways scroll on a phone", test_phone_layout_has_no_sideways_scroll, page)
         step("phone list shows amount, invoice and edit", test_list_shows_key_fields_on_a_phone, page)
-        # Expected 400 from the deliberate bad submission above isn't a script error.
+        step("OneDrive page and upload field", test_onedrive_page, page)
+        # Expected 400s from the deliberate bad submissions above aren't script errors.
         real = [t for t in problems if "400" not in t]
         step("no script or CSP errors", lambda: (_ for _ in ()).throw(AssertionError(real)) if real else None)
 

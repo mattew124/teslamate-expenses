@@ -15,6 +15,11 @@ MAX_URL_LEN = 2048
 MAX_TEXT_LEN = 500
 MAX_NOTES_LEN = 2000
 MAX_CATEGORY_LEN = 60
+MAX_PDF_BYTES = 20 * 1024 * 1024
+MAX_FOLDER_LEN = 400
+MAX_FILENAME_LEN = 120
+# Characters OneDrive refuses in file and folder names.
+ONEDRIVE_FORBIDDEN = set('"*:<>?/\\|')
 
 
 def parse_amount(raw):
@@ -71,6 +76,44 @@ def parse_invoice_url(raw):
     if parts.scheme.lower() != "https" or not parts.hostname:
         raise ValueError("Link must start with https:// (use your storage's Share → Copy link).")
     return url
+
+
+def parse_invoice_pdf(filename, data):
+    """Optional upload. -> the bytes, or None when no file was chosen. Checks the
+    content, not just the name: a PDF has its %PDF- header in the first 1 KiB."""
+    if not filename and not data:
+        return None
+    if not data:
+        raise ValueError("That file is empty.")
+    if len(data) > MAX_PDF_BYTES:
+        raise ValueError("Invoice PDF is too large (max 20 MB).")
+    if b"%PDF-" not in data[:1024]:
+        raise ValueError("Only PDF invoices can be uploaded.")
+    return data
+
+
+def parse_onedrive_folder(raw):
+    """'/Cars/Model 3/' -> 'Cars/Model 3' (relative to the drive root); blank -> None."""
+    if raw and len(raw) > MAX_FOLDER_LEN:
+        raise ValueError(f"Folder is too long (max {MAX_FOLDER_LEN} characters).")
+    parts = [p.strip() for p in (raw or "").split("/")]
+    parts = [p for p in parts if p]
+    for part in parts:
+        if part in (".", "..") or part.endswith(".") or any(
+                ch in ONEDRIVE_FORBIDDEN or ord(ch) < 32 for ch in part):
+            raise ValueError(
+                f"“{part}” can't be a OneDrive folder name: use / between folders, and none of "
+                '\\ : * ? " < > | or a trailing dot.')
+    return "/".join(parts) or None
+
+
+def invoice_filename(occurred_at, category, vendor):
+    """'2026-11-07 Tyres - Tyre Shop.pdf': sorts by date in the folder, and is a
+    legal OneDrive name whatever the vendor field holds."""
+    stem = f"{occurred_at:%Y-%m-%d} {category}" + (f" - {vendor}" if vendor else "")
+    stem = "".join("-" if ch in ONEDRIVE_FORBIDDEN or ord(ch) < 32 else ch for ch in stem)
+    stem = stem[:MAX_FILENAME_LEN - 4].rstrip(" .")
+    return stem + ".pdf"
 
 
 def parse_local_datetime(date_raw, time_raw, tz):

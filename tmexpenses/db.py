@@ -124,3 +124,44 @@ def odometer_at(conn, car_id, when):
         (car_id, when),
     ).fetchone()
     return None if row is None else round(row["odometer"], 1)
+
+
+# ---- OneDrive ------------------------------------------------------------------
+
+def car_folders(conn):
+    """-> {car_id: folder}"""
+    return {r["car_id"]: r["onedrive_folder"] for r in
+            conn.execute("SELECT car_id, onedrive_folder FROM expenses.car_folder")}
+
+
+def set_car_folder(conn, car_id, folder):
+    if folder is None:
+        conn.execute("DELETE FROM expenses.car_folder WHERE car_id = %s", (car_id,))
+    else:
+        conn.execute(
+            "INSERT INTO expenses.car_folder (car_id, onedrive_folder) VALUES (%s, %s) "
+            "ON CONFLICT (car_id) DO UPDATE SET onedrive_folder = EXCLUDED.onedrive_folder",
+            (car_id, folder))
+
+
+def onedrive_account(conn, lock=False):
+    """The single sign-in row, or None. lock=True holds it until commit, so two
+    uploads at once can't both spend the same (single-use) refresh token."""
+    return conn.execute(
+        "SELECT * FROM expenses.onedrive_account" + (" FOR UPDATE" if lock else "")
+    ).fetchone()
+
+
+def save_onedrive_account(conn, **fields):
+    """Upsert the given columns of the sign-in row."""
+    cols = ", ".join(fields)
+    vals = ", ".join(f"%({f})s" for f in fields)
+    sets = ", ".join(f"{f} = EXCLUDED.{f}" for f in fields)
+    conn.execute(
+        f"INSERT INTO expenses.onedrive_account (id, {cols}) VALUES (true, {vals}) "
+        f"ON CONFLICT (id) DO UPDATE SET {sets}, updated_at = now()",
+        fields)
+
+
+def forget_onedrive_account(conn):
+    conn.execute("DELETE FROM expenses.onedrive_account")

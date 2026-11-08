@@ -5,6 +5,8 @@ Track what your Tesla costs to own, next to [TeslaMate](https://github.com/tesla
 - **Web UI** (Flask) to add/edit expenses: category, date, time, amount, odometer, vendor,
   notes and a link to the PDF invoice in your cloud storage. The odometer can be filled in from
   TeslaMate's own position data for the chosen date and time.
+- **Optional OneDrive upload**: choose the invoice PDF in the form and it goes into that car's
+  OneDrive folder, with the link filled in for you.
 - **Postgres schema** `expenses` inside the TeslaMate database, so Grafana joins it to
   TeslaMate's charging costs and odometer with no second datasource.
 - **Grafana dashboard** "Cost of Ownership": total cost of ownership, purchase vs running
@@ -44,9 +46,48 @@ Authentik or Authelia with Traefik. `docker-compose.traefik.yml` refuses to star
    ```
 
    It joins TeslaMate's compose network (`TESLAMATE_NETWORK`, default `teslamate_default`).
-4. **Grafana.** Dashboards → New → Import → upload `grafana/cost-of-ownership.json`
+4. **OneDrive (optional).** See [OneDrive uploads](#onedrive-uploads).
+5. **Grafana.** Dashboards → New → Import → upload `grafana/cost-of-ownership.json`
    (datasource `TeslaMate`, tested on Grafana 13). Set the **Timezone** box to your IANA zone and
    save the dashboard, so months line up with your local calendar.
+
+## OneDrive uploads
+
+With this on, the expense form takes the invoice PDF itself. The app uploads it to the folder
+you set for that car, names it `2026-11-07 Tyres - Tyre Shop.pdf` (date, category, vendor;
+an existing name gets a suffix, never overwritten) and stores the file's OneDrive link as the
+expense's invoice link. It works with a personal Microsoft account (OneDrive Personal).
+
+1. **Register an app** at [Microsoft Entra → App registrations](https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade)
+   → New registration:
+   - Supported account types: **Personal Microsoft accounts only** (or any org directory and
+     personal accounts).
+   - No redirect URI.
+   - Then, under Authentication, set **Allow public client flows** to **Yes**.
+   - Copy the **Application (client) ID**. There is no client secret.
+
+   The app signs in with the device code flow, so it asks for delegated `Files.ReadWrite` and
+   `offline_access` and needs no redirect URI on your hostname.
+2. **Configure.** In `.env`:
+
+   ```bash
+   ONEDRIVE_CLIENT_ID=<application (client) id>
+   ONEDRIVE_TOKEN_KEY=<output of: openssl rand -base64 32 | tr '+/' '-_'>
+   ```
+
+   The key encrypts the saved sign-in (a refresh token for your whole OneDrive) before it goes
+   into the database, so a database dump or backup on its own can't open the drive. Keep the key
+   out of those backups. If you lose or change it, connect again.
+3. **Re-run `scripts/provision-db.sh`** (it adds the two tables), restart the app, open the
+   **OneDrive** page, press **Connect OneDrive**, enter the code shown at
+   microsoft.com/devicelogin, then press **I've signed in**.
+4. **Set a folder per car** on the same page, e.g. `Cars/Model 3/Invoices`, from the top of
+   your OneDrive. Missing folders are created on the first upload.
+
+PDFs only (checked by content, not just the name), up to 20 MB. Uploading on the edit page
+replaces the link; the old file stays in OneDrive. Disconnecting deletes the saved sign-in;
+to revoke the app's access entirely, remove it at
+[account.live.com/consent/Manage](https://account.live.com/consent/Manage).
 
 ## What the dashboard counts
 
@@ -66,12 +107,14 @@ Currency is shown as `$` and distance in km.
 
 - **Invoice links** must be `https://` (rendered as a link, so `javascript:`/`data:` are
   refused). Whoever opens one needs access to it, and it lasts as long as its sharing settings.
+  An uploaded invoice's link is its plain OneDrive address, not a share link: it opens for you,
+  signed in to that Microsoft account, and for nobody else.
 - **Timezone.** Date and time are entered in `APP_TZ` and stored as `timestamptz`.
   TeslaMate's `positions.date` is naive UTC; the odometer lookup converts before comparing.
 - POSTs must carry a same-origin `Origin`/`Referer` header (CSRF guard). Plain `curl` needs
   `-H 'Origin: https://your-host'`.
-- Not covered yet: depreciation or resale value (so "TCO" is spend, not net cost), uploading
-  invoices to the app itself, deleting categories.
+- Not covered yet: depreciation or resale value (so "TCO" is spend, not net cost), storing
+  invoices in the app itself (they go to your cloud storage), deleting categories.
 
 ## Development
 
@@ -102,6 +145,10 @@ Each git worktree gets its own stack and test database at `/expenses-dev/<worktr
 parallel branches never share running code. `scripts/dev.sh info` shows a checkout's path and
 ports, `list` shows every running dev stack, and `destroy` removes one. `.worktreeinclude`
 copies your `dev.env` into new Claude Code worktrees.
+
+To try OneDrive uploads in dev, set `ONEDRIVE_CLIENT_ID` in `dev.env`; the token key is
+generated into `.dev/env`. A sign-in there writes to your real OneDrive, so give each car a test
+folder.
 
 The seed only reads from TeslaMate. It copies all of `cars` and `charging_processes`, and one
 `positions` row per hour with latitude, longitude and elevation blanked. `up` warns if

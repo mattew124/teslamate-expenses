@@ -50,6 +50,28 @@ CREATE TABLE IF NOT EXISTS expenses.expense (
 CREATE INDEX IF NOT EXISTS expense_car_time_idx ON expenses.expense (car_id, occurred_at);
 CREATE INDEX IF NOT EXISTS expense_category_idx ON expenses.expense (category_id);
 
+-- OneDrive folder each car's invoice PDFs are uploaded to, relative to the drive
+-- root ("Cars/Model 3/Invoices"). Set on the app's OneDrive page.
+CREATE TABLE IF NOT EXISTS expenses.car_folder (
+    car_id          smallint PRIMARY KEY REFERENCES public.cars (id) ON DELETE CASCADE,
+    onedrive_folder text NOT NULL CHECK (btrim(onedrive_folder) <> '')
+);
+
+-- The OneDrive sign-in: at most one row. refresh_token and device_code are
+-- encrypted by the app with ONEDRIVE_TOKEN_KEY, so a database dump or backup
+-- alone can't open the drive. device_code/user_code are only set while a
+-- sign-in is waiting for the user to enter the code at Microsoft.
+CREATE TABLE IF NOT EXISTS expenses.onedrive_account (
+    id                boolean PRIMARY KEY DEFAULT true CHECK (id),
+    account           text,
+    refresh_token     text,
+    device_code       text,
+    user_code         text,
+    verification_uri  text,
+    device_expires_at timestamptz,
+    updated_at        timestamptz NOT NULL DEFAULT now()
+);
+
 -- One row per car: everything the TCO dashboard's headline panels need, so the
 -- definitions (what counts as "start odometer", what is charging) live in one
 -- place instead of being copy-pasted across panels.

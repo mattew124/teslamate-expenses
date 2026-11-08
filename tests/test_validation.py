@@ -70,3 +70,47 @@ def test_expense_form_ok():
     assert errors == {}
     assert values["vendor"] == "Bob" and values["notes"] is None
     assert values["odometer_km"] == 12000.0 and values["amount"] == Decimal("450.00")
+
+
+# ---- OneDrive ------------------------------------------------------------------
+
+PDF = b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n1 0 obj\n<<>>\nendobj\n%%EOF\n"
+
+
+def test_invoice_pdf():
+    assert v.parse_invoice_pdf("", b"") is None          # no file chosen
+    assert v.parse_invoice_pdf("inv.PDF", PDF) == PDF
+    assert v.parse_invoice_pdf("scan", b"\r\n" + PDF) == b"\r\n" + PDF   # junk before the header is legal
+    for name, data, msg in (("inv.pdf", b"", "empty"),
+                            ("inv.pdf", b"<html>not a pdf", "PDF"),
+                            ("photo.jpg", b"\xff\xd8\xff\xe0", "PDF"),
+                            ("big.pdf", PDF + b"0" * v.MAX_PDF_BYTES, "20 MB")):
+        with pytest.raises(ValueError, match=msg):
+            v.parse_invoice_pdf(name, data)
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("", None), ("  ", None), ("/", None),
+    ("Cars/Model 3/Invoices", "Cars/Model 3/Invoices"),
+    (" /Cars//Model 3/ Invoices / ", "Cars/Model 3/Invoices"),
+    ("Documents", "Documents"),
+])
+def test_onedrive_folder_ok(raw, expected):
+    assert v.parse_onedrive_folder(raw) == expected
+
+
+@pytest.mark.parametrize("raw", ["Cars/../Secret", "Cars/./x", "a:b", "a*b", 'a"b', "a<b", "a>b",
+                                 "a?b", "a|b", "Cars\\Model 3", "Cars/trailing.", "x" * 401, "a\tb"])
+def test_onedrive_folder_rejected(raw):
+    with pytest.raises(ValueError):
+        v.parse_onedrive_folder(raw)
+
+
+def test_invoice_filename():
+    from datetime import datetime
+    when = datetime(2026, 11, 7, 14, 5)
+    assert v.invoice_filename(when, "Tyres", "Tyre Shop") == "2026-11-07 Tyres - Tyre Shop.pdf"
+    assert v.invoice_filename(when, "Insurance", None) == "2026-11-07 Insurance.pdf"
+    assert v.invoice_filename(when, "Tyres", 'A/B: "C"*?<>|\\ ') == "2026-11-07 Tyres - A-B- -C-------.pdf"
+    long = v.invoice_filename(when, "Tyres", "x" * 500)
+    assert len(long) <= 120 and long.endswith(".pdf")

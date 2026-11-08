@@ -10,6 +10,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const form = document.getElementById("expense-form");
   if (!form) return;
+
+  // An upload can take a few seconds: say so, and stop a second click sending it twice.
+  form.addEventListener("submit", () => {
+    const file = form.elements.invoice_file;
+    const save = form.querySelector("button[type=submit]");
+    if (file && file.files.length) {
+      save.disabled = true;
+      save.textContent = "Uploading…";
+    }
+  });
   const odo = form.elements.odometer_km;
   const hint = document.getElementById("odometer-hint");
 
