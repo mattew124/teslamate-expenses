@@ -129,6 +129,33 @@ def test_phone_layout_has_no_sideways_scroll(page):
     shot(page, "categories-phone")
 
 
+def test_header_stays_tidy_on_a_phone(page):
+    """Every header link is one line, and the links share rows rather than wrapping inside."""
+    page.goto(UI)
+    boxes = page.evaluate("""() => [...document.querySelectorAll('header nav a, header .add')].map(a => {
+        const r = a.getBoundingClientRect(); return {text: a.textContent.trim(), h: r.height, top: r.top}})""")
+    assert len(boxes) >= 4, boxes                      # All, Categories, Dashboards, Settings, Add
+    line = page.evaluate("parseFloat(getComputedStyle(document.body).lineHeight)")
+    for b in boxes:
+        assert b["h"] < line * 2.6, f"{b['text']} wraps inside its link: {b}"
+    add = next(b for b in boxes if b["text"] == "+ Add")
+    brand_top = page.evaluate("document.querySelector('.brand').getBoundingClientRect().top")
+    assert abs(add["top"] - brand_top) < 20, f"Add should sit beside the title: {add}, brand at {brand_top}"
+    page.goto(UI + "settings")
+    shot(page, "settings-phone")
+    page.goto(UI)
+    shot(page, "header-phone")
+
+
+def test_header_on_a_desktop(page):
+    """One row: title on the left, links then Add on the right."""
+    page.goto(UI)
+    tops = page.evaluate("""() => [...document.querySelectorAll('header .brand, header nav a, header .add')]
+        .map(a => Math.round(a.getBoundingClientRect().top + a.getBoundingClientRect().height / 2))""")
+    assert max(tops) - min(tops) < 12, tops
+    shot(page, "header-desktop")
+
+
 def test_list_shows_key_fields_on_a_phone(page):
     add_expense(page)
     row = page.locator(f"tr:has-text('{MARKER}')")
@@ -240,6 +267,7 @@ def main():
         step("add, list, invoice link, edit, delete", test_add_list_edit_delete, page)
         step("delete can be cancelled", test_delete_can_be_cancelled, page)
         step("no sideways scroll on a phone", test_phone_layout_has_no_sideways_scroll, page)
+        step("header stays tidy on a phone", test_header_stays_tidy_on_a_phone, page)
         step("phone list shows amount, invoice and edit", test_list_shows_key_fields_on_a_phone, page)
         step("OneDrive page and upload field", test_onedrive_page, page)
         step("Connect OneDrive goes to Microsoft", test_connect_reaches_microsoft, page)
@@ -251,6 +279,7 @@ def main():
         desktop = browser.new_context(viewport={"width": 1280, "height": 900}, device_scale_factor=2)
         dash_page = desktop.new_page()
         step("dashboard renders with data and invoice links", test_dashboard, dash_page)
+        step("header is one row on a desktop", test_header_on_a_desktop, desktop.new_page())
         remove_marked(page)
         browser.close()
     print(f"\n{passed} passed, {len(failed)} failed")

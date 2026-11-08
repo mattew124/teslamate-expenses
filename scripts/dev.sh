@@ -102,14 +102,14 @@ ensure_env() {
     mkdir -p .dev/dashboards .dev/screenshots
     if [ ! -f "$ENVF" ]; then
         ( umask 077
-          printf 'DEV_APP_DB_PASS=%s\nDEV_ADMIN_DB_PASS=%s\nDEV_GRAFANA_PASS=%s\n' \
-              "$(openssl rand -hex 24)" "$(openssl rand -hex 24)" "$(openssl rand -hex 24)" > "$ENVF" )
+          printf 'DEV_ADMIN_DB_PASS=%s\nDEV_GRAFANA_PASS=%s\n' \
+              "$(openssl rand -hex 24)" "$(openssl rand -hex 24)" > "$ENVF" )
     fi
     # Added later than the passwords, so older .dev/env files get it too.
     grep -q '^DEV_ONEDRIVE_TOKEN_KEY=' "$ENVF" ||
         printf 'DEV_ONEDRIVE_TOKEN_KEY=%s\n' "$(openssl rand -base64 32 | tr '+/' '-_')" >> "$ENVF"
-    # Dashboard copy with the app link kept inside dev and the timezone defaulted.
-    sed -e "s#\"url\": \"/expenses/\"#\"url\": \"$DEV_BASE_PATH/\"#" \
+    # Dashboard copy with the app link's fallback kept inside dev and the timezone defaulted.
+    sed -e "s#, '/expenses/')#, '$DEV_BASE_PATH/')#" \
         -e "s#\"\(query\|text\|value\)\": \"UTC\"#\"\1\": \"$APP_TZ\"#" \
         grafana/cost-of-ownership.json > .dev/dashboards/cost-of-ownership.json
 }
@@ -220,17 +220,36 @@ SQL
         || (SELECT count(*) FROM expenses.expense) || ' test expense(s)'"
 }
 
+# TeslaMate's own tables, as TeslaMate would have created them. Our schema is not
+# loaded here: the app creates it when it starts, exactly as it does in production.
+# Sets FIRST_RUN for seed_data.
 prepare_database() {
     compose up -d --wait dev-db
-    local first_run=no pass
+    FIRST_RUN=no
     if [ "$(dev_psql -At -c "SELECT to_regclass('public.cars') IS NULL")" = t ]; then
-        first_run=yes
+        FIRST_RUN=yes
         dev_psql < "$SCHEMA"
     fi
-    # shellcheck disable=SC1090
-    pass="$(. "$ENVF"; printf '%s' "$DEV_APP_DB_PASS")"
-    DB_CONTAINER="$(compose ps -q dev-db)" EXPENSES_DB_PASS="$pass" scripts/provision-db.sh
-    [ "$first_run" = no ] || copy_data
+}
+
+seed_data() {
+    [ "$FIRST_RUN" = yes ] || return 0
+    copy_data
+    seed_settings
+}
+
+# What you would type on the app's Settings page, for this stack's own addresses.
+seed_settings() {
+    local app graf
+    if [ -n "${PUBLIC_HOST:-}" ]; then
+        app="https://$PUBLIC_HOST$DEV_BASE_PATH/"; graf="https://$PUBLIC_HOST$DEV_BASE_PATH/grafana/"
+    else
+        app="http://localhost:$DEV_UI_PORT$DEV_BASE_PATH/"
+        graf="http://localhost:$DEV_GRAFANA_PORT$DEV_BASE_PATH/grafana/"
+    fi
+    dev_psql -q -v "app=$app" -v "graf=$graf" <<'SQL'
+UPDATE expenses.setting SET expenses_url = :'app', grafana_url = :'graf' WHERE id = 1;
+SQL
 }
 
 start() {
@@ -244,6 +263,7 @@ start() {
     else
         compose up -d --build --wait
     fi
+    seed_data
     if docker inspect "$SEED_FROM" >/dev/null 2>&1; then warn_if_schema_drifted; fi
     urls
 }

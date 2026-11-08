@@ -204,3 +204,140 @@ def test_ownership_view_without_purchase_or_data(admin):
     admin.execute("TRUNCATE positions")
     r = admin.execute("SELECT * FROM expenses.ownership").fetchone()
     assert r["distance_km"] is None and r["owned_since"] is None
+
+
+def test_settings_page_saves_urls_and_header_links_to_dashboards(client, admin):
+    """Like TeslaMate's own Settings page: the URLs are set in this app's UI, not in compose."""
+    admin.execute("UPDATE expenses.setting SET expenses_url = NULL, grafana_url = NULL")
+    assert b"Dashboards" not in client.get("/").data          # nothing set, so no dead link
+    assert b'name="grafana_url"' in client.get("/settings").data
+    ok = client.post("/settings", data={"expenses_url": "https://tm.example.test/expenses/",
+                                        "grafana_url": " https://tm.example.test/grafana/d/tco "},
+                     headers=ORIGIN)
+    assert ok.status_code == 303
+    row = admin.execute("SELECT expenses_url, grafana_url FROM expenses.setting").fetchone()
+    assert row == {"expenses_url": "https://tm.example.test/expenses/",
+                   "grafana_url": "https://tm.example.test/grafana/d/tco"}
+    assert b'href="https://tm.example.test/grafana/d/tco"' in client.get("/").data
+    # blank clears a URL
+    client.post("/settings", data={"expenses_url": "", "grafana_url": ""}, headers=ORIGIN)
+    assert b"Dashboards" not in client.get("/").data
+
+
+def test_settings_rejects_non_http_urls(client, admin):
+    for bad in ("javascript:alert(1)", "ftp://x.test/", "not a url", "https://a b.test/"):
+        r = client.post("/settings", data={"expenses_url": "", "grafana_url": bad}, headers=ORIGIN)
+        assert r.status_code == 400 and b"http" in r.data, bad
+    assert admin.execute("SELECT grafana_url FROM expenses.setting").fetchone()["grafana_url"] is None
+
+
+# ---- the app sets up its own schema on start ---------------------------------
+
+@pytest.fixture()
+def blank_db(pg):
+    """A TeslaMate database as TeslaMate leaves it: its own tables, no `expenses` schema."""
+    import secrets
+    from tests.conftest import STUBS
+    name = f"blank_{secrets.token_hex(4)}"
+    with pg.admin() as conn:
+        conn.execute(f'CREATE DATABASE "{name}"')
+    url = f"postgresql://postgres:{pg.admin_pass}@127.0.0.1:{pg.port}/{name}"
+    with psycopg.connect(url, autocommit=True) as conn:
+        conn.execute(STUBS)
+    yield url
+    with pg.admin() as conn:
+        conn.execute(f'DROP DATABASE "{name}" WITH (FORCE)')
+
+
+def tables(url):
+    with psycopg.connect(url) as conn:
+        return {r[0] for r in conn.execute(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'expenses'")}
+
+
+def test_first_start_creates_the_schema(blank_db, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", blank_db)
+    monkeypatch.delenv("SKIP_MIGRATE", raising=False)
+    assert tables(blank_db) == set()
+    client = create_app().test_client()           # no scripts, no injected connection
+    assert {"expense", "category", "setting", "ownership"} <= tables(blank_db)
+    assert client.get("/").status_code == 200 and client.get("/settings").status_code == 200
+
+
+def test_restart_keeps_data_and_is_idempotent(blank_db, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", blank_db)
+    create_app()
+    with psycopg.connect(blank_db, autocommit=True) as conn:
+        conn.execute("INSERT INTO expenses.category (name) VALUES ('Car wash')")
+        conn.execute("UPDATE expenses.setting SET grafana_url = 'https://g.example.test/'")
+    create_app()
+    with psycopg.connect(blank_db) as conn:
+        assert conn.execute("SELECT count(*) FROM expenses.category WHERE name = 'Car wash'").fetchone()[0] == 1
+        assert conn.execute("SELECT grafana_url FROM expenses.setting").fetchone()[0] == "https://g.example.test/"
+        assert conn.execute("SELECT count(*) FROM expenses.category WHERE sort_order < 100").fetchone()[0] == 8
+
+
+def test_skip_migrate_for_a_restricted_role(blank_db, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", blank_db)
+    monkeypatch.setenv("SKIP_MIGRATE", "1")
+    create_app()
+    assert tables(blank_db) == set()
+
+
+def test_migration_failure_is_explained(pg, blank_db, monkeypatch):
+    """A role that cannot create the schema gets a message saying what to do, not a stack trace."""
+    with pg.admin() as conn:
+        conn.execute("DROP ROLE IF EXISTS cannot_create")
+        conn.execute("CREATE ROLE cannot_create LOGIN PASSWORD 'cannot-create-1234'")
+    monkeypatch.setenv("DATABASE_URL", blank_db.replace("postgres:" + pg.admin_pass, "cannot_create:cannot-create-1234"))
+    with pytest.raises(RuntimeError, match="SKIP_MIGRATE"):
+        create_app()
+
+
+# ---- first-start URLs come from FQDN_TM, like TeslaMate's own compose variable --
+
+def stored_urls(url):
+    with psycopg.connect(url) as conn:
+        return conn.execute("SELECT expenses_url, grafana_url FROM expenses.setting").fetchone()
+
+
+def test_first_start_seeds_urls_from_fqdn(blank_db, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", blank_db)
+    monkeypatch.setenv("FQDN_TM", "tm.example.test")
+    monkeypatch.setenv("BASE_PATH", "/expenses")
+    create_app()
+    assert stored_urls(blank_db) == ("https://tm.example.test/expenses/",
+                                     "https://tm.example.test/grafana/d/tm-expenses-tco")
+
+
+def test_fqdn_seeds_only_once_so_clearing_a_url_sticks(blank_db, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", blank_db)
+    monkeypatch.setenv("FQDN_TM", "tm.example.test")
+    create_app()
+    with psycopg.connect(blank_db, autocommit=True) as conn:
+        conn.execute("UPDATE expenses.setting SET grafana_url = NULL, expenses_url = 'https://other.test/x/'")
+    create_app()                                   # a restart
+    assert stored_urls(blank_db) == ("https://other.test/x/", None)
+
+
+def test_grafana_path_can_be_changed(blank_db, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", blank_db)
+    monkeypatch.setenv("FQDN_TM", "tm.example.test")
+    monkeypatch.setenv("GRAFANA_PATH", "/dash")
+    create_app()
+    assert stored_urls(blank_db)[1] == "https://tm.example.test/dash/d/tm-expenses-tco"
+
+
+def test_no_fqdn_or_a_bad_one_leaves_urls_empty(blank_db, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", blank_db)
+    monkeypatch.delenv("FQDN_TM", raising=False)
+    create_app()
+    assert stored_urls(blank_db) == (None, None)
+    with psycopg.connect(blank_db, autocommit=True) as conn:
+        conn.execute("DROP SCHEMA expenses CASCADE")
+    for bad in ("evil.test/x y", "http://tm.example.test", "tm example"):
+        monkeypatch.setenv("FQDN_TM", bad)
+        create_app()                               # must not crash
+        assert stored_urls(blank_db) == (None, None), bad
+        with psycopg.connect(blank_db, autocommit=True) as conn:
+            conn.execute("DROP SCHEMA expenses CASCADE")

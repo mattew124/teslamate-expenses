@@ -28,17 +28,9 @@ Air filter, Wheel alignment, Tyre rotation. Add more at `/expenses/categories`
 The app has **no login of its own**. Only publish it behind a forward-auth gate, such as
 Authentik or Authelia with Traefik. `docker-compose.traefik.yml` refuses to start without one.
 
-1. **Provision the database.** This is idempotent, so re-run it on every upgrade. It creates the
-   `expenses` schema and a role that can write expenses and read only `cars` and
-   `positions(car_id, date, odometer)`, nothing else in the TeslaMate database.
-
-   ```bash
-   export EXPENSES_DB_PASS=$(openssl rand -hex 24)
-   ./scripts/provision-db.sh          # DB_CONTAINER defaults to teslamate-database-1
-   ```
-
-2. **Configure.** `cp .env.example .env`, and set `DATABASE_PASS` to the same value.
-3. **Run it.** Pin a released image with `EXPENSES_IMAGE`, or leave it unset to build locally.
+1. **Configure.** `cp .env.example .env` and set `DATABASE_USER` and `DATABASE_PASS` to the same
+   values TeslaMate and its other add-ons use (they're in TeslaMate's compose file).
+2. **Run it.** Pin a released image with `EXPENSES_IMAGE`, or leave it unset to build locally.
 
    ```bash
    docker compose up -d                                                     # localhost:8088/expenses/
@@ -46,10 +38,28 @@ Authentik or Authelia with Traefik. `docker-compose.traefik.yml` refuses to star
    ```
 
    It joins TeslaMate's compose network (`TESLAMATE_NETWORK`, default `teslamate_default`).
-4. **OneDrive (optional).** See [OneDrive uploads](#onedrive-uploads).
-5. **Grafana.** Dashboards → New → Import → upload `grafana/cost-of-ownership.json`
+3. **OneDrive (optional).** See [OneDrive uploads](#onedrive-uploads).
+4. **Grafana.** Dashboards → New → Import → upload `grafana/cost-of-ownership.json`
    (datasource `TeslaMate`, tested on Grafana 13). Set the **Timezone** box to your IANA zone and
    save the dashboard, so months line up with your local calendar.
+5. **Link the two.** Set `FQDN_TM` in `.env` to the same value as TeslaMate's compose variable. On
+   first start the app uses it to pre-fill its **Settings** page (the same idea as TeslaMate's): this
+   app at `https://$FQDN_TM$BASE_PATH/` and the dashboard at `https://$FQDN_TM/grafana/d/tm-expenses-tco`
+   (change the `/grafana` part with `GRAFANA_PATH`). Those addresses add a *Dashboards ↗* link to the
+   app's header and make the dashboard's *Add / edit expenses* link go to the right place. After
+   that, the Settings page is the only place to change them, and restarts never overwrite it.
+   Without `FQDN_TM` they start empty, and you fill them in there.
+
+### The database
+
+There is nothing to run. On start the app creates its own `expenses` schema in the TeslaMate
+database (idempotent, so upgrades apply themselves), and only ever writes inside it. It reads
+`cars`, `positions` and `charging_processes`. This needs TeslaMate's database user, which
+owns the database; Grafana already reads it the same way.
+
+To give the app less than that, run `scripts/provision-db.sh` once. It creates a role that
+can write expenses and read only `cars` and `positions(car_id, date, odometer)`. Point
+`DATABASE_USER`/`DATABASE_PASS` at it and set `SKIP_MIGRATE=1`. Re-run the script on upgrades.
 
 ## OneDrive uploads
 
@@ -136,7 +146,7 @@ to revoke the app's access entirely, remove it at
 
 ## What the dashboard counts
 
-All of it lives in the `expenses.ownership` view (`db/schema.sql`), one row per car:
+All of it lives in the `expenses.ownership` view (`tmexpenses/schema.sql`), one row per car:
 
 | Figure | Definition |
 |---|---|
@@ -168,8 +178,8 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/python -m pytest -q     # starts a throwaway postgres:18 container
 ```
 
-The tests load TeslaMate's real table definitions (`db/teslamate-schema.sql`) and run the real
-`scripts/provision-db.sh`.
+The tests load TeslaMate's real table definitions (`db/teslamate-schema.sql`), start the app so
+it creates its own schema, and also cover the optional `scripts/provision-db.sh` role.
 
 ### Dev stack
 
@@ -212,8 +222,7 @@ scripts/dev.sh up --image ghcr.io/mattew124/teslamate-expenses@sha256:...
 scripts/dev.sh test-browser
 ```
 
-Then pin production to that digest. Schema changes reach an existing install by re-running
-`scripts/provision-db.sh`.
+Then pin production to that digest. Schema changes apply when the new version starts.
 
 ## License
 
