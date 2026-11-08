@@ -161,6 +161,27 @@ def test_onedrive_page(page):
     shot(page, "form-onedrive-phone")
 
 
+def test_connect_reaches_microsoft(page):
+    """Real Chromium enforces the CSP, so this is where a blocked redirect shows.
+    The request to Microsoft is answered locally and never sent. Runs only when
+    the dev database has an app registration saved."""
+    page.goto(UI + "onedrive")
+    button = page.locator("button:has-text('Connect OneDrive')")
+    if not button.count():
+        print("     (skipped: no app registration saved, or already connected)")
+        return
+    reached = []
+
+    def stub(route):
+        reached.append(route.request.url)
+        route.fulfill(status=200, content_type="text/html", body="<p>stub Microsoft sign-in</p>")
+    page.route("https://login.microsoftonline.com/**", stub)
+    button.click()
+    page.wait_for_url(re.compile(r"^https://login\.microsoftonline\.com/consumers/oauth2/v2\.0/authorize\?"))
+    assert reached and "code_challenge=" in reached[0]
+    page.unroute("https://login.microsoftonline.com/**")
+
+
 def test_dashboard(page):
     add_expense(page, "62000", "Initial purchase")
     add_expense(page, "1500", "Tyres")
@@ -206,6 +227,7 @@ def main():
         step("no sideways scroll on a phone", test_phone_layout_has_no_sideways_scroll, page)
         step("phone list shows amount, invoice and edit", test_list_shows_key_fields_on_a_phone, page)
         step("OneDrive page and upload field", test_onedrive_page, page)
+        step("Connect OneDrive goes to Microsoft", test_connect_reaches_microsoft, page)
         # Expected 400s from the deliberate bad submissions above aren't script errors.
         real = [t for t in problems if "400" not in t]
         step("no script or CSP errors", lambda: (_ for _ in ()).throw(AssertionError(real)) if real else None)

@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta, timezone
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
-from flask import Flask, abort, jsonify, redirect, render_template, request, url_for
+from flask import Flask, abort, jsonify, make_response, redirect, render_template, request, url_for
 
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -347,7 +347,11 @@ def create_app(connect=None, onedrive_transport=None):
             db.save_onedrive_account(
                 conn, auth_state=drive.encrypt(f"{state} {verifier}"),
                 auth_expires_at=datetime.now(timezone.utc) + timedelta(minutes=SIGN_IN_MINUTES))
-        resp = redirect(drive.authorize_url(account["client_id"], callback_url(), state, challenge), 303)
+        # Not a redirect: Chrome applies form-action to a form POST's redirect.
+        # A link (followed by app.js) is a plain navigation, as n8n does it.
+        resp = make_response(render_template(
+            "connecting.html",
+            sign_in_url=drive.authorize_url(account["client_id"], callback_url(), state, challenge)))
         # Ties the sign-in to this browser: the callback must come back to the one that started it.
         resp.set_cookie(STATE_COOKIE, state, max_age=SIGN_IN_MINUTES * 60, httponly=True,
                         samesite="Lax", secure=request.is_secure, path=request.script_root or "/")

@@ -8,6 +8,8 @@ redirect's parameters by hand.
 
 import base64
 import hashlib
+import html
+import re
 import io
 import json
 from datetime import date, timedelta
@@ -133,10 +135,14 @@ def save_credentials(client, client_id=CLIENT_ID, secret=SECRET, expires=""):
 
 
 def start_sign_in(client, ms):
-    """Press Connect -> the redirect to Microsoft. Returns its query parameters."""
+    """Press Connect -> the page that sends the browser on to Microsoft (a link,
+    followed by app.js: a plain navigation, which form-action doesn't police).
+    Returns the sign-in address's query parameters."""
     resp = client.post("/onedrive/connect", headers=ORIGIN)
-    assert resp.status_code == 303
-    loc = urlparse(resp.headers["Location"])
+    assert resp.status_code == 200
+    page = resp.data.decode()
+    href = html.unescape(re.search(r'<a id="continue-sign-in" href="([^"]+)"', page).group(1))
+    loc = urlparse(href)
     assert loc.scheme == "https" and loc.netloc == "login.microsoftonline.com"
     q = {k: v[0] for k, v in parse_qs(loc.query).items()}
     ms.challenge = q.get("code_challenge")
@@ -433,3 +439,16 @@ def test_setup_page_has_the_full_registration_walkthrough(client):
                  "Secret ID", "24 months", "Application (client) ID"):
         assert text in page, text
     assert f'data-copy="{CALLBACK}"' in page        # one-click copy of the exact address
+
+
+def test_connect_never_relies_on_a_form_redirect(client, ms):
+    """Chrome applies form-action to the redirect after a form POST, so Connect
+    hands the browser a link instead, and the CSP stays same-origin everywhere."""
+    save_credentials(client)
+    resp = client.post("/onedrive/connect", headers=ORIGIN)
+    assert resp.status_code == 200 and "Location" not in resp.headers
+    assert 'data-auto-follow' in resp.data.decode()
+    for r in (resp, client.get("/onedrive"), client.get("/new")):
+        form_action = next(d for d in r.headers["Content-Security-Policy"].split(";")
+                           if d.strip().startswith("form-action"))
+        assert form_action.strip() == "form-action 'self'"
