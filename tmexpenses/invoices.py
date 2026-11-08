@@ -47,6 +47,9 @@ PAID_LABEL = re.compile(r"(?:annual premium|amount paid|pay annually)\s*:?", re.
 MONEY = re.compile(r"\$\s*([\d,]+\.\d{2})")
 ODOMETER = re.compile(r"odometer\s*:?\s*([\d,]+)(?:\s*km)?", re.I)
 _NAME_JOINERS = {"&", "and", "of", "the", "t/as"}
+# "Legal Pty Ltd ABN 11 ... trading as Brand Name": the brand is what the owner knows the business by.
+TRADING_AS = re.compile(r"\b(?:trading\s+as|t/as?)\s+(.+)", re.I)
+_REGISTRATION_WORDS = {"abn", "acn", "afsl", "afs", "arbn", "arsn"}
 COMPANY = re.compile(r"([A-Z][\w&'.\- ]{2,60}?\s(?:Pty\.?\s+Ltd\.?|Pty\.?\s+Limited|Limited|Ltd\.?))\b")
 
 
@@ -207,6 +210,41 @@ def _amount(text, multi="max"):
     return max(totals) if totals else None
 
 
+def _reads_as_a_company(before):
+    """Is what precedes 'trading as' a legal name (capitalised words, numbers like ABN 11 000...)
+    rather than a sentence such as 'Brand CTP Insurance is provided by Other Ltd (ACN 1)'? That
+    sentence names some third party in a footnote, not who the document is from."""
+    words = before.split()
+    return bool(words) and all(
+        w.strip(".,;:()")[:1].isupper() or w.strip(".,;:()")[:1].isdigit() or w.lower() in _NAME_JOINERS
+        or not w.strip(".,;:()") for w in words)
+
+
+def _trading_name(text):
+    """The name after 'trading as' / 't/as': capitalised words, up to a registration number
+    (ABN, AFSL...) or the end of the column. Prose ('trading as a sole trader') isn't a name."""
+    for column in re.split(r"\s{2,}|\n", text):
+        m = TRADING_AS.search(column)
+        if not m or not _reads_as_a_company(column[:m.start()]):
+            continue
+        words = []
+        for word in m.group(1).split():
+            bare = word.strip(".,;:()")
+            if not bare or bare.lower() in _REGISTRATION_WORDS or any(ch.isdigit() for ch in bare):
+                break
+            if not (bare[0].isupper() or bare.lower() in _NAME_JOINERS):
+                break
+            words.append(word.rstrip(".,;:"))
+            if len(words) >= 6:
+                break
+        while words and words[-1].lower() in _NAME_JOINERS:
+            words.pop()
+        name = " ".join(words)
+        if len(name) >= 3:
+            return name[:100]
+    return None
+
+
 def _vendor(name, category, text):
     stem = re.sub(r"\.pdf$", "", name, flags=re.I)
     parts = [p.strip() for p in stem.split(" - ")]
@@ -214,6 +252,9 @@ def _vendor(name, category, text):
         for i, part in enumerate(parts):
             if part.lower() == category.lower() and i + 1 < len(parts):
                 return parts[i + 1][:100]
+    trading = _trading_name(text)
+    if trading:
+        return trading
     for column in re.split(r"\s{2,}|\n", text):  # layout text puts columns side by side
         m = COMPANY.match(column.strip())
         name = " ".join(m.group(1).split()) if m else ""

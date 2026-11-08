@@ -263,3 +263,65 @@ def test_a_sentence_is_not_a_vendor():
     text = "Example CTP Insurance is provided by Example Insurer Limited\n"
     assert invoices.propose("", "x.pdf", text, CATS)["vendor"] is None
     assert invoices.propose("", "x.pdf", "Example Insurer Limited and more\n", CATS)["vendor"] == "Example Insurer Limited"
+
+
+# ---- trading names: "Legal Pty Ltd ABN ... trading as Brand Name" --------------------------
+
+LEGAL = "Example Insurer Limited"
+
+
+def vendor(text, name="x.pdf"):
+    return invoices.propose("", name, text, CATS)["vendor"]
+
+
+def test_the_trading_name_beats_the_legal_entity():
+    text = f"Page 1 of 8     {LEGAL} ABN 11 111 111 111 AFSL 123456 trading as Brand Cover        MOTREN Issued at 02:17AM\n"
+    assert vendor(text) == "Brand Cover"
+
+
+def test_trading_as_at_the_end_of_a_line_and_with_a_full_stop():
+    assert vendor(f"      {LEGAL} ABN 11 111 111 111 trading as Brand Cover\n") == "Brand Cover"
+    assert vendor(f"{LEGAL} trading as Brand Cover.\n") == "Brand Cover"
+
+
+def test_other_ways_of_writing_it():
+    assert vendor("Example Garage Pty Ltd t/as Corner Garage\n") == "Corner Garage"
+    assert vendor("Example Garage Pty Ltd T/A Corner Garage and Tyres\n") == "Corner Garage and Tyres"
+    assert vendor("Example Garage Pty Ltd Trading As Corner Garage\n") == "Corner Garage"
+
+
+def test_the_name_stops_before_registration_numbers():
+    assert vendor("Example Pty Ltd trading as Brand Cover ABN 11 111 111 111\n") == "Brand Cover"
+    assert vendor("Example Pty Ltd trading as Brand Cover AFSL 123456\n") == "Brand Cover"
+
+
+def test_the_trading_name_wins_even_when_the_legal_name_comes_first():
+    text = f"{LEGAL}\nSome heading\n   {LEGAL} ABN 11 111 111 111 trading as Brand Cover\n"
+    assert vendor(text) == "Brand Cover"
+
+
+def test_a_file_name_vendor_still_wins():
+    assert invoices.propose("", "261030 - Tyres - Tesla.pdf", f"{LEGAL} trading as Brand Cover\n", CATS)["vendor"] == "Tesla"
+
+
+def test_prose_that_says_trading_as_is_not_a_vendor():
+    assert vendor("These terms apply when trading as a sole trader.\n") is None
+    assert vendor(f"{LEGAL} ABN 1\nWhen trading as a sole trader the policy differs.\n") == LEGAL
+
+
+def test_without_a_trading_name_the_legal_company_is_used_as_before():
+    assert vendor(f"      {LEGAL} ABN 11 111 111 111 AFSL 123456\n") == LEGAL
+
+
+def test_a_footnote_naming_a_third_party_is_not_the_vendor():
+    text = ("Department of Example Transport\n"
+            "Brand CTP Insurance is provided by Other Insurer Limited (ACN 005297807) trading as Brand Insurance.\n")
+    assert vendor(text) is None or "Brand" not in vendor(text)
+
+
+def test_the_legal_name_before_trading_as_may_carry_registration_numbers():
+    assert vendor("Example Insurer Limited (ACN 005 297 807) ABN 11 000 016 722 AFSL 227681 trading as Brand Cover\n") == "Brand Cover"
+
+
+def test_trading_as_with_nothing_before_it_is_not_enough():
+    assert vendor("trading as Brand Cover\n") is None
