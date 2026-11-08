@@ -27,6 +27,7 @@ services:
       ONEDRIVE_TOKEN_KEY: ${DEV_ONEDRIVE_TOKEN_KEY:-}
       APP_TZ: ${APP_TZ:-UTC}
       TZ: ${APP_TZ:-UTC}
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
     depends_on:
       dev-db:
         condition: service_healthy

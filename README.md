@@ -169,8 +169,8 @@ to revoke the app's access entirely, remove it at
 ### Importing invoices you already have
 
 Invoices already in a car's OneDrive folder (and its subfolders) can be turned into expenses:
-**OneDrive → Import existing invoices** beside the car. The app reads up to 10 PDFs not yet
-linked to an expense, guesses each one's date, category, vendor, amount and odometer, and shows
+**OneDrive → Import existing invoices** beside the car. The app reads up to 10 PDFs at a time (fewer if a round is
+taking over about 75 seconds, as scans do) that aren't yet linked to an expense, guesses each one's date, category, vendor, amount and odometer, and shows
 them in a table to check, correct and untick. **Nothing is saved until you press Import**, and a
 file already linked to an expense never appears again, so you can work through a big folder in
 rounds.
@@ -197,6 +197,17 @@ guesses once you've confirmed it twice; a learned label that finds two different
 PDF leaves the field blank rather than guessing. Nothing is learned if your value isn't in the
 PDF text. **Import page → See and remove what it has learned** lists everything and lets you
 delete it. This stores only short labels and vendor names, in the `expenses` schema.
+
+## Logs
+
+The app logs to docker's own logs (stdout/stderr), so whatever collects those keeps them across
+container recreates. `LOG_LEVEL` (`debug`, `info` by default, `warning`, `error`) sets how much it
+says. At `debug` every invoice read is described in one line: the file name, size, a short hash,
+how its text was read (text layer or OCR), which fields were found and which weren't, and how long it
+took, for example `prefill file="261024 - Tyres.pdf" bytes=122032 sha256=ab12cd34ef56 found=date,category,amount
+missing=- ms=310`. Document text, amounts and dates are never logged. Problems that change a result (a
+missing poppler/tesseract, a failed rename, a refused upload) are warnings at any level. The dev stack
+runs at `debug`.
 
 ## What the dashboard counts
 
