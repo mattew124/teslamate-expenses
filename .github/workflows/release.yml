@@ -1,5 +1,6 @@
 # Push a tag (v0.1.0, or v0.1.0-rc1 for a candidate) to publish an image.
-# Pre-release tags never move :latest. The run summary shows the digest to pin.
+# Pre-release tags never move :latest; they move the floating :rc tag instead, so an
+# installation can follow the candidate channel. The run summary shows the digest to pin.
 name: Release
 on:
   push:
@@ -31,7 +32,9 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
-          tags: type=semver,pattern={{version}}
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=rc,enable=${{ contains(github.ref_name, '-rc') }}
       - id: build
         uses: docker/build-push-action@v6
         with:
