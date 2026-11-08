@@ -549,24 +549,79 @@ def create_app(connect=None, onedrive_transport=None):
                                errors=errors or {}, categories=categories, notice=notice,
                                learn_after=invoices.LEARN_AFTER), status
 
+    def import_context(car_id):
+        """What reading a file needs: the folder, category names, learned labels and settings."""
+        with connect() as conn:
+            return {"folder": db.car_folders(conn).get(car_id), "categories": db.categories(conn),
+                    "learned": db.learned(conn, invoices.LEARN_AFTER), "settings": db.get_settings(conn),
+                    "connected": bool((db.onedrive_account(conn) or {}).get("refresh_token"))}
+
+    def pending_files(token, ctx):
+        """-> (all PDFs in the folder, those with no expense yet)."""
+        files = drive.pdfs(token, ctx["folder"]["folder_id"])
+        with connect() as conn:
+            known = db.known_invoice_urls(conn, [f["web_url"] for f in files])
+        return files, [f for f in files if f["web_url"] not in known]
+
+    def read_file(token, car, ctx, n, f):
+        """Download one PDF and propose its expense: an import row. A file that can't be fetched
+        becomes a row saying why, never an error for the whole page."""
+        by_name = {c["name"]: c["id"] for c in ctx["categories"]}
+        row = import_row(n, url=f["url"], name=f["name"], folder=f["folder"], id=f["id"])
+        timer = docinfo.Timer()
+        try:
+            pdf = drive.download(token, f["id"])
+            guess = invoices.propose(f["folder"], f["name"], invoices.extract_text(pdf), list(by_name), ctx["learned"])
+        except onedrive.OneDriveError as exc:
+            log.warning("import file=%s folder=%s skipped: %s", docinfo.quote(f["name"]), docinfo.quote(f["folder"]), exc)
+            row["note"] = str(exc)
+            return row
+        have, missing = docinfo.found(guess)
+        log.debug("import file=%s folder=%s size=%s sha256=%s found=%s missing=%s ms=%d", docinfo.quote(f["name"]),
+                  docinfo.quote(f["folder"]), f["size"], docinfo.sha12(pdf), have, missing, timer.ms)
+        row.update(
+            date=guess["date"].isoformat() if guess["date"] else "",
+            category_id=str(by_name.get(guess["category"], "")),
+            vendor=guess["vendor"] or "", odometer_km=guess["odometer_km"] or "",
+            amount=f"{guess['amount']:.2f}" if guess["amount"] is not None else "",
+            include=not guess["missing"],
+            note=("Couldn't read the " + ", ".join(guess["missing"]) + ": fill in to import."
+                  if guess["missing"] else ""))
+        if guess["date"] and not row["odometer_km"]:
+            with connect() as conn:
+                reading = db.odometer_at(conn, car["id"], datetime.combine(guess["date"], dtime(12), ZoneInfo(tz)))
+            if reading is not None:
+                row["odometer_km"] = f"{reading:.1f}".rstrip("0").rstrip(".")
+                row["odo_note"] = "from TeslaMate"
+        if guess["date"] and guess["category"]:
+            target = validation.invoice_filename(
+                datetime.combine(guess["date"], dtime(12)), guess["category"], guess["vendor"],
+                ctx["settings"]["invoice_date_format"], ctx["settings"]["invoice_name_format"],
+                car=car["name"], amount=guess["amount"])
+            row["new_name"] = "" if target == f["name"] else target
+        # What was proposed, sent back with the form so confirming can tell what the owner changed.
+        row["guess"] = {k: row[k] for k in LEARN_FIELDS}
+        return row
+
+    def file_entry(f):
+        return {"id": f["id"], "name": f["name"], "folder": f["folder"], "url": f["web_url"], "size": f["size"]}
+
     @app.get("/onedrive/import/<int:car_id>")
     def onedrive_import(car_id):
+        """The page comes up at once, with a progress bar: its script then asks for the file list
+        (/scan) and for each file in turn (/read), so nothing waits on OneDrive or OCR. With
+        ?sync=1 (no JavaScript) everything is read before the page is sent."""
         need_drive()
         car = car_or_404(car_id)
-        with connect() as conn:
-            folder = db.car_folders(conn).get(car_id)
-            categories = db.categories(conn)
-            learned = db.learned(conn, invoices.LEARN_AFTER)
-            settings_row = db.get_settings(conn)
-        if not folder:
+        ctx = import_context(car_id)
+        if not ctx["folder"] or not ctx["connected"]:
             return redirect(url_for("onedrive_page"), 303)
-        by_name = {c["name"]: c["id"] for c in categories}
+        if not request.args.get("sync"):
+            return render_template("import.html", car=car, rows=[], remaining=0, errors={}, shell=True,
+                                   categories=ctx["categories"], notice=None, learn_after=invoices.LEARN_AFTER)
         try:
             token = access_token()
-            files = drive.pdfs(token, folder["folder_id"])
-            with connect() as conn:
-                known = db.known_invoice_urls(conn, [f["web_url"] for f in files])
-            pending = [f for f in files if f["web_url"] not in known]
+            files, pending = pending_files(token, ctx)
             log.debug("import scan car=%d listed=%d already_imported=%d pending=%d batch=%d", car_id, len(files),
                       len(files) - len(pending), len(pending), min(len(pending), IMPORT_BATCH))
             rows, round_timer = [], docinfo.Timer()
@@ -574,42 +629,7 @@ def create_app(connect=None, onedrive_transport=None):
                 if n and round_timer.ms > IMPORT_BUDGET_SECONDS * 1000:
                     log.debug("import scan stopped after %d files: over the %ds budget", n, IMPORT_BUDGET_SECONDS)
                     break
-                row = import_row(n, url=f["web_url"], name=f["name"], folder=f["folder"], id=f["id"])
-                timer = docinfo.Timer()
-                try:
-                    pdf = drive.download(token, f["id"])
-                    guess = invoices.propose(f["folder"], f["name"], invoices.extract_text(pdf), list(by_name), learned)
-                except onedrive.OneDriveError as exc:
-                    log.warning("import file=%s folder=%s skipped: %s", docinfo.quote(f["name"]), docinfo.quote(f["folder"]), exc)
-                    row["note"] = str(exc)
-                    rows.append(row)
-                    continue
-                have, missing = docinfo.found(guess)
-                log.debug("import file=%s folder=%s size=%s sha256=%s found=%s missing=%s ms=%d", docinfo.quote(f["name"]),
-                          docinfo.quote(f["folder"]), f["size"], docinfo.sha12(pdf), have, missing, timer.ms)
-                row.update(
-                    date=guess["date"].isoformat() if guess["date"] else "",
-                    category_id=str(by_name.get(guess["category"], "")),
-                    vendor=guess["vendor"] or "", odometer_km=guess["odometer_km"] or "",
-                    amount=f"{guess['amount']:.2f}" if guess["amount"] is not None else "",
-                    include=not guess["missing"],
-                    note=("Couldn't read the " + ", ".join(guess["missing"]) + ": fill in to import."
-                          if guess["missing"] else ""))
-                if guess["date"] and not row["odometer_km"]:
-                    with connect() as conn:
-                        reading = db.odometer_at(conn, car_id, datetime.combine(guess["date"], dtime(12), ZoneInfo(tz)))
-                    if reading is not None:
-                        row["odometer_km"] = f"{reading:.1f}".rstrip("0").rstrip(".")
-                        row["odo_note"] = "from TeslaMate"
-                if guess["date"] and guess["category"]:
-                    target = validation.invoice_filename(
-                        datetime.combine(guess["date"], dtime(12)), guess["category"], guess["vendor"],
-                        settings_row["invoice_date_format"], settings_row["invoice_name_format"],
-                        car=car["name"], amount=guess["amount"])
-                    row["new_name"] = "" if target == f["name"] else target
-                # What was proposed, sent back with the form so confirming can tell what the owner changed.
-                row["guess"] = {k: row[k] for k in LEARN_FIELDS}
-                rows.append(row)
+                rows.append(read_file(token, car, ctx, n, file_entry(f)))
         except onedrive.NotConnected:
             return redirect(url_for("onedrive_page"), 303)
         except onedrive.SignInExpired as exc:
@@ -618,6 +638,49 @@ def create_app(connect=None, onedrive_transport=None):
             return render_onedrive(status=502, notice=str(exc))
         return render_import(car, rows, remaining=len(pending) - len(rows), status=200,
                              notice=None if files else "No PDFs found in that folder.")
+
+    @app.get("/onedrive/import/<int:car_id>/scan")
+    def onedrive_import_scan(car_id):
+        """The files still to import, listed but not read: {listed, already_imported, remaining, files}."""
+        need_drive()
+        car_or_404(car_id)
+        ctx = import_context(car_id)
+        if not ctx["folder"]:
+            return jsonify(error="Choose a OneDrive folder for this car on the OneDrive page first.",
+                           url=url_for("onedrive_page")), 409
+        try:
+            files, pending = pending_files(access_token(), ctx)
+        except onedrive.NotConnected as exc:
+            return jsonify(error=str(exc), url=url_for("onedrive_page")), 409
+        except onedrive.SignInExpired as exc:
+            return jsonify(error=str(exc), url=url_for("onedrive_page")), 400
+        except onedrive.OneDriveError as exc:
+            log.warning("import scan failed: %s", exc)
+            return jsonify(error=str(exc)), 502
+        batch = pending[:IMPORT_BATCH]
+        log.debug("import scan car=%d listed=%d already_imported=%d pending=%d batch=%d", car_id, len(files),
+                  len(files) - len(pending), len(pending), len(batch))
+        return jsonify(listed=len(files), already_imported=len(files) - len(pending),
+                       remaining=len(pending) - len(batch), files=[file_entry(f) for f in batch])
+
+    @app.post("/onedrive/import/<int:car_id>/read")
+    def onedrive_import_read(car_id):
+        """One file's row (an HTML fragment) for the page to add to the table."""
+        need_drive()
+        car = car_or_404(car_id)
+        n = request.form.get("n", type=int)
+        f = {k: request.form.get(k, "") for k in ("id", "name", "folder", "url")}
+        f["size"] = request.form.get("size", "")
+        if n is None or n < 0 or not f["id"] or not f["name"]:
+            abort(400)
+        ctx = import_context(car_id)
+        try:
+            row = read_file(access_token(), car, ctx, n, f)
+        except onedrive.NotConnected as exc:
+            row = import_row(n, name=f["name"], folder=f["folder"], url=f["url"], note=str(exc))
+        except onedrive.OneDriveError as exc:
+            row = import_row(n, name=f["name"], folder=f["folder"], url=f["url"], note=str(exc))
+        return render_template("_import_row.html", r=row, n=n, categories=ctx["categories"], errors={})
 
     def learn_from(imported):
         """Remember what the owner's corrections show: the label printed beside a value they

@@ -21,6 +21,7 @@ TEXT = {b"%PDF-tyres": TYRES_TEXT, b"%PDF-scan": "", b"%PDF-insurer": "Total pre
 
 class ImportDrive(FakeMicrosoft):
     rename_status = 200
+    download_status = 200
 
     def __call__(self, method, url, data=None, headers=None, raw=False):
         from urllib.parse import unquote, urlparse
@@ -34,6 +35,8 @@ class ImportDrive(FakeMicrosoft):
         if url.startswith("https://cdn.example/"):
             assert "Authorization" not in (headers or {}), "the CDN link must be fetched without the token"
             self.calls.append((method, url, data, headers or {}))
+            if self.download_status != 200:
+                return self.download_status, b""
             return 200, FILES[path.rsplit("/", 1)[1]][2]
         if method == "GET" and path.endswith("/children") and path.split("/")[-2] in ("INV", "SUB"):
             self.calls.append((method, url, data, headers))
@@ -86,7 +89,7 @@ def post_rows(admin, **over):
 
 
 def test_preview_proposes_and_writes_nothing(client, admin):
-    page = client.get("/onedrive/import/1").data.decode()
+    page = client.get("/onedrive/import/1?sync=1").data.decode()
     assert "261024 - Tyres.pdf" in page and "250105 - Insurer cert.pdf" in page and "scan.pdf" in page
     assert 'value="2026-10-24"' in page and 'value="1234.50"' in page and 'value="45120"' in page
     assert "Example Tyres Pty Ltd" in page and "Couldn&#39;t read the date, category, amount" in page
@@ -94,7 +97,7 @@ def test_preview_proposes_and_writes_nothing(client, admin):
 
 
 def test_only_complete_guesses_are_ticked(client):
-    page = client.get("/onedrive/import/1").data.decode()
+    page = client.get("/onedrive/import/1?sync=1").data.decode()
     assert page.count(" checked>") == 2   # tyres + insurer; the unreadable scan is left for the owner
 
 
@@ -110,7 +113,7 @@ def test_confirm_imports_ticked_rows_only(client, admin):
 
 def test_already_imported_files_are_left_out(client, admin):
     client.post("/onedrive/import/1", data=post_rows(admin), headers=ORIGIN)
-    page = client.get("/onedrive/import/1").data.decode()
+    page = client.get("/onedrive/import/1?sync=1").data.decode()
     assert "scan.pdf" in page and "Tyres.pdf" not in page and "Insurer" not in page
 
 
@@ -140,7 +143,7 @@ def test_bad_link_refused(client, admin):
 
 def test_works_in_batches(client, admin, monkeypatch):
     monkeypatch.setattr("tmexpenses.IMPORT_BATCH", 1)
-    page = client.get("/onedrive/import/1").data.decode()
+    page = client.get("/onedrive/import/1?sync=1").data.decode()
     assert "2 more waiting" in page
 
 
@@ -160,19 +163,19 @@ def test_missing_odometer_is_filled_from_teslamate(client, admin):
     # P3 is dated 2025-01-05 (file name) and its text has no odometer; TeslaMate does.
     admin.execute("INSERT INTO positions (latitude, longitude, date, odometer, car_id) VALUES "
                   "(0, 0, '2025-01-04 00:00', 40000.5, 1), (0, 0, '2025-02-01 00:00', 41000, 1)")
-    page = client.get("/onedrive/import/1").data.decode()
+    page = client.get("/onedrive/import/1?sync=1").data.decode()
     assert 'value="40000.5"' in page and "from TeslaMate" in page
 
 
 def test_a_pdf_odometer_beats_teslamate(client, admin):
     admin.execute("INSERT INTO positions (latitude, longitude, date, odometer, car_id) VALUES (0, 0, '2026-10-01', 1, 1)")
-    page = client.get("/onedrive/import/1").data.decode()
+    page = client.get("/onedrive/import/1?sync=1").data.decode()
     assert 'value="45120"' in page          # the tyre invoice's own odometer
 
 
 def test_odometer_stays_blank_when_teslamate_has_nothing(client, admin):
     admin.execute("TRUNCATE positions")
-    assert 'name="odometer_km_2"' in client.get("/onedrive/import/1").data.decode()
+    assert 'name="odometer_km_2"' in client.get("/onedrive/import/1?sync=1").data.decode()
 
 
 @pytest.fixture()
@@ -186,7 +189,7 @@ def renames(ms):
 
 
 def test_preview_offers_the_new_name_without_renaming(client, ms, admin, dashed):
-    page = client.get("/onedrive/import/1").data.decode()
+    page = client.get("/onedrive/import/1?sync=1").data.decode()
     assert 'name="rename_0"' in page and "261024 - Tyres - Example Tyres Pty Ltd.pdf" in page
     assert renames(ms) == []
 
@@ -250,7 +253,7 @@ def test_rename_follows_the_settings_template_by_default(client, ms, admin):
 
 
 def test_rename_is_offered_even_when_nothing_could_be_guessed(client):
-    page = client.get("/onedrive/import/1").data.decode()
+    page = client.get("/onedrive/import/1?sync=1").data.decode()
     assert page.count('name="rename_') == 3          # every row, including the unreadable scan
     assert "yymmdd - category - vendor" in page
 
@@ -268,6 +271,80 @@ def test_a_slow_round_stops_early_and_defers_the_rest(client, monkeypatch):
     """OCR can take 10+ s a file; gunicorn kills a request at 120 s. Past the time budget the
     page stops reading files and leaves the rest for the next round."""
     monkeypatch.setattr("tmexpenses.IMPORT_BUDGET_SECONDS", -1)      # already used up
-    page = client.get("/onedrive/import/1").data.decode()
+    page = client.get("/onedrive/import/1?sync=1").data.decode()
     assert page.count('name="include_') == 1          # always at least one file per round
     assert "2 more waiting" in page
+
+
+# ---- the page shows progress instead of making the browser wait ---------------------------
+
+def downloads(ms):
+    return [c for c in ms.calls if c[1].startswith("https://cdn.example/")]
+
+
+def test_the_import_page_loads_at_once_and_reads_nothing(client, ms):
+    before = len(ms.calls)
+    page = client.get("/onedrive/import/1").data.decode()
+    assert len(ms.calls) == before            # no OneDrive traffic: the reading happens after the page is up
+    assert 'id="import-status"' in page and "data-scan-url" in page and "data-row-url" in page
+    assert "<progress" in page and "?sync=1" in page            # and a way in without JavaScript
+    assert 'name="include_' not in page
+
+
+def test_the_import_form_cant_be_sent_before_reading_finishes(client):
+    page = client.get("/onedrive/import/1").data.decode()
+    assert 'name="count" value="0"' in page and "disabled" in page.split("Import ticked")[0].split("<button")[-1]
+
+
+def test_scan_lists_the_files_without_reading_them(client, ms):
+    data = client.get("/onedrive/import/1/scan").get_json()
+    assert (data["listed"], data["already_imported"], data["remaining"]) == (3, 0, 0)
+    assert [f["name"] for f in data["files"]] == ["261024 - Tyres.pdf", "scan.pdf", "250105 - Insurer cert.pdf"]
+    assert {"id", "name", "folder", "url", "size"} <= set(data["files"][0])
+    assert downloads(ms) == []
+
+
+def test_scan_leaves_out_what_is_imported_and_batches(client, admin, monkeypatch):
+    client.post("/onedrive/import/1", data=post_rows(admin), headers=ORIGIN)      # imports P3 and P1
+    monkeypatch.setattr("tmexpenses.IMPORT_BATCH", 1)
+    data = client.get("/onedrive/import/1/scan").get_json()
+    assert (data["listed"], data["already_imported"], data["remaining"]) == (3, 2, 0)
+    assert [f["name"] for f in data["files"]] == ["scan.pdf"]
+
+
+def test_scan_reports_what_is_in_the_way(client, ms):
+    client.post("/onedrive/disconnect", headers=ORIGIN)
+    resp = client.get("/onedrive/import/1/scan")
+    assert resp.status_code == 409 and "Connect OneDrive" in resp.get_json()["error"]
+
+
+def read(client, **over):
+    data = {"n": "4", "id": "P1", "name": "261024 - Tyres.pdf", "folder": "", "url": "https://od.example/P1", "size": "10"}
+    data.update(over)
+    return client.post("/onedrive/import/1/read", headers=ORIGIN, data=data)
+
+
+def test_read_returns_one_row_for_the_page_to_add(client):
+    resp = read(client)
+    html = resp.data.decode()
+    assert resp.status_code == 200 and html.lstrip().startswith("<tr") and "<html" not in html
+    assert 'name="amount_4"' in html and 'value="1234.50"' in html and 'name="id_4" value="P1"' in html
+
+
+def test_an_unreadable_file_becomes_a_row_with_a_reason_not_an_error(client, ms):
+    ms.download_status = 500
+    resp = read(client)
+    assert resp.status_code == 200 and "<tr" in resp.data.decode() and "261024 - Tyres.pdf" in resp.data.decode()
+    assert "HTTP 500" in resp.data.decode()
+
+
+def test_read_checks_origin_and_input(client):
+    assert client.post("/onedrive/import/1/read", data={"id": "P1"}).status_code == 403
+    assert read(client, id="").status_code == 400
+    assert read(client, n="x").status_code == 400
+    assert client.post("/onedrive/import/99/read", headers=ORIGIN, data={"id": "P1", "n": "0"}).status_code == 404
+
+
+def test_the_slow_way_still_works_without_javascript(client):
+    page = client.get("/onedrive/import/1?sync=1").data.decode()
+    assert page.count('name="include_') == 3 and "<progress" not in page

@@ -9,6 +9,7 @@ again, so test expenses you entered by hand are left alone.
 import os
 import re
 import sys
+import time
 
 from playwright.sync_api import expect, sync_playwright
 
@@ -54,6 +55,25 @@ def test_large_pdf_is_accepted(page):
         "invoice_file": {"name": "large.pdf", "mimeType": "application/pdf", "buffer": big}})
     assert resp.status == 200, f"HTTP {resp.status}: a large PDF upload crashed the app"
     assert set(resp.json()) >= {"date", "amount", "vendor", "category_id", "odometer_km"}
+
+
+def test_import_page_shows_progress(page):
+    """The import page opens at once and reports its progress, instead of a blank wait."""
+    page.goto(UI + "onedrive")
+    if "Connected as" not in page.inner_text("main") or not page.query_selector("text=Import existing invoices"):
+        print("     (skipped: dev stack isn't connected to OneDrive with a car folder)")
+        return
+    car = re.search(r"onedrive/import/(\d+)", page.get_attribute("text=Import existing invoices", "href")).group(1)
+    started = time.time()
+    page.goto(UI + f"onedrive/import/{car}", wait_until="domcontentloaded")
+    assert time.time() - started < 5, "the import page should open at once, not wait for OneDrive"
+    expect(page.locator("#import-status-text")).to_be_visible()
+    # It ends with a summary (and the form ready) or a plain message saying why there is nothing to do.
+    expect(page.locator("#import-status-text")).to_have_text(
+        re.compile(r"^(Read \d+ PDF|Every PDF|No PDFs)"), timeout=240000)
+    if page.locator("#import-form").is_visible():
+        assert page.locator("#import-form button[type=submit]").is_enabled()
+        shot(page, "import-progress")
 
 
 def remove_marked(page):
@@ -283,6 +303,7 @@ def main():
         step("OneDrive page and upload field", test_onedrive_page, page)
         step("Connect OneDrive goes to Microsoft", test_connect_reaches_microsoft, page)
         step("folder browser (read-only)", test_folder_browser, page)
+        step("import page shows progress", test_import_page_shows_progress, page)
         # Expected 400s from the deliberate bad submissions above aren't script errors.
         real = [t for t in problems if "400" not in t]
         step("no script or CSP errors", lambda: (_ for _ in ()).throw(AssertionError(real)) if real else None)
