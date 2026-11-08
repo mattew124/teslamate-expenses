@@ -51,4 +51,5 @@ Parallel sessions each get a git worktree under `.claude/worktrees/<name>/`, and
 
 A `v*` tag publishes the image to ghcr.io. Test with a candidate tag first, by digest:
 `scripts/dev.sh up --image <ref>`, then `scripts/dev.sh test-browser`. Pin
-production to the digest that passed.
+production to the digest that passed. Version numbering and the
+candidate-to-stable steps are in RELEASING.md.
