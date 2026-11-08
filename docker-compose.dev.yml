@@ -27,6 +27,10 @@ services:
       ONEDRIVE_TOKEN_KEY: ${DEV_ONEDRIVE_TOKEN_KEY:-}
       APP_TZ: ${APP_TZ:-UTC}
       TZ: ${APP_TZ:-UTC}
+      # The app writes its Grafana dashboard here, exactly as in production.
+      DASHBOARD_DIR: /dashboards
+    volumes:
+      - dev-dashboards:/dashboards
     depends_on:
       dev-db:
         condition: service_healthy
@@ -76,7 +80,7 @@ services:
       TZ: ${APP_TZ:-UTC}
     volumes:
       - ./grafana/provider.dev.yml:/etc/grafana/provisioning/dashboards/expenses-dev.yml:ro
-      - ./.dev/dashboards:/dashboards-dev:ro
+      - dev-dashboards:/dashboards-dev:ro
     depends_on:
       dev-db:
         condition: service_healthy
@@ -89,3 +93,4 @@ networks:
 
 volumes:
   dev-db:
+  dev-dashboards:

@@ -57,9 +57,26 @@ Authentik or Authelia with Traefik. `docker-compose.traefik.yml` refuses to star
 
    It joins TeslaMate's compose network (`TESLAMATE_NETWORK`, default `teslamate_default`).
 3. **OneDrive (optional).** See [OneDrive uploads](#onedrive-uploads).
-4. **Grafana.** Dashboards → New → Import → upload `grafana/cost-of-ownership.json`
-   (datasource `TeslaMate`, tested on Grafana 13). Set the **Timezone** box to your IANA zone and
-   save the dashboard, so months line up with your local calendar.
+4. **Grafana.** The app writes its own dashboard, with your `APP_TZ` as the default timezone, to
+   the `teslamate-expenses-dashboards` volume each time it starts, so the dashboard always matches
+   the version you run. Give TeslaMate's Grafana that volume and `grafana/provider.yml`, in
+   TeslaMate's compose file:
+
+   ```yaml
+   services:
+     grafana:
+       volumes:
+         - teslamate-expenses-dashboards:/dashboards-expenses:ro
+         - /path/to/teslamate-expenses/grafana/provider.yml:/etc/grafana/provisioning/dashboards/expenses.yml:ro
+   volumes:
+     teslamate-expenses-dashboards:
+       external: true      # created when you start this app's compose file
+   ```
+
+   Restart Grafana once. The dashboard appears under **Expenses** (datasource `TeslaMate`, tested
+   on Grafana 13). Provisioned dashboards can't be edited in Grafana; to customise, import
+   `grafana/cost-of-ownership.json` by hand instead (Dashboards → New → Import), set the
+   **Timezone** box to your IANA zone and save, and set `DASHBOARD_DIR=` empty in `.env`.
 5. **Link the two.** Set `FQDN_TM` in `.env` to the same value as TeslaMate's compose variable. On
    first start the app uses it to pre-fill its **Settings** page (the same idea as TeslaMate's): this
    app at `https://$FQDN_TM$BASE_PATH/` and the dashboard at `https://$FQDN_TM/grafana/d/tm-expenses-tco`

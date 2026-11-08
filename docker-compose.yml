@@ -20,6 +20,10 @@ services:
       FQDN_TM: ${FQDN_TM:-}
       APP_TZ: ${APP_TZ:-UTC}
       TZ: ${APP_TZ:-UTC}
+      # The app writes its Grafana dashboard here, for Grafana to provision (see the README).
+      DASHBOARD_DIR: ${DASHBOARD_DIR-/dashboards}
+    volumes:
+      - dashboards:/dashboards
     ports:
       # Loopback only; docker-compose.traefik.yml publishes it behind forward-auth.
       - "127.0.0.1:${HOST_PORT:-8088}:8080"
@@ -30,6 +34,11 @@ services:
       retries: 3
     networks:
       - teslamate
+
+volumes:
+  dashboards:
+    # A fixed name, so TeslaMate's compose file can mount it into Grafana as an external volume.
+    name: teslamate-expenses-dashboards
 
 networks:
   teslamate:

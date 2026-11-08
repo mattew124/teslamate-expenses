@@ -16,7 +16,7 @@ from flask import Flask, abort, jsonify, make_response, redirect, render_templat
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from . import db, onedrive, validation
+from . import dashboard, db, onedrive, validation
 
 MESSAGES = {
     "saved": "Expense saved.",
@@ -60,6 +60,13 @@ def create_app(connect=None, onedrive_transport=None):
         connect = db.connect
         if os.environ.get("SKIP_MIGRATE") != "1":
             db.migrate()
+    dashboard_dir = os.environ.get("DASHBOARD_DIR")
+    if dashboard_dir:
+        try:
+            wrote = dashboard.export(dashboard_dir, tz, os.environ.get("BASE_PATH", "").rstrip("/"))
+            app.logger.info("Grafana dashboard %s in %s", "written" if wrote else "already up to date", dashboard_dir)
+        except OSError as exc:
+            app.logger.warning("Could not write the Grafana dashboard to %s: %s", dashboard_dir, exc)
     # Room for the largest PDF plus the rest of the form.
     app.config["MAX_CONTENT_LENGTH"] = validation.MAX_PDF_BYTES + 1024 * 1024
     # ONEDRIVE_TOKEN_KEY turns OneDrive on; everything else is set up in the UI.

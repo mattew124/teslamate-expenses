@@ -99,7 +99,7 @@ sync_local_notes() {
 
 ensure_env() {
     sync_local_notes
-    mkdir -p .dev/dashboards .dev/screenshots
+    mkdir -p .dev/screenshots
     if [ ! -f "$ENVF" ]; then
         ( umask 077
           printf 'DEV_ADMIN_DB_PASS=%s\nDEV_GRAFANA_PASS=%s\n' \
@@ -108,10 +108,6 @@ ensure_env() {
     # Added later than the passwords, so older .dev/env files get it too.
     grep -q '^DEV_ONEDRIVE_TOKEN_KEY=' "$ENVF" ||
         printf 'DEV_ONEDRIVE_TOKEN_KEY=%s\n' "$(openssl rand -base64 32 | tr '+/' '-_')" >> "$ENVF"
-    # Dashboard copy with the app link's fallback kept inside dev and the timezone defaulted.
-    sed -e "s#, '/expenses/')#, '$DEV_BASE_PATH/')#" \
-        -e "s#\"\(query\|text\|value\)\": \"UTC\"#\"\1\": \"$APP_TZ\"#" \
-        grafana/cost-of-ownership.json > .dev/dashboards/cost-of-ownership.json
 }
 
 # ---- reading TeslaMate (never writes) ----------------------------------------
