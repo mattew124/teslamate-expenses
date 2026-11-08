@@ -6,6 +6,7 @@ WORKDIR /srv
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
+COPY gunicorn.conf.py .
 COPY tmexpenses ./tmexpenses
 COPY grafana/cost-of-ownership.json ./grafana/cost-of-ownership.json
 # Where the app writes its Grafana dashboard when DASHBOARD_DIR points here. World-writable
@@ -19,5 +20,5 @@ USER 10001:10001
 EXPOSE 8080
 # Root filesystem is read-only: heartbeat file goes to tmpfs, and the control
 # socket (unused, defaults to $HOME) is switched off.
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "--worker-tmp-dir", "/dev/shm", "--no-control-socket", \
+CMD ["gunicorn", "-c", "/srv/gunicorn.conf.py", "--bind", "0.0.0.0:8080", "--workers", "2", "--worker-tmp-dir", "/dev/shm", "--no-control-socket", \
      "--access-logfile", "-", "tmexpenses:create_app()"]

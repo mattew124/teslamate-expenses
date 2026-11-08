@@ -19,6 +19,7 @@ services:
       # TeslaMate's own variable: this host's name. Pre-fills the Settings page on first start.
       FQDN_TM: ${FQDN_TM:-}
       APP_TZ: ${APP_TZ:-UTC}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
       TZ: ${APP_TZ:-UTC}
       # The app writes its Grafana dashboard here, for Grafana to provision (see the README).
       DASHBOARD_DIR: ${DASHBOARD_DIR-/dashboards}

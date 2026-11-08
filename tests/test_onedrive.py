@@ -435,6 +435,23 @@ def test_upload_failure_saves_nothing(client, ms, admin):
     assert rows(admin) == []
 
 
+def test_onedrive_events_are_logged_without_secrets(client, ms, admin, caplog):
+    import logging
+    caplog.set_level(logging.DEBUG, logger="tmexpenses")
+    sign_in(client, ms)
+    choose_folder(client)
+    client.post("/new", data=with_pdf(form(admin, invoice_url="")), headers=ORIGIN)
+    text = "\n".join(caplog.messages)
+    assert "OneDrive connected" in text and "invoice uploaded" in text
+    for secret in (SECRET, "AUTH-CODE", "AT-", "RT-", "Tyre Shop"):
+        assert secret not in text, secret
+    ms.upload_status = 403
+    client.post("/new", data=with_pdf(form(admin)), headers=ORIGIN)
+    assert any(r.levelno == logging.WARNING and "upload" in r.getMessage() for r in caplog.records)
+    client.post("/onedrive/disconnect", headers=ORIGIN)
+    assert "OneDrive disconnected" in "\n".join(caplog.messages)
+
+
 def test_expired_sign_in_is_explained(client, ms, admin):
     sign_in(client, ms)
     choose_folder(client)
