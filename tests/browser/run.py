@@ -142,30 +142,20 @@ def test_list_shows_key_fields_on_a_phone(page):
 
 
 def test_onedrive_page(page):
-    """Works whether or not the stack has ONEDRIVE_CLIENT_ID. When it has, the
-    folder of the first car is saved and put back, and the form offers an upload."""
+    """The setup steps render on a phone, with the address to register. Only
+    invalid details are submitted, so a real registration in the dev database
+    is left alone."""
     page.goto(UI + "onedrive")
     expect(page.locator("h1")).to_have_text("OneDrive")
-    if not page.locator("input[name^=folder_]").count():
-        expect(page.locator("main")).to_contain_text("ONEDRIVE_CLIENT_ID")
-        page.goto(UI + "new")
-        expect(page.locator("input[name=invoice_file]")).to_have_count(0)
-        shot(page, "onedrive-off-phone")
-        return
-    field = page.locator("input[name^=folder_]").first
-    before = field.input_value()
-    field.fill(" /Bad/../Folder ")
-    page.click("text=Save folders")
-    expect(page.locator(".error").first).to_contain_text("can't be a OneDrive folder name")
-    page.locator("input[name^=folder_]").first.fill(f"/{MARKER}//Invoices/")
-    page.click("text=Save folders")
-    page.wait_for_url(re.compile(r"msg=folders"))
-    expect(page.locator("input[name^=folder_]").first).to_have_value(f"{MARKER}/Invoices")
+    expect(page.locator("code.copy")).to_have_text(re.compile(re.escape(BASE) + r"/onedrive/callback$"))
+    if not page.locator("details[open]").count():
+        page.click("summary")
+    page.fill("input[name=client_id]", "not-a-client-id")
+    page.fill("input[name=client_secret]", "x")
+    page.click("details button[type=submit]")
+    expect(page.locator(".error").first).to_contain_text("Application (client) ID")
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     shot(page, "onedrive-phone")
-    page.locator("input[name^=folder_]").first.fill(before)
-    page.click("text=Save folders")
-    page.wait_for_url(re.compile(r"msg=folders"))
     page.goto(UI + "new")
     expect(page.locator("input[name=invoice_file]")).to_have_attribute("accept", "application/pdf,.pdf")
     shot(page, "form-onedrive-phone")

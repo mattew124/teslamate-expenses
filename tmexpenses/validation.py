@@ -4,7 +4,8 @@ Pure functions, no database or Flask — everything the DB would otherwise rejec
 with an opaque constraint error is caught here with a message a human can act on.
 """
 
-from datetime import datetime
+import re
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
@@ -16,8 +17,8 @@ MAX_TEXT_LEN = 500
 MAX_NOTES_LEN = 2000
 MAX_CATEGORY_LEN = 60
 MAX_PDF_BYTES = 20 * 1024 * 1024
-MAX_FOLDER_LEN = 400
 MAX_FILENAME_LEN = 120
+GUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 # Characters OneDrive refuses in file and folder names.
 ONEDRIVE_FORBIDDEN = set('"*:<>?/\\|')
 
@@ -92,19 +93,23 @@ def parse_invoice_pdf(filename, data):
     return data
 
 
-def parse_onedrive_folder(raw):
-    """'/Cars/Model 3/' -> 'Cars/Model 3' (relative to the drive root); blank -> None."""
-    if raw and len(raw) > MAX_FOLDER_LEN:
-        raise ValueError(f"Folder is too long (max {MAX_FOLDER_LEN} characters).")
-    parts = [p.strip() for p in (raw or "").split("/")]
-    parts = [p for p in parts if p]
-    for part in parts:
-        if part in (".", "..") or part.endswith(".") or any(
-                ch in ONEDRIVE_FORBIDDEN or ord(ch) < 32 for ch in part):
-            raise ValueError(
-                f"“{part}” can't be a OneDrive folder name: use / between folders, and none of "
-                '\\ : * ? " < > | or a trailing dot.')
-    return "/".join(parts) or None
+def parse_client_id(raw):
+    """An Entra Application (client) ID: a GUID."""
+    value = (raw or "").strip().lower()
+    if not GUID.fullmatch(value):
+        raise ValueError("Paste the Application (client) ID from the app's Overview page: "
+                         "it looks like 1a2b3c4d-1a2b-1a2b-1a2b-1a2b3c4d5e6f.")
+    return value
+
+
+def parse_optional_date(raw):
+    value = (raw or "").strip()
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        raise ValueError("Date isn't valid.") from None
 
 
 def invoice_filename(occurred_at, category, vendor):

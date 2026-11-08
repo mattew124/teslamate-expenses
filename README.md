@@ -54,35 +54,40 @@ Authentik or Authelia with Traefik. `docker-compose.traefik.yml` refuses to star
 ## OneDrive uploads
 
 With this on, the expense form takes the invoice PDF itself. The app uploads it to the folder
-you set for that car, names it `2026-11-07 Tyres - Tyre Shop.pdf` (date, category, vendor;
+you chose for that car, names it `2026-11-07 Tyres - Tyre Shop.pdf` (date, category, vendor;
 an existing name gets a suffix, never overwritten) and stores the file's OneDrive link as the
 expense's invoice link. It works with a personal Microsoft account (OneDrive Personal).
 
-1. **Register an app** at [Microsoft Entra → App registrations](https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade)
-   → New registration:
-   - Supported account types: **Personal Microsoft accounts only** (or any org directory and
-     personal accounts).
-   - No redirect URI.
-   - Then, under Authentication, set **Allow public client flows** to **Yes**.
-   - Copy the **Application (client) ID**. There is no client secret.
-
-   The app signs in with the device code flow, so it asks for delegated `Files.ReadWrite` and
-   `offline_access` and needs no redirect URI on your hostname.
-2. **Configure.** In `.env`:
+1. **Turn it on.** Add a key to `.env`, re-run `scripts/provision-db.sh` (it adds two tables)
+   and restart the app:
 
    ```bash
-   ONEDRIVE_CLIENT_ID=<application (client) id>
    ONEDRIVE_TOKEN_KEY=<output of: openssl rand -base64 32 | tr '+/' '-_'>
    ```
 
-   The key encrypts the saved sign-in (a refresh token for your whole OneDrive) before it goes
-   into the database, so a database dump or backup on its own can't open the drive. Keep the key
-   out of those backups. If you lose or change it, connect again.
-3. **Re-run `scripts/provision-db.sh`** (it adds the two tables), restart the app, open the
-   **OneDrive** page, press **Connect OneDrive**, enter the code shown at
-   microsoft.com/devicelogin, then press **I've signed in**.
-4. **Set a folder per car** on the same page, e.g. `Cars/Model 3/Invoices`, from the top of
-   your OneDrive. Missing folders are created on the first upload.
+   The key encrypts the client secret and the saved sign-in (a refresh token for your whole
+   OneDrive) before they go into the database, so a database dump or backup on its own can't
+   open the drive. Keep the key out of those backups. If you lose or change it, enter the
+   secret and connect again.
+2. **Open the OneDrive page** in the app and follow its steps. It shows the exact redirect URI
+   to register:
+   - In [Microsoft Entra → App registrations](https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade),
+     register an app for **Personal Microsoft accounts only**, with a **Web** redirect URI of
+     `https://<your host><BASE_PATH>/onedrive/callback`.
+   - Add a client secret, and paste the client ID and the secret's value into the page.
+     Secrets last at most 24 months; enter the expiry date and the page warns you 30 days
+     before it runs out.
+3. **Connect OneDrive.** You sign in on Microsoft's page and come straight back. The app asks
+   for delegated `Files.ReadWrite` and `offline_access`.
+4. **Choose a folder for each car** by browsing your OneDrive. Uploads go by the folder's ID,
+   so renaming or moving it later doesn't break them.
+
+Every installation registers its own app because Microsoft only redirects to addresses
+registered on the app, and each installation has its own. Sign-in uses PKCE, and the
+callback must return to the browser that started it.
+
+The redirect URI is built from the proxy's `X-Forwarded-Proto` and `X-Forwarded-Host`
+headers, so the proxy must set them (Traefik does).
 
 PDFs only (checked by content, not just the name), up to 20 MB. Uploading on the edit page
 replaces the link; the old file stays in OneDrive. Disconnecting deletes the saved sign-in;
@@ -146,9 +151,9 @@ parallel branches never share running code. `scripts/dev.sh info` shows a checko
 ports, `list` shows every running dev stack, and `destroy` removes one. `.worktreeinclude`
 copies your `dev.env` into new Claude Code worktrees.
 
-To try OneDrive uploads in dev, set `ONEDRIVE_CLIENT_ID` in `dev.env`; the token key is
-generated into `.dev/env`. A sign-in there writes to your real OneDrive, so give each car a test
-folder.
+OneDrive is on in the dev stack with a throwaway token key in `.dev/env`. To sign in there,
+add the dev stack's callback address (shown on its OneDrive page) as a second redirect URI on
+your app registration. A sign-in writes to your real OneDrive, so give each car a test folder.
 
 The seed only reads from TeslaMate. It copies all of `cars` and `charging_processes`, and one
 `positions` row per hour with latitude, longitude and elevation blanked. `up` warns if

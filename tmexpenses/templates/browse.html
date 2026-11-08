@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Choose folder{% endblock %}
+{% block content %}
+<h1>Folder for {{ car.name or ('Car ' ~ car.id) }}</h1>
+<p class="here"><code>{{ here.path }}</code></p>
+<ul class="plain folder-list">
+  {% if not is_root %}
+  <li><a href="{{ url_for('onedrive_browse', car_id=car.id, folder=here.parent_id) if here.parent_id else url_for('onedrive_browse', car_id=car.id) }}">⬑ Up</a></li>
+  {% endif %}
+  {% for f in children %}
+  <li><a href="{{ url_for('onedrive_browse', car_id=car.id, folder=f.id) }}">📁 {{ f.name }}</a></li>
+  {% else %}
+  <li><small>No folders in here.</small></li>
+  {% endfor %}
+</ul>
+<form method="post" action="{{ url_for('onedrive_choose_folder', car_id=car.id) }}" class="row">
+  <input type="hidden" name="folder_id" value="{{ '' if is_root else here.id }}">
+  <button type="submit" class="button">Use {{ here.path }}</button>
+  <a href="{{ url_for('onedrive_page') }}">Cancel</a>
+</form>
+<p><small>To use a new folder, create it in OneDrive first, then reload this page.</small></p>
+{% endblock %}

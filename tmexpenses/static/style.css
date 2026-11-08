@@ -48,6 +48,11 @@ button.secondary { background: transparent; color: var(--accent); border: 1px so
 button:disabled { opacity: .6; cursor: progress; }
 ol.steps { margin: 0; padding-left: 1.25rem; display: grid; gap: .4rem; }
 ol.steps a { overflow-wrap: anywhere; }
-code.user-code { font-size: 1.3rem; font-weight: 700; letter-spacing: .1em; padding: .1rem .4rem;
-  border: 1px solid var(--line); border-radius: .3rem; user-select: all; }
 input[type=file] { padding: .4rem; }
+details > summary { cursor: pointer; color: var(--accent); margin-bottom: .75rem; }
+code.copy { display: block; margin-top: .25rem; padding: .4rem .5rem; border: 1px solid var(--line);
+  border-radius: .3rem; overflow-wrap: anywhere; user-select: all; }
+ul.folders li { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+ul.folders .actions { display: flex; gap: 1rem; align-items: center; }
+ul.folder-list li a { display: block; padding: .3rem 0; }
+.here code { overflow-wrap: anywhere; }

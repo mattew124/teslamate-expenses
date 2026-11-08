@@ -5,14 +5,16 @@ dashboard in grafana/ turns it (plus TeslaMate's own charging costs) into total
 cost of ownership.
 """
 
+import hmac
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 from flask import Flask, abort, jsonify, redirect, render_template, request, url_for
 
 from werkzeug.exceptions import RequestEntityTooLarge
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from . import db, onedrive, validation
 
@@ -23,6 +25,7 @@ MESSAGES = {
     "category": "Category added.",
     "folders": "Folders saved.",
     "connected": "OneDrive connected.",
+    "credentials": "App registration saved. Now connect OneDrive.",
     "disconnected": "OneDrive disconnected.",
 }
 
@@ -55,15 +58,16 @@ def create_app(connect=None, onedrive_transport=None):
     connect = connect or db.connect
     # Room for the largest PDF plus the rest of the form.
     app.config["MAX_CONTENT_LENGTH"] = validation.MAX_PDF_BYTES + 1024 * 1024
+    # ONEDRIVE_TOKEN_KEY turns OneDrive on; everything else is set up in the UI.
     drive = None
-    if os.environ.get("ONEDRIVE_CLIENT_ID"):
-        if not os.environ.get("ONEDRIVE_TOKEN_KEY"):
-            raise ValueError("ONEDRIVE_CLIENT_ID is set but ONEDRIVE_TOKEN_KEY isn't (see README.md, OneDrive)")
-        drive = onedrive.OneDrive(os.environ["ONEDRIVE_CLIENT_ID"], os.environ["ONEDRIVE_TOKEN_KEY"],
-                                  onedrive_transport)
+    if os.environ.get("ONEDRIVE_TOKEN_KEY"):
+        drive = onedrive.OneDrive(os.environ["ONEDRIVE_TOKEN_KEY"], onedrive_transport)
     base_path = os.environ.get("BASE_PATH", "")
     if base_path:
         app.wsgi_app = PrefixMiddleware(app.wsgi_app, base_path)
+    # The proxy's scheme and host, so the OneDrive callback address is the
+    # public one. The app is only reachable through the proxy (or on loopback).
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=0, x_proto=1, x_host=1)
 
     # ---- helpers --------------------------------------------------------------
 
@@ -152,8 +156,9 @@ def create_app(connect=None, onedrive_transport=None):
         with connect() as conn:
             account = db.onedrive_account(conn, lock=True)
             if not account or not account["refresh_token"]:
-                raise onedrive.OneDriveError("Connect OneDrive first (OneDrive page), then try again.")
-            tokens = drive.refresh(drive.decrypt(account["refresh_token"]))
+                raise onedrive.NotConnected()
+            tokens = drive.refresh(account["client_id"], drive.decrypt(account["client_secret"]),
+                                   drive.decrypt(account["refresh_token"]))
             if tokens.get("refresh_token"):
                 db.save_onedrive_account(conn, refresh_token=drive.encrypt(tokens["refresh_token"]))
         return tokens["access_token"]
@@ -164,11 +169,11 @@ def create_app(connect=None, onedrive_transport=None):
             category = next(c["name"] for c in db.categories(conn) if c["id"] == values["category_id"])
             connected = (db.onedrive_account(conn) or {}).get("refresh_token")
         if not connected:
-            raise onedrive.OneDriveError("Connect OneDrive first (OneDrive page), then try again.")
+            raise onedrive.NotConnected()
         if not folder:
-            raise onedrive.OneDriveError("Set a OneDrive folder for this car on the OneDrive page first.")
+            raise onedrive.OneDriveError("Choose a OneDrive folder for this car on the OneDrive page first.")
         name = validation.invoice_filename(values["occurred_at"], category, values["vendor"])
-        return drive.upload(access_token(), folder, name, pdf)
+        return drive.upload(access_token(), folder["folder_id"], name, pdf)
 
     def form_values(form):
         """Echo the raw submission back into the form after a validation error."""
@@ -271,9 +276,22 @@ def create_app(connect=None, onedrive_transport=None):
 
     # ---- OneDrive ---------------------------------------------------------------
 
+    STATE_COOKIE = "onedrive_sign_in"
+    SIGN_IN_MINUTES = 10
+
     def need_drive():
         if drive is None:
             abort(404)
+
+    def callback_url():
+        return url_for("onedrive_callback", _external=True)
+
+    def car_or_404(car_id):
+        with connect() as conn:
+            car = next((c for c in db.cars(conn) if c["id"] == car_id), None)
+        if car is None:
+            abort(404)
+        return car
 
     @app.get("/onedrive")
     def onedrive_page():
@@ -282,80 +300,135 @@ def create_app(connect=None, onedrive_transport=None):
     def render_onedrive(errors=None, status=200, notice=None):
         message = MESSAGES.get(request.args.get("msg", ""))
         if drive is None:
-            return render_template("onedrive.html", message=message)
+            return render_template("onedrive.html", message=message), status
         with connect() as conn:
             account = db.onedrive_account(conn)
-            ctx = {"cars": db.cars(conn), "folders": db.car_folders(conn)}
-        pending = None
-        if account and account["device_code"] and account["device_expires_at"] > datetime.now(timezone.utc):
-            pending = account
-        ctx.update(
-            account=account if account and account["refresh_token"] else None,
-            pending=pending, errors=errors or {}, message=message, notice=notice)
-        if errors:
-            ctx["folders"] = {c["id"]: request.form.get(f"folder_{c['id']}", "") for c in ctx["cars"]}
+            cars, folders = db.cars(conn), db.car_folders(conn)
+        expires = account and account["secret_expires"]
+        ctx = {
+            "account": account, "cars": cars, "folders": folders,
+            "connected": bool(account and account["refresh_token"]),
+            "callback_url": callback_url(), "errors": errors or {},
+            "values": request.form if errors else {}, "message": message, "notice": notice,
+            "secret_days_left": (expires - date.today()).days if expires else None,
+        }
         return render_template("onedrive.html", **ctx), status
+
+    @app.post("/onedrive/credentials")
+    def onedrive_credentials():
+        need_drive()
+        errors, fields = {}, {}
+        for field, fn in (("client_id", validation.parse_client_id),
+                          ("secret_expires", validation.parse_optional_date)):
+            try:
+                fields[field] = fn(request.form.get(field))
+            except ValueError as exc:
+                errors[field] = str(exc)
+        secret = (request.form.get("client_secret") or "").strip()
+        if not secret:
+            errors["client_secret"] = "Paste the client secret's Value (not its Secret ID)."
+        if errors:
+            return render_onedrive(errors, 400)
+        with connect() as conn:
+            # A new registration can't use the old one's sign-in.
+            db.save_onedrive_account(conn, client_secret=drive.encrypt(secret), refresh_token=None,
+                                     account=None, auth_state=None, auth_expires_at=None, **fields)
+        return redirect(url_for("onedrive_page", msg="credentials"), 303)
 
     @app.post("/onedrive/connect")
     def onedrive_connect():
         need_drive()
-        try:
-            flow = drive.start_sign_in()
-        except onedrive.OneDriveError as exc:
-            return render_onedrive(notice=str(exc), status=502)
-        expires = datetime.now(timezone.utc) + timedelta(seconds=int(flow.get("expires_in", 900)))
+        with connect() as conn:
+            account = db.onedrive_account(conn)
+        if not account or not account["client_id"]:
+            return redirect(url_for("onedrive_page"), 303)
+        state, verifier, challenge = onedrive.new_pkce()
         with connect() as conn:
             db.save_onedrive_account(
-                conn, device_code=drive.encrypt(flow["device_code"]), user_code=flow["user_code"],
-                verification_uri=flow["verification_uri"], device_expires_at=expires)
-        return redirect(url_for("onedrive_page"), 303)
+                conn, auth_state=drive.encrypt(f"{state} {verifier}"),
+                auth_expires_at=datetime.now(timezone.utc) + timedelta(minutes=SIGN_IN_MINUTES))
+        resp = redirect(drive.authorize_url(account["client_id"], callback_url(), state, challenge), 303)
+        # Ties the sign-in to this browser: the callback must come back to the one that started it.
+        resp.set_cookie(STATE_COOKIE, state, max_age=SIGN_IN_MINUTES * 60, httponly=True,
+                        samesite="Lax", secure=request.is_secure, path=request.script_root or "/")
+        return resp
 
-    @app.post("/onedrive/connect/check")
-    def onedrive_check():
+    @app.get("/onedrive/callback")
+    def onedrive_callback():
         need_drive()
         with connect() as conn:
             account = db.onedrive_account(conn)
-        if not account or not account["device_code"]:
-            return redirect(url_for("onedrive_page"), 303)
+        state = request.args.get("state", "")
         try:
-            tokens = drive.finish_sign_in(drive.decrypt(account["device_code"]))
-        except onedrive.SignInPending as exc:
-            return render_onedrive(notice=str(exc))
+            pending = account and account["auth_state"] and drive.decrypt(account["auth_state"]).split(" ")
+        except onedrive.SignInExpired:
+            pending = None
+        if (not pending or account["auth_expires_at"] < datetime.now(timezone.utc)
+                or not hmac.compare_digest(pending[0], state)
+                or not hmac.compare_digest(request.cookies.get(STATE_COOKIE, ""), state)):
+            return render_onedrive(status=400, notice=(
+                "This sign-in wasn't started from this browser, or took longer than "
+                f"{SIGN_IN_MINUTES} minutes. Press Connect OneDrive to try again."))
+        with connect() as conn:
+            db.save_onedrive_account(conn, auth_state=None, auth_expires_at=None)
+        if request.args.get("error"):
+            return render_onedrive(status=400, notice="Microsoft didn't connect OneDrive: "
+                                   + (request.args.get("error_description") or request.args["error"]))
+        try:
+            tokens = drive.redeem_code(account["client_id"], drive.decrypt(account["client_secret"]),
+                                       request.args.get("code", ""), callback_url(), pending[1])
         except onedrive.OneDriveError as exc:
-            with connect() as conn:
-                db.save_onedrive_account(conn, device_code=None, user_code=None,
-                                         verification_uri=None, device_expires_at=None)
-            return render_onedrive(notice=str(exc), status=400)
+            return render_onedrive(status=400, notice=str(exc))
         name = drive.account_name(tokens["access_token"]) or "your Microsoft account"
         with connect() as conn:
-            db.save_onedrive_account(
-                conn, refresh_token=drive.encrypt(tokens["refresh_token"]), account=name,
-                device_code=None, user_code=None, verification_uri=None, device_expires_at=None)
-        return redirect(url_for("onedrive_page", msg="connected"), 303)
+            db.save_onedrive_account(conn, refresh_token=drive.encrypt(tokens["refresh_token"]), account=name)
+        resp = redirect(url_for("onedrive_page", msg="connected"), 303)
+        resp.delete_cookie(STATE_COOKIE, path=request.script_root or "/")
+        return resp
 
     @app.post("/onedrive/disconnect")
     def onedrive_disconnect():
         need_drive()
         with connect() as conn:
-            db.forget_onedrive_account(conn)
+            db.save_onedrive_account(conn, refresh_token=None, account=None)
         return redirect(url_for("onedrive_page", msg="disconnected"), 303)
 
-    @app.post("/onedrive/folders")
-    def onedrive_folders():
+    @app.get("/onedrive/browse/<int:car_id>")
+    def onedrive_browse(car_id):
         need_drive()
+        car = car_or_404(car_id)
+        try:
+            token = access_token()
+            folder_id = request.args.get("folder") or None
+            here = drive.folder(token, folder_id)
+            children = drive.subfolders(token, folder_id)
+        except onedrive.NotConnected:
+            return redirect(url_for("onedrive_page"), 303)
+        except onedrive.SignInExpired as exc:
+            return render_onedrive(status=400, notice=str(exc))
+        except onedrive.OneDriveError as exc:
+            return render_onedrive(status=502, notice=str(exc))
+        return render_template("browse.html", car=car, here=here, children=children,
+                               is_root=folder_id is None)
+
+    @app.post("/onedrive/folders/<int:car_id>")
+    def onedrive_choose_folder(car_id):
+        need_drive()
+        car_or_404(car_id)
+        try:
+            chosen = drive.folder(access_token(), request.form.get("folder_id") or None)
+        except onedrive.OneDriveError as exc:
+            return render_onedrive(status=400, notice=f"Couldn't use that folder: {exc}")
         with connect() as conn:
-            cars = db.cars(conn)
-        parsed, errors = {}, {}
-        for car in cars:
-            try:
-                parsed[car["id"]] = validation.parse_onedrive_folder(request.form.get(f"folder_{car['id']}"))
-            except ValueError as exc:
-                errors[car["id"]] = str(exc)
-        if errors:
-            return render_onedrive(errors, 400)
+            db.set_car_folder(conn, car_id, chosen["id"], chosen["path"])
+        return redirect(url_for("onedrive_page", msg="folders"), 303)
+
+    @app.post("/onedrive/folders/<int:car_id>/clear")
+    def onedrive_clear_folder(car_id):
+        need_drive()
+        car_or_404(car_id)
         with connect() as conn:
-            for car_id, folder in parsed.items():
-                db.set_car_folder(conn, car_id, folder)
+            db.clear_car_folder(conn, car_id)
         return redirect(url_for("onedrive_page", msg="folders"), 303)
 
     @app.get("/api/odometer")
