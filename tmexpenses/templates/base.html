@@ -10,12 +10,12 @@
 <body>
   <header>
     <a class="brand" href="{{ url_for('index') }}">Expenses</a>
+    <a class="button add" href="{{ url_for('new') }}">+ Add</a>
     <nav>
       <a href="{{ url_for('index') }}">All</a>
       <a href="{{ url_for('categories') }}">Categories</a>
       {% if grafana_url %}<a href="{{ grafana_url }}" target="_blank" rel="noopener noreferrer">Dashboards ↗</a>{% endif %}
       <a href="{{ url_for('settings') }}">Settings</a>
-      <a class="button" href="{{ url_for('new') }}">+ Add</a>
     </nav>
   </header>
   <main>
