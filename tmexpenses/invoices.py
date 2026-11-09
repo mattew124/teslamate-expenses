@@ -134,7 +134,7 @@ def _table_totals(text):
         for below in rows[i + 1:i + 3]:
             money = [c for c in below if MONEY.fullmatch(c)]
             if len(money) == len(headers):
-                for head, figure in zip(headers, money):
+                for head, figure in zip(headers, money, strict=True):
                     if head.lower().startswith("total"):
                         found.append(Decimal(MONEY.fullmatch(figure).group(1).replace(",", "")))
                 break
