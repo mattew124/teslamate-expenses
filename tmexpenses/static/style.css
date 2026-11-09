@@ -66,3 +66,17 @@ ul.folder-list li a { display: block; padding: .3rem 0; }
 ol.steps small { display: block; }
 form.new-folder { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--line); }
 form.new-folder button { justify-self: start; }
+
+form.import { display: grid; gap: 1rem; }
+.import-table td { vertical-align: top; }
+.import-table input:not([type=checkbox]), .import-table select { width: 100%; min-width: 0; padding: .3rem .4rem; }
+.import-table input[name^=amount_], .import-table input[name^=odometer_km_] { width: 6.5rem; text-align: right; }
+.import-table .file { white-space: normal; max-width: 12rem; overflow-wrap: anywhere; word-break: break-word; }
+.import-table input[type=date] { min-width: 8.5rem; }
+.import-table select { min-width: 7.5rem; }
+.import-table input[name^=vendor_] { min-width: 8rem; }
+.import-table input[name^=amount_], .import-table input[name^=odometer_km_] { width: 5.5rem; }
+@media (min-width: 40.01rem) { .import-table th, .import-table td { padding-inline: .3rem; } }
+.import-table small { display: block; }
+ul.category-list li { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: .5rem; }
+ul.category-list form.row { align-items: end; }

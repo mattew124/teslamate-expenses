@@ -74,7 +74,8 @@
     <button type="submit" class="button">Connect OneDrive</button>
   </form>
   <small>Opens Microsoft's sign-in page, then comes back here. The app can then read and write
-    files in your OneDrive; it only ever writes invoice PDFs, into the folders you choose below.</small>
+    files in your OneDrive; it only ever writes invoice PDFs into the folders you choose below, and reads PDFs from those
+    folders only when you ask to import existing invoices.</small>
   {% endif %}
 </section>
 {% endif %}
@@ -89,7 +90,8 @@
         <small>{{ f.folder_path if f else 'No folder chosen' }}</small></span>
       <span class="actions">
         <a href="{{ url_for('onedrive_browse', car_id=c.id) }}">{{ 'Change' if f else 'Choose folder' }}</a>
-        {% if f %}<form method="post" action="{{ url_for('onedrive_clear_folder', car_id=c.id) }}">
+        {% if f %}<a href="{{ url_for('onedrive_import', car_id=c.id) }}">Import existing invoices</a>
+        <form method="post" action="{{ url_for('onedrive_clear_folder', car_id=c.id) }}">
           <button type="submit" class="linklike">Clear</button></form>{% endif %}
       </span>
     </li>

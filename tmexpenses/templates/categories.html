@@ -2,11 +2,23 @@
 {% block title %}Categories{% endblock %}
 {% block content %}
 <h1>Categories</h1>
-<ul class="plain">
+<ul class="plain category-list">
   {% for c in categories %}
-  <li>{{ c.name }} <small>{{ 'capital cost' if c.kind == 'purchase' else 'running cost' }}</small></li>
+  <li>
+    <span>{{ c.name }} <small>{{ 'capital cost' if c.kind == 'purchase' else 'running cost' }}</small></span>
+    {% if onedrive_enabled %}
+    <form method="post" action="{{ url_for('category_folder', category_id=c.id) }}" class="row">
+      <label><small>OneDrive folder</small>
+        <input name="upload_folder" maxlength="255" value="{{ c.upload_folder or '' }}" placeholder="{{ c.name }}" autocomplete="off"></label>
+      <button type="submit" class="secondary">Save</button>
+      {% if folder_error and folder_error[0] == c.id %}<span class="error">{{ folder_error[1] }}</span>{% endif %}
+    </form>
+    {% endif %}
+  </li>
   {% endfor %}
 </ul>
+{% if onedrive_enabled %}<p><small>Uploaded invoices go into this subfolder of the car's OneDrive folder, made when first
+  needed. Leave it blank to use a folder named after the category, e.g. Tyres and Wheel alignment can both use “Maintenance”.</small></p>{% endif %}
 <form method="post" class="stack">
   <label>New category <input name="name" maxlength="60" required placeholder="e.g. Servicing">
     {% if error %}<span class="error">{{ error }}</span>{% endif %}</label>

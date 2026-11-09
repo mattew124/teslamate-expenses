@@ -13,7 +13,8 @@ client secret are encrypted with EXPENSES_ENCRYPTION_KEY before they reach the
 database: a backup of the TeslaMate database on its own can't open the drive.
 
 Every HTTP call goes through `transport(method, url, data, headers) -> (status, json)`,
-which tests replace with a fake.
+which tests replace with a fake. Downloading a file is the one exception: the transport
+is called with raw=True and returns (status, bytes).
 """
 
 import base64
@@ -30,6 +31,8 @@ AUTHORITY = "https://login.microsoftonline.com/consumers/oauth2/v2.0"
 GRAPH = "https://graph.microsoft.com/v1.0"
 SCOPES = "Files.ReadWrite offline_access"
 MAX_PAGES = 20   # of 200 children each, when listing a folder
+MAX_DEPTH = 4    # subfolders below a car's folder that are searched for PDFs
+MAX_PDF_BYTES = 20 * 1024 * 1024
 
 
 class OneDriveError(Exception):
@@ -45,7 +48,7 @@ class NotConnected(OneDriveError):
         super().__init__("Connect OneDrive first (OneDrive page), then try again.")
 
 
-def http(method, url, data=None, headers=None, timeout=60):
+def http(method, url, data=None, headers=None, timeout=60, raw=False):
     req = urllib.request.Request(url, data=data, method=method, headers=headers or {})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -54,6 +57,8 @@ def http(method, url, data=None, headers=None, timeout=60):
         status, body = exc.code, exc.read()
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         raise OneDriveError(f"Couldn't reach Microsoft: {exc}") from None
+    if raw:
+        return status, body
     try:
         return status, json.loads(body or b"{}")
     except ValueError:
@@ -202,6 +207,23 @@ class OneDrive:
         return {"id": item["id"], "name": item["name"], "path": display_path(item),
                 "parent_id": (item.get("parentReference") or {}).get("id")}
 
+    def ensure_subfolder(self, access_token, parent_id, name):
+        """The folder called `name` (any case) directly inside parent_id, made if it
+        isn't there. -> its id. Two uploads racing to make it both end up with one."""
+        def find():
+            return next((f["id"] for f in self.subfolders(access_token, parent_id)
+                         if f["name"].lower() == name.lower()), None)
+        found = find()
+        if found:
+            return found
+        try:
+            return self.create_folder(access_token, parent_id, name)["id"]
+        except OneDriveError:
+            found = find()   # lost the race: it exists now
+            if found:
+                return found
+            raise
+
     def upload(self, access_token, folder_id, filename, content):
         """Simple upload (fine to 250 MB) into a folder, by id. A name that
         already exists gets a suffix rather than being overwritten.
@@ -214,3 +236,40 @@ class OneDrive:
         if status not in (200, 201) or not str(body.get("webUrl", "")).startswith("https://"):
             raise OneDriveError("OneDrive refused the upload: " + graph_error(status, body))
         return body["webUrl"]
+
+    def pdfs(self, access_token, folder_id):
+        """Every PDF in a folder and the folders below it (MAX_DEPTH deep), oldest
+        name first: [{id, name, size, web_url, folder}]. `folder` is the path below
+        the one given, '' for files directly in it."""
+        found = []
+
+        def walk(fid, below, depth):
+            url = (f"{GRAPH}/me/drive/items/{quote(fid, safe='')}/children"
+                   "?$top=200&$select=id,name,size,folder,file,webUrl")
+            for _ in range(MAX_PAGES):
+                body = self._get(access_token, url)
+                for c in body.get("value", []):
+                    if "folder" in c and depth < MAX_DEPTH:
+                        walk(c["id"], f"{below}/{c['name']}" if below else c["name"], depth + 1)
+                    elif "file" in c and c["name"].lower().endswith(".pdf") and str(c.get("webUrl", "")).startswith("https://"):
+                        found.append({"id": c["id"], "name": c["name"], "size": c.get("size", 0),
+                                      "web_url": c["webUrl"], "folder": below})
+                url = body.get("@odata.nextLink")
+                if not url or not url.startswith(GRAPH + "/"):
+                    break
+
+        walk(folder_id, "", 0)
+        return sorted(found, key=lambda f: (f["folder"].lower(), f["name"].lower()))
+
+    def download(self, access_token, item_id):
+        """A file's bytes. Graph hands out a short-lived pre-authenticated address on
+        the CDN, which must be fetched without the bearer token."""
+        meta = self._get(access_token, f"{GRAPH}/me/drive/items/{quote(item_id, safe='')}"
+                                       "?select=id,size,@microsoft.graph.downloadUrl")
+        link = meta.get("@microsoft.graph.downloadUrl", "")
+        if not link.startswith("https://") or meta.get("size", 0) > MAX_PDF_BYTES:
+            raise OneDriveError("That file can't be downloaded (missing or over 20 MB).")
+        status, content = self.transport("GET", link, None, {}, raw=True)
+        if status != 200:
+            raise OneDriveError(f"OneDrive didn't give the file (HTTP {status}).")
+        return content

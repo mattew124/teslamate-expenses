@@ -59,7 +59,7 @@ class FakeMicrosoft:
         self.challenge = None
         self.created = []
 
-    def __call__(self, method, url, data=None, headers=None):
+    def __call__(self, method, url, data=None, headers=None, raw=False):
         headers = headers or {}
         self.calls.append((method, url, data, headers))
         path = unquote(urlparse(url).path)
@@ -353,7 +353,7 @@ def test_upload_name_follows_the_date_format_setting(client, ms, admin):
     admin.execute("UPDATE expenses.setting SET invoice_date_format = 'yyyy-mm-dd'")
     client.post("/new", data=with_pdf(form(admin, invoice_url="")), headers=ORIGIN)
     (put,) = ms.uploads()
-    assert unquote(urlparse(put[1]).path).endswith("/INV:/2026-11-07 Tyres - Tyre Shop.pdf:/content")
+    assert unquote(urlparse(put[1]).path).endswith(":/2026-11-07 Tyres - Tyre Shop.pdf:/content")
 
 
 def test_upload_on_create(client, ms, admin):
@@ -364,8 +364,10 @@ def test_upload_on_create(client, ms, admin):
     assert resp.status_code == 303
     (put,) = ms.uploads()
     method, url, body, headers = put
-    # by folder id, so renaming or moving the folder in OneDrive doesn't break uploads
-    assert unquote(urlparse(url).path).endswith("/me/drive/items/INV:/261107 Tyres - Tyre Shop.pdf:/content")
+    # by folder id, so renaming or moving the folder in OneDrive doesn't break uploads; into the
+    # category's subfolder (Maintenance), which was made inside the car's folder (INV)
+    assert ms.created == [("INV", "Maintenance")]
+    assert re.search(r"/me/drive/items/NEW\d+:/261107 Tyres - Tyre Shop.pdf:/content$", unquote(urlparse(url).path))
     assert "conflictBehavior=rename" in url    # never overwrite an existing invoice
     assert body == PDF and headers["Content-Type"] == "application/pdf"
     (row,) = rows(admin)

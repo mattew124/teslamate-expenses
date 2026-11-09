@@ -28,6 +28,23 @@ INSERT INTO expenses.category (name, kind, sort_order) VALUES
     ('Tyre rotation',     'running',   80)
 ON CONFLICT (name) DO NOTHING;
 
+-- Subfolder of the car's OneDrive folder that this category's invoices are uploaded
+-- into (created on demand). NULL = a subfolder named after the category. The column
+-- is added once, with sensible defaults for the standard categories; after that the
+-- owner's edits (on the Categories page) are never overwritten.
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_schema = 'expenses' AND table_name = 'category'
+                     AND column_name = 'upload_folder') THEN
+        ALTER TABLE expenses.category ADD COLUMN upload_folder text
+            CHECK (upload_folder IS NULL OR (btrim(upload_folder) <> '' AND length(upload_folder) <= 255));
+        UPDATE expenses.category SET upload_folder = 'Maintenance'
+            WHERE name IN ('Tyres', 'Cabin air filter', 'Air filter', 'Wheel alignment', 'Tyre rotation');
+        UPDATE expenses.category SET upload_folder = name WHERE name IN ('Insurance', 'Registration');
+    END IF;
+END $$;
+
 -- Settings, saved from the app's Settings page (the same idea as TeslaMate's own).
 -- A single row. Both are optional, and http(s) only: they are rendered as links.
 --   expenses_url  where this app is published; the Grafana dashboard links back to it

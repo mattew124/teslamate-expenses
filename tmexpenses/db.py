@@ -110,7 +110,7 @@ def save_settings(conn, expenses_url, grafana_url, invoice_date_format):
 
 def categories(conn):
     return conn.execute(
-        "SELECT id, name, kind FROM expenses.category ORDER BY sort_order, name"
+        "SELECT id, name, kind, upload_folder FROM expenses.category ORDER BY sort_order, name"
     ).fetchall()
 
 
@@ -126,6 +126,12 @@ def add_category(conn, name):
         "ON CONFLICT (name) DO NOTHING RETURNING id",
         (name,),
     ).fetchone()["id"]
+
+
+def set_upload_folder(conn, category_id, folder):
+    """Returns False when there is no such category."""
+    return conn.execute("UPDATE expenses.category SET upload_folder = %s WHERE id = %s",
+                        (folder, category_id)).rowcount == 1
 
 
 _SELECT = """
@@ -174,6 +180,15 @@ def insert_expense(conn, v):
         f"VALUES ({', '.join('%(' + f + ')s' for f in _FIELDS)}) RETURNING id",
         v,
     ).fetchone()["id"]
+
+
+def known_invoice_urls(conn, urls):
+    """Which of these invoice links an expense already has."""
+    if not urls:
+        return set()
+    rows = conn.execute("SELECT DISTINCT invoice_url FROM expenses.expense WHERE invoice_url = ANY(%s)",
+                        (list(urls),)).fetchall()
+    return {r["invoice_url"] for r in rows}
 
 
 def update_expense(conn, expense_id, v):
