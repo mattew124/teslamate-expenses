@@ -1,6 +1,24 @@
-# teslamate-expenses
+<p align="center"><img src="tmexpenses/static/icon.svg" alt="" width="96" height="96"></p>
 
-Track what your Tesla costs to own, next to [TeslaMate](https://github.com/teslamate-org/teslamate).
+<h1 align="center">teslamate-expenses</h1>
+
+<p align="center">Track what your Tesla costs to own, next to <a href="https://github.com/teslamate-org/teslamate">TeslaMate</a>.</p>
+
+<p align="center">
+  <a href="https://github.com/mattew124/teslamate-expenses/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/mattew124/teslamate-expenses/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/mattew124/teslamate-expenses/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/mattew124/teslamate-expenses?include_prereleases&sort=semver"></a>
+  <a href="https://github.com/mattew124/teslamate-expenses/pkgs/container/teslamate-expenses"><img alt="Container image" src="https://img.shields.io/badge/ghcr.io-teslamate--expenses-blue?logo=docker&logoColor=white"></a>
+  <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/github/license/mattew124/teslamate-expenses"></a>
+  <img alt="Vibe coded" src="https://img.shields.io/badge/vibe-coded-ff69b4">
+</p>
+
+> **Vibe coded.** This project was written with an AI coding assistant (Claude Code), directed
+> and tested by a person, not hand-written or audited line by line. It has tests, runs in a
+> read-only, non-root container and keeps its database role least-privilege, but treat it as you
+> would any young, unreviewed software: back up your TeslaMate database before first use, and
+> read the code before you trust it with anything you care about.
+>
+> Not affiliated with TeslaMate or Tesla. It's an unofficial add-on that reads TeslaMate's data.
 
 - **Web UI** (Flask) to add/edit expenses: category, date, time, amount, odometer, vendor,
   notes and a link to the PDF invoice in your cloud storage. The odometer can be filled in from
@@ -39,9 +57,26 @@ Authentik or Authelia with Traefik. `docker-compose.traefik.yml` refuses to star
 
    It joins TeslaMate's compose network (`TESLAMATE_NETWORK`, default `teslamate_default`).
 3. **OneDrive (optional).** See [OneDrive uploads](#onedrive-uploads).
-4. **Grafana.** Dashboards → New → Import → upload `grafana/cost-of-ownership.json`
-   (datasource `TeslaMate`, tested on Grafana 13). Set the **Timezone** box to your IANA zone and
-   save the dashboard, so months line up with your local calendar.
+4. **Grafana.** The app writes its own dashboard, with your `APP_TZ` as the default timezone, to
+   the `teslamate-expenses-dashboards` volume each time it starts, so the dashboard always matches
+   the version you run. Give TeslaMate's Grafana that volume and `grafana/provider.yml`, in
+   TeslaMate's compose file:
+
+   ```yaml
+   services:
+     grafana:
+       volumes:
+         - teslamate-expenses-dashboards:/dashboards-expenses:ro
+         - /path/to/teslamate-expenses/grafana/provider.yml:/etc/grafana/provisioning/dashboards/expenses.yml:ro
+   volumes:
+     teslamate-expenses-dashboards:
+       external: true      # created when you start this app's compose file
+   ```
+
+   Restart Grafana once. The dashboard appears under **Expenses** (datasource `TeslaMate`, tested
+   on Grafana 13). Provisioned dashboards can't be edited in Grafana; to customise, import
+   `grafana/cost-of-ownership.json` by hand instead (Dashboards → New → Import), set the
+   **Timezone** box to your IANA zone and save, and set `DASHBOARD_DIR=` empty in `.env`.
 5. **Link the two.** Set `FQDN_TM` in `.env` to the same value as TeslaMate's compose variable. On
    first start the app uses it to pre-fill its **Settings** page (the same idea as TeslaMate's): this
    app at `https://$FQDN_TM$BASE_PATH/` and the dashboard at `https://$FQDN_TM/grafana/d/tm-expenses-tco`
@@ -94,7 +129,7 @@ folders of the same name); a blank box means a folder named after the category.
    and restart the app:
 
    ```bash
-   ONEDRIVE_TOKEN_KEY=<output of: openssl rand -base64 32 | tr '+/' '-_'>
+   EXPENSES_ENCRYPTION_KEY=<output of: openssl rand -base64 32 | tr '+/' '-_'>
    ```
 
    The key encrypts the client secret and the saved sign-in (a refresh token for your whole
@@ -220,6 +255,11 @@ Currency is shown as `$` and distance in km.
   refused). Whoever opens one needs access to it, and it lasts as long as its sharing settings.
   An uploaded invoice's link is its plain OneDrive address, not a share link: it opens for you,
   signed in to that Microsoft account, and for nobody else.
+- **Logs.** `docker logs` shows gunicorn's request lines plus the app's own events. `LOG_LEVEL`
+  (`debug`, `info` the default, `warning`, `error`; set in `.env`, restart to change) sets both.
+  `info` records startup, schema changes, expenses saved, updated or deleted, and OneDrive
+  sign-in and upload results. `debug` adds detail such as retries. Tokens, secrets, vendors,
+  notes and amounts are never logged.
 - **Timezone.** Date and time are entered in `APP_TZ` and stored as `timestamptz`.
   TeslaMate's `positions.date` is naive UTC; the odometer lookup converts before comparing.
 - POSTs must carry a same-origin `Origin`/`Referer` header (CSRF guard). Plain `curl` needs
