@@ -20,7 +20,7 @@ import pytest
 from cryptography.fernet import Fernet
 from psycopg.rows import dict_row
 
-from tmexpenses import create_app
+from tmexpenses import create_app, onedrive
 from tests.test_app import ORIGIN, form, rows
 from tests.test_validation import PDF
 
@@ -590,3 +590,64 @@ def test_the_edit_page_has_the_pdf_field_too_but_doesnt_promise_prefill(client, 
 def test_without_onedrive_the_add_form_has_no_pdf_field(app_for, ms):
     page = app_for(ms, key=None).get("/new").data.decode()
     assert 'name="invoice_file"' not in page
+
+
+# ---- what a real drive does that the happy path doesn't ----------------------
+
+def graph_of(*replies):
+    """A OneDrive whose Graph answers come from a list, recording the URLs asked for."""
+    asked, queue = [], list(replies)
+
+    def transport(method, url, data=None, headers=None, raw=False):
+        asked.append(url)
+        return queue.pop(0)
+    return onedrive.OneDrive(KEY, transport), asked
+
+
+NEXT = onedrive.GRAPH + "/me/drive/items/X/children?$skiptoken=2"
+
+
+def test_folder_listing_follows_every_page():
+    drive, asked = graph_of(
+        (200, {"value": [{"id": "A", "name": "Alpha", "folder": {}}], "@odata.nextLink": NEXT}),
+        (200, {"value": [{"id": "B", "name": "Beta", "folder": {}}]}))
+    assert [f["name"] for f in drive.subfolders("AT-1", "X")] == ["Alpha", "Beta"]
+    assert asked[1] == NEXT
+
+
+def test_pdf_listing_follows_every_page():
+    pdf = {"file": {}, "webUrl": "https://onedrive.live.com/f", "size": 1}
+    drive, _ = graph_of(
+        (200, {"value": [{"id": "1", "name": "a.pdf", **pdf}], "@odata.nextLink": NEXT}),
+        (200, {"value": [{"id": "2", "name": "b.pdf", **pdf}]}))
+    assert [f["name"] for f in drive.pdfs("AT-1", "X")] == ["a.pdf", "b.pdf"]
+
+
+def test_a_next_page_off_graph_is_not_followed():
+    """The access token goes with each page request, so only Microsoft Graph may be asked."""
+    drive, asked = graph_of((200, {"value": [], "@odata.nextLink": "https://example.com/steal"}))
+    assert drive.subfolders("AT-1", "X") == [] and len(asked) == 1
+
+
+@pytest.mark.parametrize("busy", [429, 503])
+def test_a_busy_reply_is_retried(busy, monkeypatch):
+    monkeypatch.setattr(onedrive, "RETRY_WAITS", (0, 0))
+    drive, asked = graph_of((busy, {}), (busy, {}), (200, {"value": [{"id": "A", "name": "Alpha", "folder": {}}]}))
+    assert [f["name"] for f in drive.subfolders("AT-1", "X")] == ["Alpha"] and len(asked) == 3
+
+
+def test_staying_busy_is_explained(monkeypatch):
+    monkeypatch.setattr(onedrive, "RETRY_WAITS", (0, 0))
+    drive, asked = graph_of((429, {}), (429, {}), (429, {}))
+    with pytest.raises(onedrive.OneDriveError, match="busy"):
+        drive.subfolders("AT-1", "X")
+    assert len(asked) == 3
+
+
+def test_a_refusal_is_not_retried(monkeypatch):
+    monkeypatch.setattr(onedrive, "RETRY_WAITS", (0, 0))
+    drive, asked = graph_of((403, {"error": {"code": "accessDenied", "message": "Nope"}}))
+    with pytest.raises(onedrive.OneDriveError, match="Nope"):
+        drive.subfolders("AT-1", "X")
+    assert len(asked) == 1
+

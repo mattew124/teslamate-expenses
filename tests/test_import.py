@@ -392,3 +392,10 @@ def test_the_per_file_read_flags_it_too(client, admin):
     admin.execute("INSERT INTO expenses.expense (car_id, category_id, occurred_at, amount) VALUES (1, %s, '2026-10-24 02:00+00', 1234.50)",
                   (cat(admin, "Tyres"),))
     assert "Possible duplicate" in read(client).data.decode()
+
+
+def test_sign_in_expiring_before_a_scan_is_explained(client, ms):
+    ms.refresh_ok = False
+    resp = client.get("/onedrive/import/1?sync=1")
+    assert resp.status_code < 500 and b"sign in again" in resp.data
+
