@@ -18,7 +18,7 @@ from flask import Flask, abort, jsonify, make_response, redirect, render_templat
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from . import db, docinfo, invoices, onedrive, validation
+from . import dashboard, db, docinfo, invoices, logs, onedrive, validation
 
 log = logging.getLogger("tmexpenses.app")
 
@@ -71,23 +71,37 @@ def create_app(connect=None, onedrive_transport=None):
     """`connect` is injectable so tests can hand in a connection to a scratch DB,
     and `onedrive_transport` so they can stand in for Microsoft."""
     app = Flask(__name__)
+    logs.configure(app.logger, os.environ.get("LOG_LEVEL"))
+    log = app.logger
     tz = os.environ.get("APP_TZ", "UTC")
     if connect is None:
         connect = db.connect
         if os.environ.get("SKIP_MIGRATE") != "1":
             db.migrate()
+        else:
+            log.info("SKIP_MIGRATE=1: not touching the schema")
+    dashboard_dir = os.environ.get("DASHBOARD_DIR")
+    if dashboard_dir:
+        try:
+            wrote = dashboard.export(dashboard_dir, tz, os.environ.get("BASE_PATH", "").rstrip("/"))
+            log.info("Grafana dashboard %s in %s", "written" if wrote else "already up to date", dashboard_dir)
+        except OSError as exc:
+            log.warning("Could not write the Grafana dashboard to %s: %s", dashboard_dir, exc)
     # Room for the largest PDF plus the rest of the form.
     app.config["MAX_CONTENT_LENGTH"] = validation.MAX_PDF_BYTES + 1024 * 1024
-    # ONEDRIVE_TOKEN_KEY turns OneDrive on; everything else is set up in the UI.
+    # EXPENSES_ENCRYPTION_KEY turns OneDrive on; everything else is set up in the UI.
     drive = None
-    if os.environ.get("ONEDRIVE_TOKEN_KEY"):
-        drive = onedrive.OneDrive(os.environ["ONEDRIVE_TOKEN_KEY"], onedrive_transport)
+    if os.environ.get("EXPENSES_ENCRYPTION_KEY"):
+        drive = onedrive.OneDrive(os.environ["EXPENSES_ENCRYPTION_KEY"], onedrive_transport)
+    elif os.environ.get("ONEDRIVE_TOKEN_KEY"):
+        log.warning("ONEDRIVE_TOKEN_KEY was renamed EXPENSES_ENCRYPTION_KEY; OneDrive stays off until it is set.")
     base_path = os.environ.get("BASE_PATH", "")
     if base_path:
         app.wsgi_app = PrefixMiddleware(app.wsgi_app, base_path)
     # The proxy's scheme and host, so the OneDrive callback address is the
     # public one. The app is only reachable through the proxy (or on loopback).
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=0, x_proto=1, x_host=1)
+    log.info("started: tz=%s base_path=%s onedrive=%s", tz, base_path or "/", "on" if drive else "off")
 
     # ---- helpers --------------------------------------------------------------
 
@@ -107,7 +121,7 @@ def create_app(connect=None, onedrive_transport=None):
     def security_headers(resp):
         resp.headers["Content-Security-Policy"] = (
             "default-src 'none'; style-src 'self'; script-src 'self'; "
-            "connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
+            "img-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
         )
         resp.headers["X-Content-Type-Options"] = "nosniff"
         resp.headers["Referrer-Policy"] = "same-origin"
@@ -176,7 +190,9 @@ def create_app(connect=None, onedrive_transport=None):
             return values, errors
         try:
             values["invoice_url"] = upload_invoice(values, pdf)
+            log.info("invoice uploaded to OneDrive (%d bytes)", len(pdf))
         except onedrive.OneDriveError as exc:
+            log.warning("invoice upload to OneDrive failed: %s", exc)
             errors["invoice_file"] = str(exc)
         return values, errors
 
@@ -266,7 +282,8 @@ def create_app(connect=None, onedrive_transport=None):
         if errors:
             return render_template("form.html", **form_context(form_values(request.form), errors)), 400
         with connect() as conn:
-            db.insert_expense(conn, values)
+            expense_id = db.insert_expense(conn, values)
+        log.info("expense %s saved (car %s, category %s)", expense_id, values["car_id"], values["category_id"])
         return redirect(url_for("index", msg="saved"), 303)
 
     def load_or_404(conn, expense_id):
@@ -299,6 +316,7 @@ def create_app(connect=None, onedrive_transport=None):
         with connect() as conn:
             if not db.update_expense(conn, expense_id, values):
                 abort(404)
+        log.info("expense %s updated", expense_id)
         return redirect(url_for("index", msg="updated"), 303)
 
     @app.post("/<int:expense_id>/delete")
@@ -306,6 +324,7 @@ def create_app(connect=None, onedrive_transport=None):
         with connect() as conn:
             if not db.delete_expense(conn, expense_id):
                 abort(404)
+        log.info("expense %s deleted", expense_id)
         return redirect(url_for("index", msg="deleted"), 303)
 
     @app.route("/categories", methods=["GET", "POST"])
@@ -317,6 +336,7 @@ def create_app(connect=None, onedrive_transport=None):
                 with connect() as conn:
                     if db.add_category(conn, name) is None:
                         raise ValueError(f"“{name}” already exists.")
+                log.info("category added")
                 return redirect(url_for("categories", msg="category"), 303)
             except ValueError as exc:
                 error = str(exc)
@@ -460,16 +480,19 @@ def create_app(connect=None, onedrive_transport=None):
         with connect() as conn:
             db.save_onedrive_account(conn, auth_state=None, auth_expires_at=None)
         if request.args.get("error"):
+            log.warning("Microsoft didn't connect OneDrive: %s", request.args["error"])
             return render_onedrive(status=400, notice="Microsoft didn't connect OneDrive: "
                                    + (request.args.get("error_description") or request.args["error"]))
         try:
             tokens = drive.redeem_code(account["client_id"], drive.decrypt(account["client_secret"]),
                                        request.args.get("code", ""), callback_url(), pending[1])
         except onedrive.OneDriveError as exc:
+            log.warning("OneDrive sign-in failed: %s", exc)
             return render_onedrive(status=400, notice=str(exc))
         name = drive.account_name(tokens["access_token"]) or "your Microsoft account"
         with connect() as conn:
             db.save_onedrive_account(conn, refresh_token=drive.encrypt(tokens["refresh_token"]), account=name)
+        log.info("OneDrive connected")
         resp = redirect(url_for("onedrive_page", msg="connected"), 303)
         resp.delete_cookie(STATE_COOKIE, path=request.script_root or "/")
         return resp
@@ -479,6 +502,7 @@ def create_app(connect=None, onedrive_transport=None):
         need_drive()
         with connect() as conn:
             db.save_onedrive_account(conn, refresh_token=None, account=None)
+        log.info("OneDrive disconnected")
         return redirect(url_for("onedrive_page", msg="disconnected"), 303)
 
     @app.get("/onedrive/browse/<int:car_id>")
@@ -494,8 +518,10 @@ def create_app(connect=None, onedrive_transport=None):
         except onedrive.NotConnected:
             return redirect(url_for("onedrive_page"), 303)
         except onedrive.SignInExpired as exc:
+            log.warning("OneDrive sign-in has expired: %s", exc)
             return render_onedrive(status=400, notice=str(exc))
         except onedrive.OneDriveError as exc:
+            log.warning("OneDrive folder browse failed: %s", exc)
             return render_onedrive(status=502, notice=str(exc))
         return render_template("browse.html", car=car, here=here, children=children,
                                is_root=folder_id is None, error=error,
@@ -522,6 +548,7 @@ def create_app(connect=None, onedrive_transport=None):
         try:
             chosen = drive.folder(access_token(), request.form.get("folder_id") or None)
         except onedrive.OneDriveError as exc:
+            log.warning("OneDrive folder choice failed: %s", exc)
             return render_onedrive(status=400, notice=f"Couldn't use that folder: {exc}")
         with connect() as conn:
             db.set_car_folder(conn, car_id, chosen["id"], chosen["path"])
@@ -754,6 +781,7 @@ def create_app(connect=None, onedrive_transport=None):
                 with connect() as conn:
                     db.save_settings(conn, values["expenses_url"], values["grafana_url"],
                                      values["invoice_date_format"], values["invoice_name_format"])
+                log.info("settings saved")
                 return redirect(url_for("settings", msg="settings"), 303)
         else:
             with connect() as conn:

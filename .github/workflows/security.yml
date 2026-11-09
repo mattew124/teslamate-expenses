@@ -1,0 +1,37 @@
+# Vulnerability scans that need no code change to start failing: new CVEs appear against a
+# dependency or the base image, so this also runs weekly, not only on pushes.
+name: Security
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 21 * * 0"   # weekly, Sunday evening UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  TRIVY_IMAGE: ghcr.io/aquasecurity/trivy:0.76.2
+
+jobs:
+  trivy:
+    name: Trivy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Dependencies, secrets and Dockerfile misconfigurations
+        # tests/ holds the browser-test image, which runs as root and is never published.
+        run: >
+          docker run --rm -v "$PWD":/src:ro -w /src "$TRIVY_IMAGE" fs
+          --scanners vuln,secret,misconfig --severity HIGH,CRITICAL --ignore-unfixed
+          --skip-dirs tests --skip-dirs .git --exit-code 1 --quiet .
+      - name: Build the image
+        run: docker build -t teslamate-expenses:scan .
+      - name: Image (OS packages and Python packages)
+        run: >
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$TRIVY_IMAGE" image
+          --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --quiet teslamate-expenses:scan
