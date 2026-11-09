@@ -1,5 +1,5 @@
 # Mount this into Grafana's provisioning folder, together with the volume the app writes its
-# dashboard to (see the README, "Grafana"). Grafana then loads the dashboard by itself, and
+# dashboard to (see Setup in the docs, "Grafana"). Grafana then loads the dashboard by itself, and
 # updates it whenever you upgrade the app.
 apiVersion: 1
 providers:

@@ -1,7 +1,7 @@
 # TeslaMate expenses — runs *beside* the TeslaMate stack, not inside it.
 # It joins TeslaMate's own compose network (external) to reach the `database`
 # service, using the same database user and password as TeslaMate. The app creates
-# its own `expenses` schema when it starts. See README.md.
+# its own `expenses` schema when it starts. See https://mattew124.github.io/teslamate-expenses/setup/
 services:
   expenses:
     build: .
@@ -21,7 +21,7 @@ services:
       APP_TZ: ${APP_TZ:-UTC}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       TZ: ${APP_TZ:-UTC}
-      # The app writes its Grafana dashboard here, for Grafana to provision (see the README).
+      # The app writes its Grafana dashboard here, for Grafana to provision (see Setup in the docs).
       DASHBOARD_DIR: ${DASHBOARD_DIR-/dashboards}
     volumes:
       - dashboards:/dashboards
