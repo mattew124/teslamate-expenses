@@ -5,7 +5,11 @@ steps are in [RELEASING.md](RELEASING.md). Newest first.
 
 Each entry says what an installer must do to upgrade. Where nothing is said, pull the new image.
 
-## Unreleased (candidate `v0.2.0-rc2`, planned as 0.2.0)
+## Unreleased
+
+Nothing yet.
+
+## 0.2.0-rc2 - 2026-11-10
 
 The second candidate for 0.2.0. Once it has been tested on production, the same commit is
 tagged `v0.2.0`, the first stable release. Everything under 0.2.0-rc1 below applies to
