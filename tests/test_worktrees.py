@@ -75,3 +75,38 @@ def test_reserved_or_unusable_worktree_names_are_refused(repo):
 
 def test_instance_can_be_named_explicitly(repo):
     assert info(repo, {"DEV_INSTANCE": "demo"})["base_path"] == "/expenses-dev/demo"
+
+
+def run_destroy(checkout, tmp_path):
+    """Run `dev.sh destroy` with a stand-in docker that logs each call and whether .dev/env existed."""
+    bindir = tmp_path / "bin"
+    bindir.mkdir(exist_ok=True)
+    fake = bindir / "docker"
+    fake.write_text('#!/bin/sh\necho "$* env=$([ -f .dev/env ] && echo yes || echo no)" >> "$FAKE_DOCKER_LOG"\n')
+    fake.chmod(0o755)
+    log = tmp_path / "docker.log"
+    subprocess.run([str(checkout / "scripts" / "dev.sh"), "destroy"], cwd=checkout, check=True, capture_output=True,
+                   env={"PATH": f"{bindir}:/usr/bin:/bin", "HOME": str(checkout), "FAKE_DOCKER_LOG": str(log)})
+    return log.read_text().splitlines()
+
+
+def test_destroy_removes_the_stacks_folder_and_nothing_else(repo, tmp_path):
+    wt = worktree(repo, "x")
+    (wt / ".dev" / "screenshots").mkdir(parents=True)
+    (wt / ".dev" / "screenshots" / "page.png").write_text("png")
+    (repo / ".dev").mkdir()
+    (repo / ".dev" / "env").write_text("the main checkout's own stack")
+    calls = run_destroy(wt, tmp_path)
+    assert not (wt / ".dev").exists()
+    assert (wt / "scripts" / "dev.sh").exists() and (wt / ".git").exists()
+    assert (repo / ".dev" / "env").read_text() == "the main checkout's own stack"
+    # The stack comes down first: compose needs the passwords in .dev/env that are then deleted.
+    (down,) = [c for c in calls if " down " in f" {c} "]
+    assert "-v" in down and down.endswith("env=yes")
+
+
+def test_destroy_works_when_the_stack_was_never_started(repo, tmp_path):
+    wt = worktree(repo, "x")
+    assert not (wt / ".dev").exists()
+    run_destroy(wt, tmp_path)
+    assert not (wt / ".dev").exists()
