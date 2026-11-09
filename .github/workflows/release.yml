@@ -28,7 +28,7 @@ jobs:
       # Nothing is pushed until the image passes this scan: a high or critical vulnerability that
       # has a fix stops the release. The multi-arch build below reuses these layers from the cache.
       - name: Build for scanning
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           platforms: linux/amd64
@@ -55,7 +55,7 @@ jobs:
             type=semver,pattern={{version}}
             type=raw,value=rc,enable=${{ contains(github.ref_name, '-rc') }}
       - id: build
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           platforms: linux/amd64,linux/arm64
