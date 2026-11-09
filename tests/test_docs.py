@@ -1,0 +1,45 @@
+"""The documentation site: every page reachable, and no real data in a public repo."""
+import re
+import tomllib
+
+from tests.test_dev_stack import ROOT
+
+DOCS = ROOT / "docs"
+SITE = "https://mattew124.github.io/teslamate-expenses/"
+IMAGE_TYPES = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+
+
+def nav_pages():
+    with (ROOT / "zensical.toml").open("rb") as f:
+        nav = tomllib.load(f)["project"]["nav"]
+    return {page for entry in nav for page in entry.values()}
+
+
+def test_every_page_is_in_the_navigation():
+    assert {p.relative_to(DOCS).as_posix() for p in DOCS.rglob("*.md")} == nav_pages()
+
+
+def test_docs_have_no_screenshots_until_there_is_demo_data():
+    """The dev stack copies real cars and charging costs, so its screenshots can't be published.
+
+    Pages mark where a screenshot belongs instead. Remove this test when a demo-data seed exists.
+    """
+    assert [p for p in DOCS.rglob("*") if p.suffix.lower() in IMAGE_TYPES] == []
+
+
+def test_a_marker_names_and_describes_its_screenshot():
+    markers = [line for page in DOCS.rglob("*.md") for line in page.read_text().splitlines()
+               if line.startswith("<!-- screenshot:")]
+    assert markers
+    for line in markers:
+        assert re.fullmatch(r"<!-- screenshot: [a-z0-9-]+ - .+ -->", line), line
+
+
+def test_the_readme_links_to_the_site():
+    assert SITE in (ROOT / "README.md").read_text()
+
+
+def test_the_app_points_at_the_site_not_the_readme():
+    for name in ("tmexpenses/onedrive.py", "tmexpenses/templates/onedrive.html"):
+        text = (ROOT / name).read_text()
+        assert f"{SITE}onedrive/" in text and "README" not in text, name

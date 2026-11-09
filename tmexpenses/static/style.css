@@ -12,6 +12,9 @@ nav { display: flex; flex-wrap: wrap; gap: .4rem 1rem; align-items: center; }
 nav a { white-space: nowrap; }
 main { max-width: 60rem; margin: 0 auto; padding: 1rem; }
 a { color: var(--accent); }
+footer { max-width: 60rem; margin: 1rem auto 0; padding: 1rem; border-top: 1px solid var(--line);
+  display: flex; flex-wrap: wrap; gap: .3rem 1.2rem; font-size: .9rem; opacity: .85; }
+footer a.update { font-weight: 600; }
 .button, button { font: inherit; background: var(--accent); color: #fff; border: 0;
   border-radius: .4rem; padding: .5rem .9rem; cursor: pointer; text-decoration: none; }
 button.danger { background: #b3261e; margin-top: 1.5rem; }

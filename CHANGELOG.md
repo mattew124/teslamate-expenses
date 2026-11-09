@@ -15,6 +15,17 @@ The second candidate for 0.2.0. Once it has been tested on production, the same 
 tagged `v0.2.0`, the first stable release. Everything under 0.2.0-rc1 below applies to
 anyone upgrading to it, including its action-needed items.
 
+### Added
+
+- A documentation site (built from `docs/`, published to GitHub Pages) covering setup, OneDrive,
+  importing, the dashboard and reference. The README is now a short overview that links to it.
+- Every page's footer shows the installed version and links to the documentation. A released
+  image also asks `api.github.com`, in the background and at most every six hours, whether a
+  newer release exists, and links to its release notes. Local builds never ask. Set
+  `UPDATE_CHECK=0` to switch the check off.
+- The release workflow creates a GitHub Release for each tag, with notes generated from the
+  merged pull requests. Candidates are marked pre-releases.
+
 ### Changed
 
 - Settings: the invoice date format and file name fields now hold their defaults as real,
@@ -34,8 +45,9 @@ anyone upgrading to it, including its action-needed items.
 
 ### Upgrading
 
-No schema change and no new environment variables since 0.2.0-rc1. Anyone coming from
-earlier than that should read the action-needed items under 0.2.0-rc1.
+No schema change since 0.2.0-rc1. One new optional variable, `UPDATE_CHECK` (default on; `0`
+switches off the release check, the only time the app contacts GitHub). Anyone coming from
+earlier than rc1 should read its action-needed items below.
 
 ## 0.2.0-rc1 - 2026-11-09
 

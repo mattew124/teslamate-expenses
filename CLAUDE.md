@@ -2,7 +2,7 @@
 
 Expense tracking and total cost of ownership for TeslaMate: a Flask UI
 (`tmexpenses/`), an `expenses` schema in the TeslaMate database (`db/`), and a
-Grafana dashboard (`grafana/`). See README.md.
+Grafana dashboard (`grafana/`). See README.md and `docs/`, the documentation site.
 
 ## Rules
 
@@ -25,6 +25,10 @@ Grafana dashboard (`grafana/`). See README.md.
   `# noqa: B023 - why`; in a Dockerfile, `# hadolint ignore=DL3008` directly above the instruction with
   the reason on the comment line before it. Don't add project-wide ignores for this: they'd also hide
   future findings.
+- Docs change with the code: a pull request that changes what a user or installer sees updates `docs/`.
+  A new or visibly changed screen also gets a screenshot marker in the page it belongs on (see
+  "Documentation and screenshots" in `docs/development.md`). Never publish a screenshot from the dev
+  stack: it holds real cars and charging costs. The docs site is public too.
 
 ## Commands
 
@@ -32,6 +36,7 @@ Grafana dashboard (`grafana/`). See README.md.
 .venv/bin/python -m pytest -q    # needs docker; starts a throwaway Postgres
 scripts/dev.sh up                # dev stack; `refresh`, `reset`, `down`, `logs`
 scripts/dev.sh test-browser      # Playwright, real Chromium; screenshots in .dev/screenshots
+.venv/bin/zensical serve         # docs preview; needs requirements-docs.txt
 ```
 
 First-time setup: `python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt`.

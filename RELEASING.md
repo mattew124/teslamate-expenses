@@ -54,9 +54,19 @@ A floating tag only changes what a pull fetches. Whether the running container u
 to the installation's own update process. A release that adds tables or columns needs
 `scripts/provision-db.sh` re-run first on installations using the restricted role.
 
+## Release notes
+
+The same workflow ends by creating a GitHub Release for the tag, with notes generated from the merged
+pull requests since the previous tag. A tag with a hyphen (`-rc1`) is marked a pre-release and never
+becomes "latest". These are the notes the app's footer links to, and the releases it compares with to
+say whether an installation is up to date. Write a clear pull request title: it is the line in the notes.
+Edit the release on GitHub afterwards if it needs more, such as an upgrade step: paste in the
+tag's entry from `CHANGELOG.md`, which is where action-needed items are written first.
+
 ## How the image is built
 
 No Makefile. The `Dockerfile` in the repository root is the whole recipe, and
 `.github/workflows/release.yml` runs on any `v*` tag: tests first (`ci.yml`), then
 `docker/build-push-action` pushes to ghcr.io using the workflow's own `GITHUB_TOKEN`
-(no stored secrets). Pushes to `main` and pull requests run only the tests.
+(no stored secrets), and passes the tag as the `VERSION` build argument, which the image keeps in
+`APP_VERSION` (shown in the app's footer). Pushes to `main` and pull requests run only the tests.

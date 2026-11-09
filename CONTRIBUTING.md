@@ -39,7 +39,10 @@ elevation when it copies positions. Don't copy more than that.
    `# nosec B603 - why`. Don't add project-wide ignores.
 6. Add a line under **Unreleased** in [CHANGELOG.md](CHANGELOG.md), and say if installers
    must do anything to upgrade.
-7. Australian English in docs and UI.
+7. Update the pages in `docs/` that your change affects. A new or changed screen needs a
+   screenshot marker (see "Documentation and screenshots" in `docs/development.md`), and no
+   screenshot or example may show real data.
+8. Australian English in docs and UI.
 
 ## Things not to edit by hand
 

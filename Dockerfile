@@ -31,6 +31,11 @@ COPY grafana/cost-of-ownership.json ./grafana/cost-of-ownership.json
 # (sticky) so a new named volume mounted here is writable by whatever uid compose runs us as.
 RUN mkdir /dashboards && chmod 1777 /dashboards
 
+# The release workflow passes the tag, so the app can show its version and look for a newer release.
+# Last, so a new tag only rebuilds from here. A local build has no version and says so.
+ARG VERSION=dev
+ENV APP_VERSION=$VERSION
+
 # Non-root, and it writes nothing, so any other uid works too (`user:` in compose).
 RUN useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin expenses
 USER 10001:10001

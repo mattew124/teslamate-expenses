@@ -78,7 +78,7 @@ def token_box(key):
     except (ValueError, TypeError, AttributeError):
         raise ValueError(
             "EXPENSES_ENCRYPTION_KEY must be 32 random bytes, url-safe base64 encoded "
-            "(see README.md, OneDrive)") from None
+            "(see https://mattew124.github.io/teslamate-expenses/onedrive/)") from None
 
 
 def graph_error(status, body):

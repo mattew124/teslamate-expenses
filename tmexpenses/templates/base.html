@@ -25,5 +25,18 @@
     {% if message %}<p class="notice">{{ message }}</p>{% endif %}
     {% block content %}{% endblock %}
   </main>
+  <footer>
+    <a href="{{ docs_url }}" target="_blank" rel="noopener noreferrer">Documentation ↗</a>
+    {% if about.state == "dev" %}
+    <span>Development build</span>
+    {% else %}
+    <span>Version {{ about.installed }}</span>
+    {% endif %}
+    {% if about.state == "update" %}
+    <a class="update" href="{{ about.notes_url }}" target="_blank" rel="noopener noreferrer">{{ about.latest }} is available · release notes ↗</a>
+    {% elif about.state == "current" %}
+    <span>Up to date · <a href="{{ about.notes_url }}" target="_blank" rel="noopener noreferrer">release notes ↗</a></span>
+    {% endif %}
+  </footer>
 </body>
 </html>

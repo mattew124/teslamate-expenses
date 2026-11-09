@@ -54,6 +54,11 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=raw,value=rc,enable=${{ contains(github.ref_name, '-rc') }}
+      # The tag without its leading v (v0.3.0 -> 0.3.0), which the app shows and compares with the releases.
+      - id: version
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: echo "version=${REF_NAME#v}" >> "$GITHUB_OUTPUT"
       - id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -61,6 +66,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           cache-from: type=gha
+          build-args: VERSION=${{ steps.version.outputs.version }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
       - name: Digest to test and pin
@@ -71,3 +77,20 @@ jobs:
             echo "ghcr.io/${{ github.repository }}@${{ steps.build.outputs.digest }}"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # The release notes the app links to. A tag with a hyphen (v0.3.0-rc1) is marked a pre-release, which
+  # GitHub keeps out of "latest". Runs only once the image is published.
+  notes:
+    needs: image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          case "$TAG" in *-*) flag=--prerelease ;; *) flag=--latest ;; esac
+          gh release create "$TAG" --verify-tag --generate-notes --title "$TAG" "$flag"
