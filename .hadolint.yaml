@@ -1,0 +1,3 @@
+# Reviewed exceptions for the Dockerfile checks.
+ignored:
+  - DL3008  # apt packages aren't version-pinned: Debian removes superseded versions, which would break later builds
