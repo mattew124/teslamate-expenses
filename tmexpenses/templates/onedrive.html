@@ -99,7 +99,8 @@
     </li>
     {% endfor %}
   </ul>
-  <small>Invoices are named by date, category and vendor, e.g. “2026-11-07 Tyres - Tyre Shop.pdf”.
+  <small>Uploaded invoices are named from the template under <a href="{{ url_for('settings') }}">Settings</a>,
+    e.g. “{{ name_example }}”.
     The folder can be renamed or moved in OneDrive later without breaking uploads.</small>
 </section>
 {% endif %}

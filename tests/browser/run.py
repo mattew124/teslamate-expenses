@@ -303,6 +303,21 @@ def test_onedrive_page(page):
     shot(page, "form-onedrive-phone")
 
 
+def test_settings_file_name_defaults_can_be_edited(page):
+    """The defaults are real text, so typing adds to them instead of wiping a placeholder.
+    Nothing is saved."""
+    page.goto(UI + "settings")
+    field = page.locator("input[name=invoice_name_format]")
+    default = field.input_value()
+    assert default == "%date %category - %vendor", default
+    assert page.locator("input[name=invoice_date_format]").input_value() == "yymmdd"
+    field.click()
+    page.keyboard.press("End")
+    page.keyboard.type(" %car")
+    assert field.input_value() == default + " %car"
+    shot(page, "settings-phone")
+
+
 def test_connect_reaches_microsoft(page):
     """Real Chromium enforces the CSP, so this is where a blocked redirect shows.
     The request to Microsoft is answered locally and never sent. Runs only when
@@ -389,6 +404,7 @@ def main():
         step("the duplicate warning can be dismissed", test_duplicate_warning_can_be_dismissed, page)
         step("a PDF over 500 KB uploads (read-only container)", test_large_pdf_is_accepted, page)
         step("OneDrive page and upload field", test_onedrive_page, page)
+        step("file name settings start from the real defaults", test_settings_file_name_defaults_can_be_edited, page)
         step("Connect OneDrive goes to Microsoft", test_connect_reaches_microsoft, page)
         step("folder browser (read-only)", test_folder_browser, page)
         step("real upload to the OneDrive test folder", test_real_upload, page)
