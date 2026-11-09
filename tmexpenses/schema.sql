@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS expenses.car_folder (
 -- The OneDrive connection: at most one row. client_id/client_secret are the
 -- installer's own Entra app registration, entered on the OneDrive page.
 -- client_secret, refresh_token and auth_state are encrypted by the app with
--- ONEDRIVE_TOKEN_KEY, so a database dump or backup on its own can't open the
+-- EXPENSES_ENCRYPTION_KEY, so a database dump or backup on its own can't open the
 -- drive. auth_state holds the state and PKCE verifier of a sign-in in progress.
 CREATE TABLE IF NOT EXISTS expenses.onedrive_account (
     id              boolean PRIMARY KEY DEFAULT true CHECK (id),

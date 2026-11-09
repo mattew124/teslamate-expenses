@@ -1,6 +1,7 @@
 """All SQL lives here. One short-lived connection per request — traffic is one
 person entering the odd invoice, a pool would be machinery for nothing."""
 
+import logging
 import os
 import re
 import time
@@ -46,6 +47,7 @@ def default_urls(env=os.environ):
 
 
 SCHEMA_SQL = Path(__file__).with_name("schema.sql")
+log = logging.getLogger(__name__)   # tmexpenses.db: inherits the app's level and handlers
 MIGRATE_LOCK = 7_265_171   # arbitrary; stops two workers starting at once from racing
 
 
@@ -60,7 +62,9 @@ def migrate(wait=60):
             break
         except psycopg.OperationalError:
             if time.monotonic() > deadline:
+                log.error("database still unreachable after %ss; giving up", wait)
                 raise
+            log.debug("database not ready yet, retrying")
             time.sleep(2)
     try:
         with conn:
@@ -69,6 +73,7 @@ def migrate(wait=60):
                 with conn.transaction():
                     fresh = conn.execute("SELECT to_regclass('expenses.setting') IS NULL").fetchone()[0]
                     conn.execute(SCHEMA_SQL.read_text())
+                    log.info("schema %s", "created" if fresh else "checked and up to date")
                     if fresh:   # first start on this database: pre-fill from FQDN_TM
                         expenses_url, grafana_url = default_urls()
                         conn.execute("UPDATE expenses.setting SET expenses_url = %s, grafana_url = %s "
@@ -76,6 +81,7 @@ def migrate(wait=60):
             finally:
                 conn.execute("SELECT pg_advisory_unlock(%s)", (MIGRATE_LOCK,))
     except psycopg.errors.InsufficientPrivilege as exc:
+        log.error("the database user cannot create the 'expenses' schema")
         raise RuntimeError(
             "The database user cannot create the 'expenses' schema. Use TeslaMate's own database "
             "user, or create the schema yourself (scripts/provision-db.sh) and set SKIP_MIGRATE=1. "

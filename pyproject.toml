@@ -1,0 +1,34 @@
+# Tool configuration only: the app isn't a package (it's run from the image's /srv).
+
+[tool.ruff]
+target-version = "py314"
+extend-exclude = [".dev", ".claude"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "UP"]
+ignore = [
+    "E501",   # long lines: the code isn't wrapped to a fixed width
+    "UP017",  # datetime.UTC alias: modernise once the open pull requests have merged
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Test modules import each other's fixtures (client, admin, ...) and use them by name.
+# E401/E702/E731/E741 are style nits in test files the open pull requests are still editing:
+# tidy them (and drop these four) once the queue has merged.
+"tests/*" = ["F401", "F811", "E401", "E702", "E731", "E741"]
+
+[tool.coverage.run]
+source = ["tmexpenses"]
+
+[tool.coverage.report]
+fail_under = 85
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv", ".dev", ".claude"]
+# Each skip was reviewed, not just silenced:
+#   B105  matches the words "client secret" in a form hint, not a credential
+#   B310  urlopen is only given https URLs built from Microsoft constants and quoted ids
+#   B608  SQL is built only from column names fixed in code (_FIELDS, internal keyword names, a
+#         constant WHERE); every value is a bound parameter. CodeQL's py/sql-injection checks the
+#         data flow for real injection paths.
+skips = ["B105", "B310", "B608"]
