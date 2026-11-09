@@ -10,7 +10,7 @@ import logging
 import os
 import re
 import shutil
-import subprocess
+import subprocess  # nosec B404 - runs poppler and tesseract, list arguments only
 import tempfile
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
@@ -59,7 +59,7 @@ def extract_text(pdf):
     the caller then just has less to propose, never an error (the log says why)."""
     timer = Timer()
     # The container's root is read-only; /dev/shm is its one writable (in-memory) place.
-    scratch = "/dev/shm" if os.access("/dev/shm", os.W_OK) else None
+    scratch = "/dev/shm" if os.access("/dev/shm", os.W_OK) else None  # nosec B108 - private TemporaryDirectory in the only writable place
     method, ocr_pages = "text", 0
     with tempfile.TemporaryDirectory(prefix="tmexp-", dir=scratch) as tmp:
         path = Path(tmp) / "in.pdf"
@@ -83,7 +83,7 @@ def extract_text(pdf):
 
 def _run(cmd, timeout):
     try:
-        done = subprocess.run(cmd, capture_output=True, timeout=timeout, check=False)
+        done = subprocess.run(cmd, capture_output=True, timeout=timeout, check=False)  # nosec B603 - fixed tool names, our own temp path, no shell
     except FileNotFoundError:
         log.warning("extract: %s isn't installed", cmd[0])
         return ""
@@ -179,7 +179,7 @@ def _table_totals(text):
         for below in rows[i + 1:i + 3]:
             money = [c for c in below if MONEY.fullmatch(c)]
             if len(money) == len(headers):
-                for head, figure in zip(headers, money):
+                for head, figure in zip(headers, money, strict=True):
                     if head.lower().startswith("total"):
                         found.append(Decimal(MONEY.fullmatch(figure).group(1).replace(",", "")))
                 break
@@ -217,7 +217,7 @@ def _amount(text, multi="max"):
             except InvalidOperation:
                 pass
         columns = [c.strip() for c in re.split(r"\s{2,}", line.strip())]
-        for label, figure in zip(columns, columns[1:]):
+        for label, figure in zip(columns, columns[1:], strict=False):
             m = MONEY.fullmatch(figure)
             if m and PAID_LABEL.fullmatch(label):
                 totals.append(Decimal(m.group(1).replace(",", "")))
