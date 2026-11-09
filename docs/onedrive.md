@@ -23,6 +23,13 @@ For example `%date - %category - %vendor` gives `261107 - Tyres - Tyre Shop.pdf`
 (no vendor gives `261107 - Tyres.pdf`). It applies to new uploads and to renames on import; files
 already in OneDrive keep their names.
 
+If the invoice is already in OneDrive, press **Choose it from OneDrive** under the PDF field instead. A
+window opens over the form, in the car's folder: open a folder to go into it, or **Up** to go above it, all
+the way to the top of your drive. Choosing a PDF makes its link the invoice link and fills in the form from
+what can be read in it, as a chosen file does. Nothing is copied or moved.
+
+<!-- screenshot: form-onedrive-picker - The OneDrive window on the Add expense form, listing folders and PDFs -->
+
 The subfolder is set per category on the **Categories** page. The standard categories start
 mapped (Tyres, filters, alignment and rotation to `Maintenance`; Insurance and Registration to
 folders of the same name); a blank box means a folder named after the category.

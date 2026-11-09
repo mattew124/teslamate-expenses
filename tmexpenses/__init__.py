@@ -909,14 +909,51 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None):
                                multi_choices=validation.MULTI_AMOUNT_CHOICES, example=name_example(values),
                                message=MESSAGES.get(request.args.get("msg", ""))), (400 if errors else 200)
 
+    @app.get("/api/onedrive/browse/<int:car_id>")
+    def api_onedrive_browse(car_id):
+        """One folder for the Add form's file picker. Starts in the car's folder; ?folder=<id> goes
+        elsewhere (up included) and ?folder=root is the top of the drive."""
+        need_drive()
+        car_or_404(car_id)
+        wanted = request.args.get("folder")
+        with connect() as conn:
+            car_folder = db.car_folders(conn).get(car_id)
+            connected = (db.onedrive_account(conn) or {}).get("refresh_token")
+        if not connected:
+            return jsonify(error=str(onedrive.NotConnected()), url=url_for("onedrive_page")), 409
+        if not wanted and not car_folder:
+            return jsonify(error="Choose a OneDrive folder for this car on the OneDrive page first.",
+                           url=url_for("onedrive_page")), 409
+        folder_id = None if wanted == "root" else (wanted or car_folder["folder_id"])
+        try:
+            token = access_token()
+            here = drive.folder(token, folder_id)
+            folders, files = drive.contents(token, folder_id)
+        except onedrive.SignInExpired as exc:
+            return jsonify(error=str(exc), url=url_for("onedrive_page")), 409
+        except onedrive.OneDriveError as exc:
+            log.warning("OneDrive file picker failed: %s", exc)
+            return jsonify(error=str(exc)), 502
+        return jsonify(id=here["id"], path=here["path"], parent_id=here["parent_id"], is_root=here["is_root"],
+                       folders=folders, files=files)
+
     @app.post("/api/prefill")
     def api_prefill():
-        """Read a chosen invoice PDF and propose the form's fields, for the Add page."""
+        """Read an invoice PDF and propose the form's fields, for the Add page: the one just chosen
+        on the computer, or (onedrive_id and name) one already in OneDrive."""
         timer = docinfo.Timer()
         upload = request.files.get("invoice_file")
         filename = upload and upload.filename
+        data = upload.read() if upload else b""
+        if not upload and request.form.get("onedrive_id") and drive is not None:
+            filename = request.form.get("name", "")
+            try:
+                data = drive.download(access_token(), request.form["onedrive_id"])
+            except onedrive.OneDriveError as exc:
+                log.warning("prefill from OneDrive failed: %s", exc)
+                return jsonify(error=str(exc)), 502
         try:
-            pdf = validation.parse_invoice_pdf(filename, upload.read() if upload else b"")
+            pdf = validation.parse_invoice_pdf(filename, data)
         except ValueError as exc:
             log.debug("prefill file=%s refused: %s", docinfo.quote(filename), exc)
             return jsonify(error=str(exc)), 400
@@ -927,7 +964,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None):
             categories = db.categories(conn)
             learned = db.learned(conn, invoices.LEARN_AFTER)
             multi_amount = db.get_settings(conn)["multi_amount"]
-        guess = invoices.propose("", upload.filename, invoices.extract_text(pdf), [c["name"] for c in categories], learned,
+        guess = invoices.propose("", filename, invoices.extract_text(pdf), [c["name"] for c in categories], learned,
                                  multi_amount)
         have, missing = docinfo.found(guess)
         log.debug("prefill file=%s bytes=%d sha256=%s found=%s missing=%s ms=%d", docinfo.quote(filename), len(pdf),

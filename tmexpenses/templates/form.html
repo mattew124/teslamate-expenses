@@ -20,6 +20,7 @@
 </div>
 {% endif %}
 <form method="post" class="stack" id="expense-form" enctype="multipart/form-data"
+      {% if onedrive_connected %}data-onedrive-browse-url="{{ url_for('api_onedrive_browse', car_id=0) }}"{% endif %}
       data-odometer-url="{{ url_for('api_odometer') }}" {% if not expense_id %}data-prefill-url="{{ url_for('api_prefill') }}" data-duplicates-url="{{ url_for('api_duplicates') }}"{% endif %}>
   <input type="hidden" name="confirm_duplicate" value="{{ '1' if duplicates }}">
   <label>Car
@@ -35,6 +36,8 @@
     {% if not expense_id %}<small id="prefill-hint">Choose the PDF next: the fields below are filled in from what can be read in it. Check them before saving.</small>{% endif %}
     {% if onedrive_connected %}
     <small>It's uploaded to the car's OneDrive folder when you save, and the invoice link is filled in for you.{% if values.invoice_url %} Replaces the current link; the old file stays in OneDrive.{% endif %}</small>
+    <small>Already in OneDrive? <button type="button" id="onedrive-pick" class="linklike">Choose it from OneDrive</button>
+      <span id="onedrive-pick-hint"></span></small>
     {% else %}
     <small><a href="{{ url_for('onedrive_page') }}">Connect OneDrive</a> to upload invoices from here.</small>
     {% endif %}
@@ -83,5 +86,14 @@
 <form method="post" action="{{ url_for('delete', expense_id=expense_id) }}" data-confirm="Delete this expense?">
   <button type="submit" class="danger">Delete expense</button>
 </form>
+{% endif %}
+{% if onedrive_connected %}
+<dialog id="onedrive-picker" aria-labelledby="onedrive-picker-title" class="picker">
+  <h2 id="onedrive-picker-title">Choose an invoice from OneDrive</h2>
+  <p class="here"><code id="onedrive-picker-path"></code></p>
+  <p id="onedrive-picker-status" role="status"></p>
+  <ul class="plain folder-list" id="onedrive-picker-list"></ul>
+  <div class="row"><button type="button" id="onedrive-picker-close" class="secondary">Cancel</button></div>
+</dialog>
 {% endif %}
 {% endblock %}

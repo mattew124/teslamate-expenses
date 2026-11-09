@@ -161,6 +161,38 @@ def test_real_upload(page):
     remove_marked(page)
 
 
+def test_onedrive_picker(page):
+    """The Add form's file picker (read-only): opens in the car's folder, goes up and back down,
+    and choosing a PDF links it. Needs a connected drive whose car folder holds a PDF."""
+    page.goto(UI + "onedrive")
+    if not page.locator("button:has-text('Disconnect')").count():
+        raise Skip("dev stack isn't connected to OneDrive (scripts/dev.sh onedrive-link)")
+    page.goto(UI + "new")
+    if not page.locator("select[name=car_id]").input_value():
+        page.select_option("select[name=car_id]", index=1)
+    page.click("#onedrive-pick")
+    dialog = page.locator("#onedrive-picker")
+    expect(dialog).to_be_visible()
+    start = dialog.locator("#onedrive-picker-path")
+    expect(start).not_to_have_text("")
+    if "Choose a OneDrive folder" in dialog.locator("#onedrive-picker-status").inner_text():
+        raise Skip("this car has no OneDrive folder")
+    here = start.inner_text()
+    dialog.get_by_text("⬑ Up").click()
+    expect(start).not_to_have_text(here)
+    shot(page, "form-onedrive-picker")
+    expect(dialog.locator("#onedrive-picker-list li button", has_text="📁").first).to_be_visible()
+    dialog.get_by_text("Cancel").click()
+    expect(dialog).not_to_be_visible()
+    page.click("#onedrive-pick")
+    expect(start).to_have_text(here)         # reopening starts at the car's folder again
+    pdf = dialog.locator("#onedrive-picker-list li button", has_text="📄")
+    if not pdf.count():
+        raise Skip("no PDF in the car's folder to choose")
+    pdf.first.click()
+    expect(page.locator("input[name=invoice_url]")).to_have_value(re.compile(r"^https://"))
+
+
 def remove_marked(page):
     page.goto(UI)
     while page.locator(f"tr:has-text('{MARKER}') a:has-text('Edit')").count():
@@ -419,6 +451,7 @@ def main():
         step("Connect OneDrive goes to Microsoft", test_connect_reaches_microsoft, page)
         step("folder browser (read-only)", test_folder_browser, page)
         step("real upload to the OneDrive test folder", test_real_upload, page)
+        step("OneDrive file picker on the Add form", test_onedrive_picker, page)
         step("import page shows progress", test_import_page_shows_progress, page)
         # Expected 400s from the deliberate bad submissions above aren't script errors.
         real = [t for t in problems if "400" not in t]

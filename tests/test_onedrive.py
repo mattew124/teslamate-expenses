@@ -29,6 +29,7 @@ CLIENT_ID = "11111111-2222-3333-4444-555555555555"
 SECRET = "s3cret~value"
 WEB_URL = "https://onedrive.live.com/?id=FILE1"
 CALLBACK = "http://localhost/onedrive/callback"
+FILE_DOWNLOAD = "https://cdn.example.com/F1"
 
 # A small drive: root -> Cars -> Test car -> Invoices
 FOLDERS = {
@@ -81,15 +82,20 @@ class FakeMicrosoft:
             self.refresh_count += 1
             n = self.refresh_count + 1
             return 200, {"access_token": f"AT-{n}", "refresh_token": f"RT-{n}"}
+        if url == FILE_DOWNLOAD:                      # the CDN address: no bearer token goes with it
+            return 200, PDF
         assert headers["Authorization"].startswith("Bearer AT-")
         if method == "GET" and path.endswith("/me/drive"):
             return 200, {"owner": {"user": {"displayName": "Test Owner"}}}
         if method == "GET" and path.endswith("/children"):
             parent = "ROOT" if path.endswith("/me/drive/root/children") else path.split("/items/")[1].split("/")[0]
-            files = [{"id": "F1", "name": "receipt.pdf", "file": {}}]
+            files = [{"id": "F1", "name": "receipt.pdf", "file": {}, "size": 10, "webUrl": "https://onedrive.live.com/?id=F1"},
+                     {"id": "F2", "name": "notes.txt", "file": {}, "size": 1, "webUrl": "https://onedrive.live.com/?id=F2"}]
             return 200, {"value": [item(k) for k in CHILDREN[parent]] + files}
         if method == "GET" and path.endswith("/me/drive/root"):
             return 200, item("ROOT")
+        if method == "GET" and path.endswith("/me/drive/items/F1"):
+            return 200, {"id": "F1", "size": len(PDF), "@microsoft.graph.downloadUrl": FILE_DOWNLOAD}
         if method == "GET" and "/me/drive/items/" in path:
             key = path.rsplit("/", 1)[1]
             return (200, item(key)) if key in FOLDERS else (404, {"error": {"code": "itemNotFound"}})
@@ -666,3 +672,61 @@ def test_a_refusal_is_not_retried(monkeypatch):
         drive.subfolders("AT-1", "X")
     assert len(asked) == 1
 
+
+
+# ---- choosing a file already in OneDrive, from the Add form --------------------------------
+
+def pick(client, query=""):
+    return client.get("/api/onedrive/browse/1" + query)
+
+
+def test_the_picker_starts_in_the_cars_folder_and_lists_pdfs_only(client, ms):
+    sign_in(client, ms)
+    choose_folder(client, "TESTCAR")
+    data = pick(client).get_json()
+    assert data["path"] == "/Cars/Test car" and data["is_root"] is False
+    assert data["parent_id"] == "CARS"
+    assert [f["name"] for f in data["folders"]] == ["Invoices"]
+    assert data["files"] == [{"id": "F1", "name": "receipt.pdf", "size": 10, "web_url": "https://onedrive.live.com/?id=F1"}]
+
+
+def test_the_picker_can_go_up_to_the_top_of_the_drive(client, ms):
+    sign_in(client, ms)
+    choose_folder(client, "TESTCAR")
+    up = pick(client, "?folder=CARS").get_json()
+    assert up["path"] == "/Cars" and up["parent_id"] == "ROOT"
+    top = pick(client, "?folder=root").get_json()
+    assert top["is_root"] is True and top["parent_id"] is None and top["path"] == "/"
+    assert [f["name"] for f in top["folders"]] == ["Cars"]
+
+
+def test_the_picker_needs_a_folder_for_the_car_a_sign_in_and_a_real_car(client, ms):
+    save_credentials(client)
+    assert pick(client).status_code == 409                       # not signed in
+    sign_in(client, ms)
+    resp = pick(client)
+    assert resp.status_code == 409 and "folder" in resp.get_json()["error"]
+    assert client.get("/api/onedrive/browse/99").status_code == 404
+
+
+def test_the_picker_is_absent_without_onedrive(app_for, ms):
+    assert app_for(ms, key=None).get("/api/onedrive/browse/1").status_code == 404
+
+
+def test_reading_a_chosen_onedrive_file_fills_the_form_like_an_upload(client, ms):
+    sign_in(client, ms)
+    resp = client.post("/api/prefill", headers=ORIGIN, data={"onedrive_id": "F1", "name": "receipt.pdf"})
+    assert resp.status_code == 200 and set(resp.get_json()) >= {"date", "amount", "vendor", "category_id"}
+
+
+def test_a_onedrive_file_that_cant_be_fetched_is_explained(client, ms):
+    sign_in(client, ms)
+    resp = client.post("/api/prefill", headers=ORIGIN, data={"onedrive_id": "GONE", "name": "a.pdf"})
+    assert resp.status_code == 502 and "OneDrive said no" in resp.get_json()["error"]
+
+
+def test_the_add_form_offers_the_picker_only_when_connected(client, ms):
+    assert b"data-onedrive-browse-url" not in client.get("/new").data
+    sign_in(client, ms)
+    page = client.get("/new").data.decode()
+    assert "data-onedrive-browse-url" in page and 'id="onedrive-picker"' in page

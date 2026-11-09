@@ -190,8 +190,9 @@ class OneDrive:
         item = self._get(access_token, url)
         if "folder" not in item:
             raise OneDriveError("That isn't a folder.")
+        parent_id = (item.get("parentReference") or {}).get("id")
         return {"id": item["id"], "name": item["name"], "path": display_path(item),
-                "parent_id": (item.get("parentReference") or {}).get("id")}
+                "parent_id": parent_id, "is_root": "root" in item or parent_id is None}
 
     def subfolders(self, access_token, folder_id=None):
         """Folders directly inside a folder, by name: [{id, name}]."""
@@ -205,6 +206,25 @@ class OneDrive:
             if not url or not url.startswith(GRAPH + "/"):
                 break
         return sorted(found, key=lambda f: f["name"].lower())
+
+    def contents(self, access_token, folder_id=None):
+        """What a file picker shows for one folder: its folders and its PDFs, by name.
+        -> ([{id, name}], [{id, name, size, web_url}])"""
+        base = f"{GRAPH}/me/drive/items/{quote(folder_id, safe='')}" if folder_id else f"{GRAPH}/me/drive/root"
+        url = f"{base}/children?$top=200&$select=id,name,size,folder,file,webUrl"
+        folders, files = [], []
+        for _ in range(MAX_PAGES):
+            body = self._get(access_token, url)
+            for c in body.get("value", []):
+                if "folder" in c:
+                    folders.append({"id": c["id"], "name": c["name"]})
+                elif "file" in c and c["name"].lower().endswith(".pdf") and str(c.get("webUrl", "")).startswith("https://"):
+                    files.append({"id": c["id"], "name": c["name"], "size": c.get("size", 0), "web_url": c["webUrl"]})
+            url = body.get("@odata.nextLink")
+            if not url or not url.startswith(GRAPH + "/"):
+                break
+        by_name = lambda x: x["name"].lower()   # noqa: E731
+        return sorted(folders, key=by_name), sorted(files, key=by_name)
 
     def create_folder(self, access_token, parent_id, name):
         """New folder inside parent_id (the drive root when None). Fails rather

@@ -93,3 +93,10 @@ dl.aliases dd { margin: 0; }
 .import-table label.inline { display: flex; align-items: flex-start; gap: .4rem; margin-top: .25rem; }
 .import-table label.inline small { display: inline; }
 .import-table label.inline input[type=checkbox] { flex: none; width: auto; padding: 0; margin: .15rem 0 0; }
+
+/* The OneDrive file picker on the Add form: a window over the page, so there's nothing to come back from. */
+dialog.picker { width: min(32rem, calc(100vw - 2rem)); max-height: 80vh; overflow: auto;
+  border: 1px solid var(--line); border-radius: .5rem; background: Canvas; color: inherit; padding: 1rem; }
+dialog.picker::backdrop { background: rgb(0 0 0 / .5); }
+dialog.picker h2 { margin-top: 0; }
+dialog.picker li button { text-align: left; overflow-wrap: anywhere; }
