@@ -134,9 +134,9 @@ def app_for(pg, admin, monkeypatch):
 
     def make(transport, key=KEY):
         if key is None:
-            monkeypatch.delenv("ONEDRIVE_TOKEN_KEY", raising=False)
+            monkeypatch.delenv("EXPENSES_ENCRYPTION_KEY", raising=False)
         else:
-            monkeypatch.setenv("ONEDRIVE_TOKEN_KEY", key)
+            monkeypatch.setenv("EXPENSES_ENCRYPTION_KEY", key)
         app = create_app(connect=lambda: psycopg.connect(pg.app_url, row_factory=dict_row),
                          onedrive_transport=transport)
         app.testing = True
@@ -195,7 +195,7 @@ def test_hidden_without_token_key(app_for, ms, admin):
     assert b'name="invoice_file"' not in c.get("/new").data
     assert b"/onedrive" not in c.get("/").data
     page = c.get("/onedrive").data.decode()
-    assert "ONEDRIVE_TOKEN_KEY" in page and "Connect OneDrive" not in page
+    assert "EXPENSES_ENCRYPTION_KEY" in page and "Connect OneDrive" not in page
     assert save_credentials(c).status_code == 404
     assert c.post("/onedrive/connect", headers=ORIGIN).status_code == 404
     assert c.post("/new", data=with_pdf(form(admin)), headers=ORIGIN).status_code == 303
@@ -203,7 +203,7 @@ def test_hidden_without_token_key(app_for, ms, admin):
 
 
 def test_bad_token_key_refuses_to_start(app_for, ms):
-    with pytest.raises(ValueError, match="ONEDRIVE_TOKEN_KEY"):
+    with pytest.raises(ValueError, match="EXPENSES_ENCRYPTION_KEY"):
         app_for(ms, key="not-a-fernet-key")
 
 
@@ -435,6 +435,33 @@ def test_upload_failure_saves_nothing(client, ms, admin):
     resp = client.post("/new", data=with_pdf(form(admin)), headers=ORIGIN)
     assert resp.status_code == 400 and b"OneDrive" in resp.data and b"Nope" in resp.data
     assert rows(admin) == []
+
+
+def test_onedrive_events_are_logged_without_secrets(client, ms, admin, caplog):
+    import logging
+    caplog.set_level(logging.DEBUG, logger="tmexpenses")
+    sign_in(client, ms)
+    choose_folder(client)
+    client.post("/new", data=with_pdf(form(admin, invoice_url="")), headers=ORIGIN)
+    text = "\n".join(caplog.messages)
+    assert "OneDrive connected" in text and "invoice uploaded" in text
+    for secret in (SECRET, "AUTH-CODE", "AT-", "RT-", "Tyre Shop"):
+        assert secret not in text, secret
+    ms.upload_status = 403
+    client.post("/new", data=with_pdf(form(admin)), headers=ORIGIN)
+    assert any(r.levelno == logging.WARNING and "upload" in r.getMessage() for r in caplog.records)
+    client.post("/onedrive/disconnect", headers=ORIGIN)
+    assert "OneDrive disconnected" in "\n".join(caplog.messages)
+
+
+def test_old_variable_name_is_explained(monkeypatch, caplog):
+    import logging
+    monkeypatch.delenv("EXPENSES_ENCRYPTION_KEY", raising=False)
+    monkeypatch.setenv("ONEDRIVE_TOKEN_KEY", Fernet.generate_key().decode())
+    caplog.set_level(logging.WARNING, logger="tmexpenses")
+    from tmexpenses import create_app
+    create_app(connect=lambda: None)
+    assert any("ONEDRIVE_TOKEN_KEY" in m and "EXPENSES_ENCRYPTION_KEY" in m for m in caplog.messages)
 
 
 def test_expired_sign_in_is_explained(client, ms, admin):
