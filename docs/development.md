@@ -25,7 +25,7 @@ scripts/dev.sh setup          # in a new worktree: create .venv
 
 Each git worktree gets its own stack and test database at `/expenses-dev/<worktree>/`, so
 parallel branches never share running code. `scripts/dev.sh info` shows a checkout's path and
-ports, `list` shows every running dev stack, and `destroy` removes one. `.worktreeinclude`
+ports, `list` shows every running dev stack, and `destroy` removes one (its containers, test database, image and `.dev` folder). `.worktreeinclude`
 copies your `dev.env` into new Claude Code worktrees.
 
 OneDrive is on in the dev stack with a throwaway token key in `.dev/env`. To sign in there,
