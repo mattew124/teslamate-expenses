@@ -7,7 +7,15 @@ Each entry says what an installer must do to upgrade. Where nothing is said, pul
 
 ## Unreleased
 
-Nothing yet.
+### Changed
+
+- Importing from OneDrive reads every waiting PDF in one go, instead of ten at a time.
+
+### Added
+
+- A **Skip** tick on each import row, for files that never need importing, and a prompt on Import to
+  skip whatever was left unticked. The app creates its new
+  `expenses.import_skip` table itself; with the least-privilege role, re-run `scripts/provision-db.sh`.
 
 ## 0.2.0-rc2 - 2026-11-10
 

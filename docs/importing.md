@@ -2,10 +2,12 @@
 
 Invoices already in a car's OneDrive folder (and its subfolders) can be turned into expenses:
 **OneDrive → Import existing invoices** beside the car. The page opens at once and shows its progress (looking in the folder, then "Reading 3 of 10" with
-the file's name) while it reads up to 10 PDFs at a time that aren't yet linked to an expense, guesses each one's date, category, vendor, amount and odometer, and shows
+the file's name) while it reads every PDF that isn't yet linked to an expense, guesses each one's date, category, vendor, amount and odometer, and shows
 them in a table to check, correct and untick. **Nothing is saved until you press Import**, and a
-file already linked to an expense never appears again, so you can work through a big folder in
-rounds.
+file already linked to an expense never appears again. Tick **Skip** on files that never need
+importing (a brochure, say) and they stop being offered; **Offer them again** at the foot of the page
+brings them back. When you press Import with some files left unticked, the page asks whether to
+skip those too; choose Cancel to leave them for next time.
 
 <!-- screenshot: import-preview - The import table, with its guesses to check, correct and untick -->
 

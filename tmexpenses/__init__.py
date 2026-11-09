@@ -37,8 +37,8 @@ MESSAGES = {
     "learned_deleted": "Removed.",
 }
 
-# PDFs read per page: each is downloaded and text-extracted (OCR for scans) while
-# the request waits, so a big folder is worked through in rounds.
+# PDFs read per page without JavaScript: each is downloaded and text-extracted (OCR for scans) while
+# the request waits, so a big folder is worked through in rounds. The normal page reads them all, one request each.
 IMPORT_BATCH = 10
 # ...and stop reading more files once a round has taken this long (OCR can take 10+ seconds a file,
 # and a request that outlasts gunicorn's 120 s timeout is killed), leaving the rest for the next round.
@@ -599,15 +599,17 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None):
     # ---- import existing invoices from the car's OneDrive folder --------------
 
     def import_row(n, **fields):
-        return {"n": n, "include": False, "date": "", "category_id": "", "vendor": "",
+        return {"n": n, "include": False, "skip": False, "date": "", "category_id": "", "vendor": "",
                 "amount": "", "odometer_km": "", "url": "", "name": "", "folder": "",
                 "note": "", "id": "", "guess": {}, "new_name": "", "rename": False, "odo_note": "", "duplicates": [], **fields}
 
-    def render_import(car, rows, remaining=0, errors=None, status=200, notice=None):
+    def render_import(car, rows, remaining=0, errors=None, status=200, notice=None, skipped=None):
         with connect() as conn:
             categories = db.categories(conn)
+            if skipped is None:
+                skipped = len(db.skipped_import_urls(conn, car["id"]))
         return render_template("import.html", car=car, rows=rows, remaining=remaining,
-                               errors=errors or {}, categories=categories, notice=notice,
+                               errors=errors or {}, categories=categories, notice=notice, skipped=skipped,
                                learn_after=invoices.LEARN_AFTER), status
 
     def import_context(car_id):
@@ -617,12 +619,15 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None):
                     "learned": db.learned(conn, invoices.LEARN_AFTER), "settings": db.get_settings(conn),
                     "connected": bool((db.onedrive_account(conn) or {}).get("refresh_token"))}
 
-    def pending_files(token, ctx):
-        """-> (all PDFs in the folder, those with no expense yet)."""
+    def pending_files(token, ctx, car_id):
+        """-> (all PDFs in the folder, those with no expense yet and not skipped, how many were skipped)."""
         files = drive.pdfs(token, ctx["folder"]["folder_id"])
         with connect() as conn:
             known = db.known_invoice_urls(conn, [f["web_url"] for f in files])
-        return files, [f for f in files if f["web_url"] not in known]
+            skipped = db.skipped_import_urls(conn, car_id)
+        left = [f for f in files if f["web_url"] not in known]
+        pending = [f for f in left if f["web_url"] not in skipped]
+        return files, pending, len(left) - len(pending)
 
     def read_file(token, car, ctx, n, f):
         """Download one PDF and propose its expense: an import row. A file that can't be fetched
@@ -686,11 +691,13 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None):
         if not ctx["folder"] or not ctx["connected"]:
             return redirect(url_for("onedrive_page"), 303)
         if not request.args.get("sync"):
-            return render_template("import.html", car=car, rows=[], remaining=0, errors={}, scanning=True,
+            with connect() as conn:
+                skipped = len(db.skipped_import_urls(conn, car_id))
+            return render_template("import.html", car=car, rows=[], remaining=0, errors={}, scanning=True, skipped=skipped,
                                    categories=ctx["categories"], notice=None, learn_after=invoices.LEARN_AFTER)
         try:
             token = access_token()
-            files, pending = pending_files(token, ctx)
+            files, pending, skipped = pending_files(token, ctx, car_id)
             log.debug("import scan car=%d listed=%d already_imported=%d pending=%d batch=%d", car_id, len(files),
                       len(files) - len(pending), len(pending), min(len(pending), IMPORT_BATCH))
             rows, round_timer = [], docinfo.Timer()
@@ -705,7 +712,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None):
             return render_onedrive(status=400, notice=str(exc))
         except onedrive.OneDriveError as exc:
             return render_onedrive(status=502, notice=str(exc))
-        return render_import(car, rows, remaining=len(pending) - len(rows), status=200,
+        return render_import(car, rows, remaining=len(pending) - len(rows), skipped=skipped, status=200,
                              notice=None if files else "No PDFs found in that folder.")
 
     @app.get("/onedrive/import/<int:car_id>/scan")
@@ -718,7 +725,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None):
             return jsonify(error="Choose a OneDrive folder for this car on the OneDrive page first.",
                            url=url_for("onedrive_page")), 409
         try:
-            files, pending = pending_files(access_token(), ctx)
+            files, pending, skipped = pending_files(access_token(), ctx, car_id)
         except onedrive.NotConnected as exc:
             return jsonify(error=str(exc), url=url_for("onedrive_page")), 409
         except onedrive.SignInExpired as exc:
@@ -726,11 +733,11 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None):
         except onedrive.OneDriveError as exc:
             log.warning("import scan failed: %s", exc)
             return jsonify(error=str(exc)), 502
-        batch = pending[:IMPORT_BATCH]
-        log.debug("import scan car=%d listed=%d already_imported=%d pending=%d batch=%d", car_id, len(files),
-                  len(files) - len(pending), len(pending), len(batch))
-        return jsonify(listed=len(files), already_imported=len(files) - len(pending),
-                       remaining=len(pending) - len(batch), files=[file_entry(f) for f in batch])
+        # Every file, not a batch: the page reads them one request at a time, so none waits on the others.
+        log.debug("import scan car=%d listed=%d already_imported=%d skipped=%d pending=%d", car_id, len(files),
+                  len(files) - len(pending) - skipped, skipped, len(pending))
+        return jsonify(listed=len(files), already_imported=len(files) - len(pending) - skipped, skipped=skipped,
+                       remaining=0, files=[file_entry(f) for f in pending])
 
     @app.post("/onedrive/import/<int:car_id>/read")
     def onedrive_import_read(car_id):
@@ -750,6 +757,15 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None):
         except onedrive.OneDriveError as exc:
             row = import_row(n, name=f["name"], folder=f["folder"], url=f["url"], note=str(exc))
         return render_template("_import_row.html", r=row, n=n, categories=ctx["categories"], errors={})
+
+    @app.post("/onedrive/import/<int:car_id>/unskip")
+    def onedrive_import_unskip(car_id):
+        """Offer the skipped files again."""
+        need_drive()
+        car_or_404(car_id)
+        with connect() as conn:
+            db.clear_skipped_imports(conn, car_id)
+        return redirect(url_for("onedrive_import", car_id=car_id), 303)
 
     def learn_from(imported):
         """Remember what the owner's corrections show: the label printed beside a value they
@@ -798,16 +814,19 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None):
             settings_row = db.get_settings(conn)
         cat_names = {c["id"]: c["name"] for c in cat_rows}
         count = min(request.form.get("count", type=int) or 0, 200)
-        rows, chosen, errors = [], [], {}
+        rows, chosen, errors, skip_urls = [], [], {}, []
         for n in range(count):
             def f(key, n=n):
                 return request.form.get(f"{key}_{n}", "")
 
-            row = import_row(n, include=bool(f("include")), rename=bool(f("rename")), date=f("date"), category_id=f("category_id"),
+            row = import_row(n, include=bool(f("include")), skip=bool(f("skip")), rename=bool(f("rename")), date=f("date"), category_id=f("category_id"),
                              vendor=f("vendor"), amount=f("amount"), odometer_km=f("odometer_km"),
                              url=f("url"), name=f("name"), folder=f("folder"), id=f("id"),
                              guess={k: f(f"guess_{k}") for k in LEARN_FIELDS})
             rows.append(row)
+            if row["skip"] and row["url"]:
+                skip_urls.append(row["url"])
+                continue
             if not row["include"]:
                 continue
             values, row_errors = validation.parse_expense_form({
@@ -820,9 +839,15 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None):
                 errors[n] = " ".join(row_errors.values())
             else:
                 chosen.append((row, values))
-        if errors or not chosen:
-            return render_import(car, rows, errors=errors, status=400,
-                                 notice=None if errors else "Tick at least one invoice to import.")
+        if errors:
+            return render_import(car, rows, errors=errors, status=400)
+        if skip_urls:
+            with connect() as conn:
+                db.skip_imports(conn, car_id, skip_urls)
+        if not chosen:
+            if skip_urls:
+                return redirect(url_for("onedrive_import", car_id=car_id), 303)
+            return render_import(car, rows, status=400, notice="Tick at least one invoice to import.")
         imported, renamed, rename_failed = [], 0, 0
         with connect() as conn:
             known = db.known_invoice_urls(conn, [v["invoice_url"] for _, v in chosen])
