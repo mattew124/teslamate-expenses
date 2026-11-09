@@ -673,7 +673,7 @@ def create_app(connect=None, onedrive_transport=None):
         if not ctx["folder"] or not ctx["connected"]:
             return redirect(url_for("onedrive_page"), 303)
         if not request.args.get("sync"):
-            return render_template("import.html", car=car, rows=[], remaining=0, errors={}, shell=True,  # nosec B604 - a template flag, not a subprocess
+            return render_template("import.html", car=car, rows=[], remaining=0, errors={}, scanning=True,
                                    categories=ctx["categories"], notice=None, learn_after=invoices.LEARN_AFTER)
         try:
             token = access_token()
