@@ -842,7 +842,7 @@ def test_the_icon_comes_from_the_source_and_is_cached_by_browsers(app_for, ms, m
     fetch = Fetch()
     c = icon_app(app_for, ms, fetch, monkeypatch)
     resp = c.get("/provider-icon/onedrive")
-    assert resp.status_code == 200 and resp.mimetype == "image/svg+xml" and b'fill="#0078D4"' in resp.data
+    assert resp.status_code == 200 and resp.mimetype == "image/svg+xml" and resp.data.startswith(b"<svg")
     assert "max-age" in resp.headers["Cache-Control"] and "no-store" not in resp.headers["Cache-Control"]
     c.get("/provider-icon/onedrive")
     assert len(fetch.urls) == 1
@@ -910,3 +910,14 @@ def test_no_logo_when_there_is_no_storage_provider(app_for, ms):
     c = app_for(ms, key=None)
     for path in ("/", "/onedrive", "/categories"):
         assert "provider-icon" not in c.get(path).data.decode()
+
+
+def test_the_logos_source_is_credited_on_the_onedrive_page(client, ms):
+    sign_in(client, ms)
+    page = client.get("/onedrive").data.decode()
+    assert re.search(r'<a href="https://selfh\.st/icons"[^>]*>selfh\.st/icons</a>', page)
+    assert re.search(r'<a href="https://creativecommons\.org/licenses/by/4\.0/"[^>]*>CC BY 4\.0</a>', page)
+
+
+def test_no_credit_without_the_logo(app_for, ms):
+    assert "selfh.st" not in app_for(ms, key=None).get("/onedrive").data.decode()

@@ -106,4 +106,9 @@
 </section>
 {% endif %}
 {% endif %}
+{% if storage %}
+<p><small>OneDrive logo: <a href="{{ storage.credit.url }}" target="_blank" rel="noopener noreferrer">{{ storage.credit.text }}</a>,
+  <a href="{{ storage.credit.licence_url }}" target="_blank" rel="noopener noreferrer">{{ storage.credit.licence }}</a>.
+  OneDrive is a trademark of Microsoft Corporation.</small></p>
+{% endif %}
 {% endblock %}

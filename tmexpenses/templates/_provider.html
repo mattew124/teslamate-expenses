@@ -1,3 +1,3 @@
 {# The storage provider's logo (OneDrive today), or nothing when the app has no provider set up.
    Import with context: {% from "_provider.html" import mark with context %} #}
-{% macro mark() %}{% if storage %}<img src="{{ storage.icon }}" alt="" class="provider-icon" width="24" height="24">{% endif %}{% endmacro %}
+{% macro mark() %}{% if storage %}<img src="{{ storage.icon }}" alt="" class="provider-icon">{% endif %}{% endmacro %}

@@ -143,7 +143,8 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
     def onedrive_flag():
         # `storage` is the provider the app is set up with: its name and icon for the pages. Another
         # provider (Google Drive, say) is another entry here, not another edit to every template.
-        storage = {"name": "OneDrive", "icon": url_for("provider_icon", name="onedrive")} if drive else None
+        storage = {"name": "OneDrive", "icon": url_for("provider_icon", name="onedrive"),
+                   "credit": icons.CREDIT} if drive else None
         return {"onedrive_enabled": drive is not None, "storage": storage}
 
     @app.context_processor
