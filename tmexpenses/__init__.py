@@ -598,7 +598,8 @@ def create_app(connect=None, onedrive_transport=None):
         timer = docinfo.Timer()
         try:
             pdf = drive.download(token, f["id"])
-            guess = invoices.propose(f["folder"], f["name"], invoices.extract_text(pdf), list(by_name), ctx["learned"])
+            guess = invoices.propose(f["folder"], f["name"], invoices.extract_text(pdf), list(by_name), ctx["learned"],
+                                     ctx["settings"]["multi_amount"])
         except onedrive.OneDriveError as exc:
             log.warning("import file=%s folder=%s skipped: %s", docinfo.quote(f["name"]), docinfo.quote(f["folder"]), exc)
             row["note"] = str(exc)
@@ -842,17 +843,24 @@ def create_app(connect=None, onedrive_transport=None):
                 values["invoice_name_format"] = validation.parse_name_format(raw)
             except ValueError as exc:
                 errors["invoice_name_format"] = str(exc)
+            raw = request.form.get("multi_amount", "max")
+            values["multi_amount"] = raw
+            try:
+                values["multi_amount"] = validation.parse_multi_amount(raw)
+            except ValueError as exc:
+                errors["multi_amount"] = str(exc)
             if not errors:
                 with connect() as conn:
                     db.save_settings(conn, values["expenses_url"], values["grafana_url"],
-                                     values["invoice_date_format"], values["invoice_name_format"])
+                                     values["invoice_date_format"], values["invoice_name_format"],
+                                     values["multi_amount"])
                 log.info("settings saved")
                 return redirect(url_for("settings", msg="settings"), 303)
         else:
             with connect() as conn:
                 values = db.get_settings(conn)
         return render_template("settings.html", values=values, errors=errors, aliases=validation.NAME_ALIASES,
-                               example=name_example(values),
+                               multi_choices=validation.MULTI_AMOUNT_CHOICES, example=name_example(values),
                                message=MESSAGES.get(request.args.get("msg", ""))), (400 if errors else 200)
 
     @app.post("/api/prefill")
@@ -872,7 +880,9 @@ def create_app(connect=None, onedrive_transport=None):
         with connect() as conn:
             categories = db.categories(conn)
             learned = db.learned(conn, invoices.LEARN_AFTER)
-        guess = invoices.propose("", upload.filename, invoices.extract_text(pdf), [c["name"] for c in categories], learned)
+            multi_amount = db.get_settings(conn)["multi_amount"]
+        guess = invoices.propose("", upload.filename, invoices.extract_text(pdf), [c["name"] for c in categories], learned,
+                                 multi_amount)
         have, missing = docinfo.found(guess)
         log.debug("prefill file=%s bytes=%d sha256=%s found=%s missing=%s ms=%d", docinfo.quote(filename), len(pdf),
                   docinfo.sha12(pdf), have, missing, timer.ms)

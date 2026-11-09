@@ -92,5 +92,5 @@ def admin(pg):
                      " expenses.learned_label, expenses.learned_vendor,"
                      " positions, charging_processes RESTART IDENTITY")
         conn.execute("DELETE FROM expenses.category WHERE sort_order = 100")
-        conn.execute("UPDATE expenses.setting SET invoice_date_format = NULL, invoice_name_format = NULL")
+        conn.execute("UPDATE expenses.setting SET invoice_date_format = NULL, invoice_name_format = NULL, multi_amount = NULL")
         yield conn

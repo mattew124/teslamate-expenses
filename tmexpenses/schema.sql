@@ -78,6 +78,9 @@ ALTER TABLE expenses.setting ADD COLUMN IF NOT EXISTS invoice_date_format text
 --   invoice_name_format  the file name template (%date %category %vendor %car %amount); NULL = the original style
 ALTER TABLE expenses.setting ADD COLUMN IF NOT EXISTS invoice_name_format text
     CHECK (invoice_name_format IS NULL OR length(invoice_name_format) <= 100);
+--   multi_amount         which figure to take when an invoice offers several (6 or 12 months): max, min or blank; NULL = max
+ALTER TABLE expenses.setting ADD COLUMN IF NOT EXISTS multi_amount text
+    CHECK (multi_amount IS NULL OR multi_amount IN ('max', 'min', 'blank'));
 INSERT INTO expenses.setting (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS expenses.expense (
