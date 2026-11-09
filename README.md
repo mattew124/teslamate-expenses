@@ -48,6 +48,9 @@ and development.
 The app has **no login of its own**. Only publish it behind a forward-auth gate, such as Authentik
 or Authelia with Traefik. `docker-compose.traefik.yml` refuses to start without one.
 
+Back up TeslaMate's database first: the first start adds the `expenses` schema to it and changes
+nothing else.
+
 ```bash
 cp .env.example .env    # set DATABASE_USER and DATABASE_PASS to TeslaMate's
 docker compose up -d    # localhost:8088/expenses/

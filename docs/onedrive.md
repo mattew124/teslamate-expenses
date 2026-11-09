@@ -27,8 +27,7 @@ The subfolder is set per category on the **Categories** page. The standard categ
 mapped (Tyres, filters, alignment and rotation to `Maintenance`; Insurance and Registration to
 folders of the same name); a blank box means a folder named after the category.
 
-1. **Turn it on.** Add a key to `.env`, re-run `scripts/provision-db.sh` (it adds two tables)
-    and restart the app:
+1. **Turn it on.** Add a key to `.env` and restart the app, which creates its own tables:
 
     ```bash
     EXPENSES_ENCRYPTION_KEY=<output of: openssl rand -base64 32 | tr '+/' '-_'>
@@ -86,6 +85,10 @@ sign in as the account whose OneDrive gets the invoices.
 
 A dev stack or second installation needs its own callback address: add it as another **Web**
 redirect URI on the same registration.
+
+A redirect URI you have just added can take a few minutes to take effect. If **Connect OneDrive**
+shows Microsoft's "invalid request" error straight after adding one, and the address matches
+exactly, wait a few minutes and press it again.
 
 Why the normal web sign-in and not a device code or the "nativeclient" redirect: both have
 been tried with personal accounts and fail. A device-code sign-in marks the app as a public
