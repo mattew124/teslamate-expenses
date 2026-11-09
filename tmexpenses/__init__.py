@@ -582,7 +582,9 @@ def create_app(connect=None, onedrive_transport=None):
         count = min(request.form.get("count", type=int) or 0, 200)
         rows, chosen, errors = [], [], {}
         for n in range(count):
-            f = lambda key: request.form.get(f"{key}_{n}", "")
+            def f(key, n=n):
+                return request.form.get(f"{key}_{n}", "")
+
             row = import_row(n, include=bool(f("include")), date=f("date"), category_id=f("category_id"),
                              vendor=f("vendor"), amount=f("amount"), odometer_km=f("odometer_km"),
                              url=f("url"), name=f("name"), folder=f("folder"))
