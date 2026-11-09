@@ -9,6 +9,8 @@ ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PIP_NO_CACHE_DIR=1
 
 # PDF text (poppler) and OCR for scanned invoices (tesseract), used when importing
 # existing invoices from OneDrive.
+# Not version-pinned: Debian removes superseded versions, which would break later builds.
+# hadolint ignore=DL3008
 RUN apt-get update \
  && apt-get install -y --no-install-recommends poppler-utils tesseract-ocr tesseract-ocr-eng \
  && rm -rf /var/lib/apt/lists/*
