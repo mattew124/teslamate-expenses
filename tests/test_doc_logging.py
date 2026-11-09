@@ -95,5 +95,5 @@ def test_a_failed_rename_is_logged_as_a_warning(client, ms, admin, caplog):
 def test_upload_logs_name_folder_and_size(client, ms, admin, caplog):
     sign_in_done = client  # the import fixture already signed in and chose a folder
     sign_in_done.post("/new", data=with_pdf(form(admin, invoice_url="")), headers=ORIGIN)
-    (line,) = lines(caplog, "upload")
+    (line,) = lines(caplog, "upload name=")
     assert "subfolder=Maintenance" in line and 'name="261107 Tyres - Tyre Shop.pdf"' in line and "bytes=" in line
