@@ -36,6 +36,19 @@ Rules of thumb:
    The stable tag is a fresh build, so its digest differs from the candidate's: give it the same
    quick check before pinning.
 
+## Following a channel
+
+| Tag | Moves on | For |
+|---|---|---|
+| `X.Y.Z-rcN` | never (fixed) | Testing one exact candidate; pin by digest. |
+| `rc` | every `-rc` tag | An installation that follows the candidate channel. |
+| `latest` | every stable `vX.Y.Z` tag | An installation that follows stable. |
+| `X.Y.Z` | never (fixed) | Pinning a stable release. |
+
+A floating tag only changes what a pull fetches. Whether the running container updates is up
+to the installation's own update process. A release that adds tables or columns needs
+`scripts/provision-db.sh` re-run first on installations using the restricted role.
+
 ## How the image is built
 
 No Makefile. The `Dockerfile` in the repository root is the whole recipe, and
