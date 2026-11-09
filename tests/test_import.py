@@ -410,7 +410,6 @@ def test_skipped_files_stop_being_offered_until_restored(client, admin):
     data = post_rows(admin)
     data = {k: v for k, v in data.items() if not k.startswith("include_")}
     data["skip_1"] = "on"
-    n = data["count"]
     assert client.post("/onedrive/import/1", data=data, headers=ORIGIN).status_code == 303
     scan = client.get("/onedrive/import/1/scan").get_json()
     assert scan["skipped"] == 1 and len(scan["files"]) == 2 and data["url_1"] not in [f["url"] for f in scan["files"]]
