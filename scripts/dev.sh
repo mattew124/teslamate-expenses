@@ -12,7 +12,11 @@
 #   scripts/dev.sh down              stop, keeping the test DB
 #   scripts/dev.sh destroy           remove this checkout's stack, test DB and image
 #   scripts/dev.sh list              every dev stack on this machine
-#   scripts/dev.sh test-browser      run the browser tests against the dev stack
+#   scripts/dev.sh test-browser [--onedrive]
+#                                    run the browser tests against the dev stack;
+#                                    --onedrive fails if the real OneDrive checks can't run
+#   scripts/dev.sh onedrive-link     worktree only: reuse the main dev stack's OneDrive
+#                                    sign-in here, pointed at the /Expenses test folder
 #   scripts/dev.sh schema            regenerate db/teslamate-schema.sql from TeslaMate
 #   scripts/dev.sh psql [args]       psql on the test database
 #   scripts/dev.sh logs              follow the app's logs
@@ -302,13 +306,76 @@ setup() {
 }
 
 test_browser() {
+    local require_onedrive="${1:-0}"
     ensure_env
     docker build -q -t teslamate-expenses:browser-tests tests/browser >/dev/null
     # Straight to the containers on the dev network, past the proxy's login.
     docker run --rm --network "${PROJECT}_dev" --user "$(id -u):$(id -g)" \
-        -e HOME=/tmp -e OUT=/out -e "BASE_PATH=$DEV_BASE_PATH" \
+        -e HOME=/tmp -e OUT=/out -e "BASE_PATH=$DEV_BASE_PATH" -e "REQUIRE_ONEDRIVE=$require_onedrive" \
         -v "$ROOT/tests/browser:/tests:ro" -v "$ROOT/.dev/screenshots:/out" \
         teslamate-expenses:browser-tests python3 /tests/run.py
+}
+
+# ---- a real OneDrive for worktrees ---------------------------------------------
+
+# The main dev stack's database holds the OneDrive sign-in. Only that one row is read, so
+# its code can be any version; the container just has to be running.
+ONEDRIVE_SOURCE_DB="${ONEDRIVE_SOURCE_DB:-teslamate-expenses-dev-dev-db-1}"
+source_dev_psql() { docker exec -i "$ONEDRIVE_SOURCE_DB" psql -X -At -v ON_ERROR_STOP=1 -U teslamate -d teslamate "$@"; }
+
+# Copies the sign-in (never the car folders: the source's may be real invoices), then points
+# every car here at the test folder. Secrets stay encrypted and are never printed.
+onedrive_link() {
+    if [ -z "$INSTANCE" ]; then
+        echo "dev: this stack is where the sign-in lives; run onedrive-link from a worktree" >&2
+        exit 1
+    fi
+    ensure_env
+    local app source_env key current
+    app="$(compose ps -q expenses-dev)"
+    [ -n "$app" ] || { echo "dev: start this stack first: scripts/dev.sh up" >&2; exit 1; }
+    if [ "$(docker inspect -f '{{.State.Running}}' "$ONEDRIVE_SOURCE_DB" 2>/dev/null)" != true ]; then
+        echo "dev: the main dev stack's database ($ONEDRIVE_SOURCE_DB) isn't running" >&2
+        exit 1
+    fi
+    if [ "$(source_dev_psql -c "SELECT count(*) FROM expenses.onedrive_account WHERE refresh_token IS NOT NULL")" != 1 ]; then
+        echo "dev: the main dev stack isn't signed in to OneDrive: connect it on its OneDrive page" >&2
+        exit 1
+    fi
+    # The row is encrypted with the source's key, so this stack uses the same one.
+    source_env="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/.dev/env"
+    key="$(sed -n 's/^DEV_\(ENCRYPTION\|ONEDRIVE_TOKEN\)_KEY=//p' "$source_env" | head -n 1)"
+    [ -n "$key" ] || { echo "dev: no encryption key in $source_env" >&2; exit 1; }
+    current="$(sed -n 's/^DEV_ENCRYPTION_KEY=//p' "$ENVF")"
+    if [ "$key" != "$current" ]; then
+        ( umask 077
+          grep -v '^DEV_ENCRYPTION_KEY=' "$ENVF" > "$ENVF.new"
+          printf 'DEV_ENCRYPTION_KEY=%s\n' "$key" >> "$ENVF.new"
+          mv "$ENVF.new" "$ENVF" )
+        # Same image (it may be `up --image`), new key.
+        EXPENSES_IMAGE="$(docker inspect -f '{{.Config.Image}}' "$app")"
+        export EXPENSES_IMAGE
+        compose up -d --no-build --wait expenses-dev
+    fi
+    {
+        cat <<'SQL'
+BEGIN;
+DELETE FROM expenses.car_folder;
+CREATE TEMP TABLE incoming (client_id text, client_secret text, secret_expires date, account text, refresh_token text) ON COMMIT DROP;
+COPY incoming FROM STDIN;
+SQL
+        source_dev_psql -c "COPY (SELECT client_id, client_secret, secret_expires, account, refresh_token FROM expenses.onedrive_account) TO STDOUT"
+        cat <<'SQL'
+\.
+INSERT INTO expenses.onedrive_account (id, client_id, client_secret, secret_expires, account, refresh_token)
+    SELECT true, client_id, client_secret, secret_expires, account, refresh_token FROM incoming
+    ON CONFLICT (id) DO UPDATE SET client_id = EXCLUDED.client_id, client_secret = EXCLUDED.client_secret,
+        secret_expires = EXCLUDED.secret_expires, account = EXCLUDED.account, refresh_token = EXCLUDED.refresh_token,
+        auth_state = NULL, auth_expires_at = NULL, updated_at = now();
+COMMIT;
+SQL
+    } | dev_psql
+    compose exec -T expenses-dev python - < scripts/onedrive-test-folder.py
 }
 
 case "${1:-}" in
@@ -326,7 +393,9 @@ case "${1:-}" in
     list) docker compose ls -a --filter name=teslamate-expenses-dev ;;
     setup) setup ;;
     info) info ;;
-    test-browser) test_browser ;;
+    test-browser)
+        if [ "${2:-}" = --onedrive ]; then test_browser 1; else test_browser 0; fi ;;
+    onedrive-link) onedrive_link ;;
     schema)
         require_source
         tmp="$(mktemp)"
@@ -336,5 +405,5 @@ case "${1:-}" in
         git --no-pager diff --stat -- "$SCHEMA" || true ;;
     psql) ensure_env; shift; dev_psql "$@" ;;
     logs) ensure_env; compose logs -f expenses-dev ;;
-    *) sed -n '3,17p' "$0" >&2; exit 2 ;;
+    *) sed -n '3,21p' "$0" >&2; exit 2 ;;
 esac

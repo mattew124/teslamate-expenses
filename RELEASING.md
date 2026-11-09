@@ -28,8 +28,9 @@ Rules of thumb:
 2. Tag a **release candidate**: `git tag -a v0.3.0-rc1 -m "v0.3.0-rc1" && git push origin v0.3.0-rc1`.
    The Release workflow runs the tests, builds `ghcr.io/<owner>/teslamate-expenses:0.3.0-rc1` for
    amd64 and arm64, and prints the digest in the run summary. A pre-release tag never moves `:latest`.
-3. Test that digest: `scripts/dev.sh up --image <ref>@<digest>`, then `scripts/dev.sh test-browser`,
-   then look at the pages yourself.
+3. Test that digest from a worktree: `scripts/dev.sh up --image <ref>@<digest>`, `scripts/dev.sh onedrive-link`,
+   then `scripts/dev.sh test-browser --onedrive` (it fails if the real OneDrive checks can't run), then
+   look at the pages yourself.
 4. Fix anything on `main` and tag `-rc2`, `-rc3`, and so on.
 5. When a candidate passes, tag the **same commit** `v0.3.0`. This publishes `0.3.0` and moves `:latest`.
 6. Pin production to the digest of the stable build (the run summary shows it), not to `:latest`.

@@ -19,7 +19,14 @@ GRAFANA = f"http://dev-grafana:3000{BASE}/grafana/"
 OUT = os.environ.get("OUT", "/out")
 MARKER = "BROWSER-TEST"
 INVOICE = "https://example.com/invoice-browser-test.pdf"
-passed, failed = 0, []
+# Writes to a real OneDrive happen only in this folder (scripts/dev.sh onedrive-link points here).
+TEST_FOLDER = "Expenses test"
+REQUIRE_ONEDRIVE = os.environ.get("REQUIRE_ONEDRIVE") == "1"
+passed, failed, skipped = 0, [], []
+
+
+class Skip(Exception):
+    """This check needs something the stack doesn't have. Reported, and a failure with --onedrive."""
 
 
 def step(name, fn, *args):
@@ -28,6 +35,13 @@ def step(name, fn, *args):
         fn(*args)
         passed += 1
         print(f"ok   {name}")
+    except Skip as why:
+        if REQUIRE_ONEDRIVE:
+            failed.append(name)
+            print(f"FAIL {name}\n     required, but: {why}")
+        else:
+            skipped.append(name)
+            print(f"SKIP {name}\n     {why}")
     except Exception as exc:  # keep going: report every failure in one run
         failed.append(name)
         print(f"FAIL {name}\n     {str(exc).splitlines()[0][:300]}")
@@ -96,8 +110,7 @@ def test_import_page_shows_progress(page):
     """The import page opens at once and reports its progress, instead of a blank wait."""
     page.goto(UI + "onedrive")
     if "Connected as" not in page.inner_text("main") or not page.query_selector("text=Import existing invoices"):
-        print("     (skipped: dev stack isn't connected to OneDrive with a car folder)")
-        return
+        raise Skip("dev stack isn't connected to OneDrive with a car folder")
     car = re.search(r"onedrive/import/(\d+)", page.get_attribute("text=Import existing invoices", "href")).group(1)
     started = time.time()
     page.goto(UI + f"onedrive/import/{car}", wait_until="domcontentloaded")
@@ -109,6 +122,43 @@ def test_import_page_shows_progress(page):
     if page.locator("#import-form").is_visible():
         assert page.locator("#import-form button[type=submit]").is_enabled()
         shot(page, "import-progress")
+        if in_test_folder(page, UI + f"onedrive/import/{car}"):
+            page.goto(UI + f"onedrive/import/{car}", wait_until="domcontentloaded")
+            expect(page.locator("#import-status-text")).to_have_text(re.compile(r"^Read \d+ PDF"), timeout=240000)
+            assert MARKER in page.content(), "the import preview should list the PDF the upload check left there"
+
+
+def in_test_folder(page, back_to=None):
+    """Whether every car points inside the test folder, the only place a test may write."""
+    page.goto(UI + "onedrive")
+    paths = page.locator("ul.folders small").all_inner_texts()
+    if back_to:
+        page.goto(back_to, wait_until="domcontentloaded")
+    return bool(paths) and all(p.strip().startswith("/" + TEST_FOLDER) for p in paths)
+
+
+def test_real_upload(page):
+    """Saves an expense with a PDF, through the real OneDrive, into the test folder only.
+    The expense is deleted again; the file stays (the app has no delete) for the import check."""
+    page.goto(UI + "onedrive")
+    if not page.locator("button:has-text('Disconnect')").count():
+        raise Skip("dev stack isn't connected to OneDrive (scripts/dev.sh onedrive-link from a worktree)")
+    if not in_test_folder(page):
+        raise Skip(f"cars aren't pointed at /{TEST_FOLDER}, so nothing was written")
+    page.goto(UI + "new")
+    page.set_input_files("input[name=invoice_file]", {
+        "name": "browser-test.pdf", "mimeType": "application/pdf", "buffer": b"%PDF-1.4\n%%EOF\n"})
+    page.wait_for_load_state("networkidle")
+    page.select_option("select[name=category_id]", label="Tyres")
+    page.fill("input[name=amount]", "371.93")
+    page.fill("input[name=vendor]", MARKER)
+    page.fill("input[name=invoice_url]", "")
+    page.click("button[type=submit].button")
+    page.wait_for_url(re.compile(r"msg=saved"), timeout=60000)
+    page.goto(UI)
+    link = page.locator("tbody tr", has_text=MARKER).locator("a[href^='https://']").first.get_attribute("href")
+    assert "example.com" not in link, "the invoice link should be the uploaded file's OneDrive address"
+    remove_marked(page)
 
 
 def remove_marked(page):
@@ -260,8 +310,10 @@ def test_connect_reaches_microsoft(page):
     page.goto(UI + "onedrive")
     button = page.locator("button:has-text('Connect OneDrive')")
     if not button.count():
-        print("     (skipped: no app registration saved, or already connected)")
-        return
+        if page.locator("button:has-text('Disconnect')").count():
+            print("     (not applicable: already connected)")
+            return
+        raise Skip("no app registration saved")
     reached = []
 
     def stub(route):
@@ -279,8 +331,7 @@ def test_folder_browser(page):
     folder browser for the first car. Creates nothing and changes no choice."""
     page.goto(UI + "onedrive")
     if not page.locator("button:has-text('Disconnect')").count():
-        print("     (skipped: dev stack isn't connected to OneDrive)")
-        return
+        raise Skip("dev stack isn't connected to OneDrive")
     page.locator("ul.folders a").first.click()
     expect(page.locator("h1")).to_contain_text("Folder for")
     expect(page.locator("form.new-folder input[name=name]")).to_be_visible()
@@ -340,6 +391,7 @@ def main():
         step("OneDrive page and upload field", test_onedrive_page, page)
         step("Connect OneDrive goes to Microsoft", test_connect_reaches_microsoft, page)
         step("folder browser (read-only)", test_folder_browser, page)
+        step("real upload to the OneDrive test folder", test_real_upload, page)
         step("import page shows progress", test_import_page_shows_progress, page)
         # Expected 400s from the deliberate bad submissions above aren't script errors.
         real = [t for t in problems if "400" not in t]
@@ -351,7 +403,7 @@ def main():
         step("header is one row on a desktop", test_header_on_a_desktop, desktop.new_page())
         remove_marked(page)
         browser.close()
-    print(f"\n{passed} passed, {len(failed)} failed")
+    print(f"\n{passed} passed, {len(failed)} failed, {len(skipped)} skipped")
     sys.exit(1 if failed else 0)
 
 

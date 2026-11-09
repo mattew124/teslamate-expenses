@@ -151,3 +151,35 @@ def test_dashboard_units_never_auto_scale():
 
 def test_dev_script_syntax():
     subprocess.run(["bash", "-n", str(ROOT / "scripts" / "dev.sh")], check=True)
+
+
+def onedrive_link_section():
+    start = SCRIPT.index("onedrive_link() {")
+    return SCRIPT[start:SCRIPT.index("\n}\n", start)]
+
+
+def test_onedrive_link_never_copies_a_real_folder():
+    """Worktrees share the main dev stack's sign-in, never the folder it's pointed at."""
+    link = onedrive_link_section()
+    assert "expenses.onedrive_account" in link
+    source_reads = [line for line in link.splitlines() if "COPY (SELECT" in line]
+    assert source_reads and all("car_folder" not in line for line in source_reads)
+    assert "DELETE FROM expenses.car_folder" in link
+
+
+def test_onedrive_link_only_runs_from_a_worktree():
+    assert 'if [ -z "$INSTANCE" ]' in onedrive_link_section()
+
+
+def test_onedrive_link_only_reads_the_source_stack():
+    for line in onedrive_link_section().splitlines():
+        if "source_dev_psql" in line:
+            assert not re.search(r"(?i)\b(insert|update|delete|truncate)\b", line), line
+
+
+def test_real_uploads_are_kept_to_the_test_folder():
+    browser = (ROOT / "tests" / "browser" / "run.py").read_text()
+    assert 'TEST_FOLDER = "Expenses test"' in browser
+    helper = (ROOT / "scripts" / "onedrive-test-folder.py").read_text()
+    assert 'FOLDER = "Expenses test"' in helper
+

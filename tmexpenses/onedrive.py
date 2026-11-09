@@ -22,6 +22,7 @@ import hashlib
 import json
 import logging
 import secrets
+import time
 import urllib.error
 import urllib.request
 from urllib.parse import quote, urlencode
@@ -33,6 +34,8 @@ log = logging.getLogger("tmexpenses.onedrive")
 AUTHORITY = "https://login.microsoftonline.com/consumers/oauth2/v2.0"
 GRAPH = "https://graph.microsoft.com/v1.0"
 SCOPES = "Files.ReadWrite offline_access"
+BUSY_STATUSES = (429, 503)   # Microsoft throttling or a brief outage: worth a short wait
+RETRY_WAITS = (1, 3)         # seconds between tries; requests are bounded by gunicorn's timeout
 MAX_PAGES = 20   # of 200 children each, when listing a folder
 MAX_DEPTH = 4    # subfolders below a car's folder that are searched for PDFs
 MAX_PDF_BYTES = 20 * 1024 * 1024
@@ -162,7 +165,14 @@ class OneDrive:
     # ---- Graph ----------------------------------------------------------------
 
     def _get(self, access_token, url):
-        status, body = self.transport("GET", url, None, {"Authorization": f"Bearer {access_token}"})
+        for wait in (*RETRY_WAITS, None):
+            status, body = self.transport("GET", url, None, {"Authorization": f"Bearer {access_token}"})
+            if status not in BUSY_STATUSES or wait is None:
+                break
+            log.warning("OneDrive busy (HTTP %d): trying again in %ds", status, wait)
+            time.sleep(wait)
+        if status in BUSY_STATUSES:
+            raise OneDriveError("OneDrive is busy right now: try again in a few minutes.")
         if status != 200:
             raise OneDriveError("OneDrive said no: " + graph_error(status, body))
         return body
