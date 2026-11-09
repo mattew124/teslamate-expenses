@@ -157,13 +157,13 @@ def test_a_learned_label_with_two_different_values_leaves_the_field_blank():
     assert got["amount"] is None and "amount" in got["missing"]
 
 
-def test_the_filename_date_beats_a_learned_label():
-    assert invoices.propose("", "261024 - x.pdf", GARAGE, CATS, LEARNED)["date"] == _date(2026, 10, 24)
+def test_a_learned_label_beats_the_filename_date():
+    assert invoices.propose("", "261024 - x.pdf", GARAGE, CATS, LEARNED)["date"] == _date(2024, 2, 9)
 
 
-def test_learned_vendor_sets_the_category_over_the_folder_but_not_the_filename():
+def test_learned_vendor_sets_the_category_over_the_folder_and_the_filename():
     assert invoices.propose("Registration", "scan.pdf", GARAGE, CATS, LEARNED)["category"] == "Tyres"
-    assert invoices.propose("Registration", "261024 - Insurance.pdf", GARAGE, CATS, LEARNED)["category"] == "Insurance"
+    assert invoices.propose("Registration", "261024 - Insurance.pdf", GARAGE, CATS, LEARNED)["category"] == "Tyres"
 
 
 # ---- documents that real-world testing showed the first rules missed ------------------
@@ -194,7 +194,7 @@ def test_trailing_filename_date():
     assert got["date"] == _date(2025, 10, 10) and got["category"] == "Registration"
 
 
-def test_leading_filename_date_still_wins_over_a_trailing_one():
+def test_leading_filename_date_comes_before_a_trailing_one():
     assert invoices.propose("", "261024 - x_251010.pdf", "", CATS)["date"] == _date(2026, 10, 24)
 
 
@@ -300,8 +300,8 @@ def test_the_trading_name_wins_even_when_the_legal_name_comes_first():
     assert vendor(text) == "Brand Cover"
 
 
-def test_a_file_name_vendor_still_wins():
-    assert invoices.propose("", "261030 - Tyres - Tesla.pdf", f"{LEGAL} trading as Brand Cover\n", CATS)["vendor"] == "Tesla"
+def test_the_pdfs_trading_name_beats_a_file_name_vendor():
+    assert invoices.propose("", "261030 - Tyres - Bogus.pdf", f"{LEGAL} trading as Brand Cover\n", CATS)["vendor"] == "Brand Cover"
 
 
 def test_prose_that_says_trading_as_is_not_a_vendor():
@@ -325,3 +325,71 @@ def test_the_legal_name_before_trading_as_may_carry_registration_numbers():
 
 def test_trading_as_with_nothing_before_it_is_not_enough():
     assert vendor("trading as Brand Cover\n") is None
+
+
+# ---- trust the PDF: the file name is only a fallback ---------------------------------------
+
+def test_the_pdf_date_beats_the_filename_date():
+    assert invoices.propose("", "261024 - x.pdf", "Invoice Date   05/12/2023\n", CATS)["date"] == _date(2023, 12, 5)
+
+
+def test_the_filename_date_is_used_when_the_pdf_has_none():
+    assert invoices.propose("", "261024 - x.pdf", "Nothing dated here\n", CATS)["date"] == _date(2026, 10, 24)
+    assert invoices.propose("", "Notice_251010.pdf", "", CATS)["date"] == _date(2025, 10, 10)
+
+
+def test_what_the_pdf_keeps_naming_beats_a_misleading_filename():
+    text = "Fitting of new tyres\nTyres: 4 x tyres supplied\nBalance of tyres\n"
+    assert invoices.propose("", "Insurance_stuff.pdf", text, CATS)["category"] == "Tyres"
+    assert invoices.propose("Misc", "261024 - Insurance.pdf", text, CATS)["category"] == "Tyres"
+
+
+def test_the_folder_the_owner_filed_it_in_still_beats_the_wording_of_the_text():
+    text = "Fitting of new tyres\nTyres: 4 x tyres supplied\nBalance of tyres\n"
+    assert invoices.propose("Insurance", "x.pdf", text, CATS)["category"] == "Insurance"
+
+
+def test_a_passing_mention_does_not_override_the_filename_or_folder():
+    # a registration notice mentions CTP insurance, but it says registration much more often
+    text = "REGISTRATION RENEWAL\n" + "Your registration is due. " * 6 + "CTP insurance. Insurance insurer. insurance.\n"
+    assert invoices.propose("", "whatever.pdf", text, CATS)["category"] == "Registration"
+    assert invoices.propose("Registration", "x.pdf", "One mention of insurance only.", CATS)["category"] == "Registration"
+
+
+def test_the_filename_and_folder_are_the_fallback_for_category():
+    assert invoices.propose("Maintenance", "261024 - Tyres.pdf", "", CATS)["category"] == "Tyres"
+    assert invoices.propose("Insurance", "x.pdf", "", CATS)["category"] == "Insurance"
+
+
+def test_the_pdf_company_beats_a_filename_vendor_which_is_the_fallback():
+    text = "Real Garage Pty Ltd\nTotal   $50.00\n"
+    assert invoices.propose("", "261030 - Tyres - Bogus Name.pdf", text, CATS)["vendor"] == "Real Garage Pty Ltd"
+    assert invoices.propose("", "261030 - Tyres - Bogus Name.pdf", "no company here\n", CATS)["vendor"] == "Bogus Name"
+
+
+def test_a_category_in_the_heading_beats_what_the_body_mentions_most():
+    # a registration notice with a long CTP insurer section: insurance is said more often, but the title says registration
+    text = ("   VEHICLE REGISTRATION                      Due date:  1 Jan 2030\n\n   RENEWAL NOTICE\n   Department of Example Transport\n"
+            + "   Insurer nomination: your insurance is provided by an insurer. Insurance applies.\n" * 8)
+    assert invoices.propose("", "scan.pdf", text, CATS)["category"] == "Registration"
+
+
+def test_when_the_heading_names_nothing_the_most_mentioned_wins():
+    assert invoices.propose("", "Policy.pdf", SCHEDULE, CATS)["category"] == "Insurance"
+
+
+def test_a_heading_naming_two_categories_falls_back_to_the_counts():
+    text = "REGISTRATION and INSURANCE summary\n" + "insurance premium. " * 5 + "registration. " * 2
+    assert invoices.propose("", "x.pdf", text, CATS)["category"] == "Insurance"
+
+
+def test_a_filename_the_pdf_contradicts_supplies_no_vendor():
+    # the name says Tyres - Nonsense; the PDF is clearly a registration notice with no company named
+    got = invoices.propose("", "261224 - Tyres - Nonsense.pdf", RENEWAL, CATS)
+    assert got["category"] == "Registration" and got["vendor"] is None
+
+
+def test_a_filename_the_pdf_agrees_with_still_supplies_the_vendor():
+    got = invoices.propose("", "261030 - Wheel Alignment - Tesla.pdf", "Wheel alignment report\nWheel alignment done\nWheel alignment\n", CATS)
+    assert got["category"] == "Wheel alignment" and got["vendor"] == "Tesla"
+    assert invoices.propose("", "261030 - Wheel Alignment - Tesla.pdf", "", CATS)["vendor"] == "Tesla"

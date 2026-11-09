@@ -137,10 +137,26 @@ def _category_in(haystack, categories):
     return max(hits, key=len) if hits else None
 
 
+def _category_in_heading(text, categories):
+    """The one category named in the document's heading (its first few lines), if exactly one:
+    a registration notice with a long insurer section is still a registration notice."""
+    lines = [line for line in text.splitlines() if line.strip()][:5]
+    # Title-like pieces only: a column of up to five words that isn't a sentence ("VEHICLE REGISTRATION").
+    pieces = [c.strip() for line in lines for c in re.split(r"\s{2,}", line.strip())]
+    heading = "\n".join(c for c in pieces if len(c.split()) <= 5 and not c.endswith((".", ":")))
+    found = {name for name in categories if re.search(r"\b" + re.escape(name.lower()) + r"\b", heading.lower())}
+    # 'Air filter' sits inside 'Cabin air filter': keep only the longest of nested names
+    found = {n for n in found if not any(n != m and n.lower() in m.lower() for m in found)}
+    return found.pop() if len(found) == 1 else None
+
+
 def _category_from_text(text, categories):
-    """The category the document keeps naming (at least three times, and clearly the most),
-    for files whose name and folder say nothing. Longer names are counted first and removed,
+    """The category the PDF is about: the one its heading names, else the one it keeps naming
+    (at least three times, and clearly the most). Longer names are counted first and removed,
     so 'Cabin air filter' isn't also counted as 'Air filter'."""
+    titled = _category_in_heading(text, categories)
+    if titled:
+        return titled
     low, counts = text.lower(), {}
     for name in sorted(categories, key=len, reverse=True):
         pattern = re.compile(r"\b" + re.escape(name.lower()) + r"\b")
@@ -245,22 +261,27 @@ def _trading_name(text):
     return None
 
 
-def _vendor(name, category, text):
-    stem = re.sub(r"\.pdf$", "", name, flags=re.I)
-    parts = [p.strip() for p in stem.split(" - ")]
-    if category:
-        for i, part in enumerate(parts):
-            if part.lower() == category.lower() and i + 1 < len(parts):
-                return parts[i + 1][:100]
+def _vendor_from_text(text):
+    """The PDF's own trading name, then the company at the start of a line."""
     trading = _trading_name(text)
     if trading:
         return trading
     for column in re.split(r"\s{2,}|\n", text):  # layout text puts columns side by side
         m = COMPANY.match(column.strip())
-        name = " ".join(m.group(1).split()) if m else ""
+        name_found = " ".join(m.group(1).split()) if m else ""
         # A name is capitalised words ("Example Insurer Limited"); a sentence has lower-case ones.
-        if name and all(w[0].isupper() or w[0].isdigit() or w.lower() in _NAME_JOINERS for w in name.split()):
-            return name[:100]
+        if name_found and all(w[0].isupper() or w[0].isdigit() or w.lower() in _NAME_JOINERS for w in name_found.split()):
+            return name_found[:100]
+    return None
+
+
+def _filename_vendor(name, category):
+    """The vendor part of a 'Category - Vendor' file name."""
+    stem = re.sub(r"\.pdf$", "", name, flags=re.I)
+    parts = [p.strip() for p in stem.split(" - ")]
+    for i, part in enumerate(parts):
+        if part.lower() == category.lower() and i + 1 < len(parts):
+            return parts[i + 1][:100]
     return None
 
 
@@ -364,11 +385,13 @@ def propose(folder, name, text, categories, learned=None, multi_amount=None):
     def learned_value(field):
         return _by_labels(text, field, labels[field]) if labels.get(field) else ("none", None)
 
-    # Date: the owner's file name, then a learned label, then the built-in text rules.
-    when = _date_from_filename(name)
-    if when is None:
-        kind, value = learned_value("date")
-        when = value if kind != "none" else _date_from_text(text)
+    # The PDF is trusted over its file name (which is often arbitrary); the name is the fallback.
+    # Date: a label the owner taught, then the built-in text rules, then the file name.
+    kind, value = learned_value("date")
+    if kind != "none":
+        when = value                       # a learned label that finds several dates leaves it blank
+    else:
+        when = _date_from_text(text) or _date_from_filename(name)
 
     kind, amount = learned_value("amount")
     if kind == "none":
@@ -381,15 +404,18 @@ def propose(folder, name, text, categories, learned=None, multi_amount=None):
     else:
         odometer = str(int(odo_value)) if odo_value is not None else None
 
-    # Category: a name in the file name, else the vendor the owner has taught, else the folder.
-    category = _category_in(name, categories)
-    vendor = _vendor(name, category, text)
-    if category is None and vendor and vendors.get(vendor.lower()) in categories:
-        category = vendors[vendor.lower()]
-    if category is None:
-        category = _category_in(folder, categories)
-    if category is None:
-        category = _category_from_text(text, categories)
+    # Vendor: the PDF's trading name or company; the file name's "Category - Vendor" only as a fallback.
+    named = _category_in(name, categories)
+    vendor = _vendor_from_text(text)
+    # Category: the vendor the owner has taught, then the folder they filed it in, then what the PDF
+    # keeps naming, and only then the file name.
+    category = vendors.get(vendor.lower()) if vendor else None
+    if category not in categories:
+        category = None
+    category = (category or _category_in(folder, categories) or _category_from_text(text, categories) or named)
+    # The file name's vendor is a last resort, and only while the file name isn't contradicted by the PDF.
+    if vendor is None and named and category == named:
+        vendor = _filename_vendor(name, named)
 
     out = {"date": when, "category": category, "vendor": vendor, "amount": amount, "odometer_km": odometer}
     out["missing"] = [f for f in ("date", "category", "amount") if out[f] is None]
