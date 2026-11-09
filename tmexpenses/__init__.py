@@ -8,6 +8,7 @@ cost of ownership.
 import hmac
 import logging
 import os
+from pathlib import Path
 import time
 from decimal import Decimal
 from datetime import date, datetime, time as dtime, timedelta, timezone
@@ -19,7 +20,7 @@ from flask import Flask, abort, jsonify, make_response, redirect, render_templat
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from . import dashboard, db, docinfo, invoices, logs, onedrive, updates, validation
+from . import dashboard, db, docinfo, icons, invoices, logs, onedrive, updates, validation
 
 log = logging.getLogger("tmexpenses.app")
 
@@ -69,9 +70,9 @@ class PrefixMiddleware:
         return [b"Not found\n"]
 
 
-def create_app(connect=None, onedrive_transport=None, release_fetch=None):
+def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_fetch=None):
     """`connect` is injectable so tests can hand in a connection to a scratch DB,
-    `onedrive_transport` so they can stand in for Microsoft, and `release_fetch` for GitHub."""
+    `onedrive_transport` so they can stand in for Microsoft, `release_fetch` for GitHub and `icon_fetch` for the provider icon's source."""
     app = Flask(__name__)
     logs.configure(app.logger, os.environ.get("LOG_LEVEL"))
     log = app.logger
@@ -102,6 +103,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None):
     update_check = updates.UpdateCheck(version, fetch=release_fetch,
                                        enabled=os.environ.get("UPDATE_CHECK", "1").strip() != "0")
     app.extensions["update_check"] = update_check
+    icon_cache = icons.IconCache(fetch=icon_fetch, enabled=os.environ.get("PROVIDER_ICONS", "1").strip() != "0")
     base_path = os.environ.get("BASE_PATH", "")
     if base_path:
         app.wsgi_app = PrefixMiddleware(app.wsgi_app, base_path)
@@ -134,14 +136,14 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None):
         )
         resp.headers["X-Content-Type-Options"] = "nosniff"
         resp.headers["Referrer-Policy"] = "same-origin"
-        resp.headers["Cache-Control"] = "no-store"
+        resp.headers.setdefault("Cache-Control", "no-store")
         return resp
 
     @app.context_processor
     def onedrive_flag():
         # `storage` is the provider the app is set up with: its name and icon for the pages. Another
         # provider (Google Drive, say) is another entry here, not another edit to every template.
-        storage = {"name": "OneDrive", "icon": url_for("static", filename="provider-onedrive.svg")} if drive else None
+        storage = {"name": "OneDrive", "icon": url_for("provider_icon", name="onedrive")} if drive else None
         return {"onedrive_enabled": drive is not None, "storage": storage}
 
     @app.context_processor
@@ -286,6 +288,20 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None):
             "vendor", "notes", "invoice_url")}
 
     # ---- routes ---------------------------------------------------------------
+
+    @app.get("/provider-icon/<name>")
+    def provider_icon(name):
+        """The storage provider's logo: fetched once from its public source and kept (see icons.py),
+        or the bundled drawing when that isn't possible. Browsers may keep it, unlike the pages."""
+        if drive is None or name not in icons.SOURCES:
+            abort(404)
+        fetched = icon_cache.get(name)
+        body = fetched or (Path(app.static_folder) / f"provider-{name}.svg").read_bytes()
+        resp = make_response(body)
+        resp.mimetype = "image/svg+xml"
+        # The bundled drawing is a stand-in: look again soon, so the real one shows once it can be fetched.
+        resp.headers["Cache-Control"] = "public, max-age=86400" if fetched else "public, max-age=300"
+        return resp
 
     @app.get("/healthz")
     def healthz():

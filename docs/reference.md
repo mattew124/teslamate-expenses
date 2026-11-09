@@ -21,6 +21,13 @@ it). GitHub sees your server's address and a `User-Agent` of `teslamate-expenses
 from your data is sent. If GitHub can't be reached, the footer simply shows the version and tries
 again later. Set `UPDATE_CHECK=0` in `.env` and restart to switch the check off.
 
+The OneDrive button on the expense form shows OneDrive's logo. The logo isn't shipped with the app: the
+first time it is needed, the server asks `cdn.jsdelivr.net` once for a pinned release of the Simple Icons
+set, checks that what comes back is a plain drawing, keeps it in memory and passes it to browsers. Nothing
+from your data is sent (jsDelivr sees your server's address). If it can't be reached, a plain cloud drawing
+that comes with the app is shown instead, and the server tries again later. Set `PROVIDER_ICONS=0` in
+`.env` and restart to never ask. OneDrive is a trademark of Microsoft Corporation.
+
 An installation on a release candidate (`0.3.0-rc1`) is told about newer candidates and the stable
 release that replaces them. One on a stable release is only told about stable releases.
 

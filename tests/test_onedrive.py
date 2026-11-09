@@ -150,13 +150,13 @@ def app_for(pg, admin, monkeypatch):
     monkeypatch.delenv("BASE_PATH", raising=False)
     monkeypatch.setenv("APP_TZ", "Australia/Brisbane")
 
-    def make(transport, key=KEY):
+    def make(transport, key=KEY, icon_fetch=None):
         if key is None:
             monkeypatch.delenv("EXPENSES_ENCRYPTION_KEY", raising=False)
         else:
             monkeypatch.setenv("EXPENSES_ENCRYPTION_KEY", key)
         app = create_app(connect=lambda: psycopg.connect(pg.app_url, row_factory=dict_row),
-                         onedrive_transport=transport)
+                         onedrive_transport=transport, icon_fetch=icon_fetch)
         app.testing = True
         return app.test_client()
     return make
@@ -828,7 +828,47 @@ def test_a_folder_with_more_than_a_page_of_children_is_followed():
 def test_the_add_form_names_and_pictures_the_provider(client, ms):
     sign_in(client, ms)
     page = client.get("/new").data.decode()
-    assert re.search(r'<img src="[^"]*/static/provider-onedrive\.svg" alt="" class="provider-icon"', page)
+    assert re.search(r'<img src="[^"]*/provider-icon/onedrive" alt="" class="provider-icon"', page)
     assert "Choose from OneDrive" in page and "Choose an invoice from OneDrive" in page
-    icon = client.get("/static/provider-onedrive.svg")
-    assert icon.status_code == 200 and icon.mimetype == "image/svg+xml" and b"<script" not in icon.data
+
+
+def icon_app(app_for, ms, fetch, monkeypatch, enabled="1"):
+    monkeypatch.setenv("PROVIDER_ICONS", enabled)
+    return app_for(ms, icon_fetch=fetch)
+
+
+def test_the_icon_comes_from_the_source_and_is_cached_by_browsers(app_for, ms, monkeypatch):
+    from tests.test_icons import Fetch
+    fetch = Fetch()
+    c = icon_app(app_for, ms, fetch, monkeypatch)
+    resp = c.get("/provider-icon/onedrive")
+    assert resp.status_code == 200 and resp.mimetype == "image/svg+xml" and b'fill="#0078D4"' in resp.data
+    assert "max-age" in resp.headers["Cache-Control"] and "no-store" not in resp.headers["Cache-Control"]
+    c.get("/provider-icon/onedrive")
+    assert len(fetch.urls) == 1
+
+
+def test_without_the_source_the_bundled_drawing_is_used(app_for, ms, monkeypatch):
+    from tests.test_icons import Fetch
+    from tmexpenses import icons
+    c = icon_app(app_for, ms, Fetch(error=icons.IconUnavailable("offline")), monkeypatch)
+    resp = c.get("/provider-icon/onedrive")
+    assert resp.status_code == 200 and resp.mimetype == "image/svg+xml" and b"<svg" in resp.data
+    assert "no-store" not in resp.headers["Cache-Control"] and "max-age=" in resp.headers["Cache-Control"]
+    assert int(re.search(r"max-age=(\d+)", resp.headers["Cache-Control"]).group(1)) < 3600   # the real one may arrive soon
+
+
+def test_switching_the_icons_off_never_fetches(app_for, ms, monkeypatch):
+    from tests.test_icons import Fetch
+    fetch = Fetch()
+    c = icon_app(app_for, ms, fetch, monkeypatch, enabled="0")
+    assert c.get("/provider-icon/onedrive").status_code == 200 and fetch.urls == []
+
+
+def test_an_unknown_provider_icon_is_404(app_for, ms, monkeypatch):
+    from tests.test_icons import Fetch
+    assert icon_app(app_for, ms, Fetch(), monkeypatch).get("/provider-icon/dropbox").status_code == 404
+
+
+def test_no_icon_route_without_a_storage_provider(app_for, ms):
+    assert app_for(ms, key=None).get("/provider-icon/onedrive").status_code == 404
