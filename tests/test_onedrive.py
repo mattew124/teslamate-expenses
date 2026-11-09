@@ -459,7 +459,7 @@ def test_onedrive_events_are_logged_without_secrets(client, ms, admin, caplog):
     # File names can hold the vendor, and appear at debug only.
     assert "Tyre Shop" not in "\n".join(r.getMessage() for r in caplog.records if r.levelno >= logging.INFO)
     ms.upload_status = 403
-    client.post("/new", data=with_pdf(form(admin)), headers=ORIGIN)
+    client.post("/new", data=with_pdf({**form(admin), "confirm_duplicate": "1"}), headers=ORIGIN)
     assert any(r.levelno == logging.WARNING and "upload" in r.getMessage() for r in caplog.records)
     client.post("/onedrive/disconnect", headers=ORIGIN)
     assert "OneDrive disconnected" in "\n".join(caplog.messages)
