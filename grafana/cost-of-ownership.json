@@ -11,7 +11,7 @@
   "version": 1,
   "refresh": "",
   "time": {
-    "from": "now-5y",
+    "from": "now-10y",
     "to": "now"
   },
   "timezone": "browser",
@@ -70,6 +70,63 @@
         "current": {}
       },
       {
+        "name": "category",
+        "label": "Category",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "TeslaMate"
+        },
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "options": [],
+        "regex": "",
+        "query": "SELECT name FROM (SELECT name, sort_order AS s FROM expenses.category UNION ALL SELECT 'Charging', 1000) x ORDER BY s, name",
+        "definition": "SELECT name FROM (SELECT name, sort_order AS s FROM expenses.category UNION ALL SELECT 'Charging', 1000) x ORDER BY s, name",
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "description": "Limits the headline figures (cost totals, per km, per day, per month) to these categories. Charging counts as its own category. Distance and time owned are not affected."
+      },
+      {
+        "name": "period",
+        "label": "Period",
+        "type": "custom",
+        "query": "week,month,year",
+        "multi": false,
+        "includeAll": false,
+        "description": "How the cost charts group spending: by week, month or year.",
+        "current": {
+          "selected": false,
+          "text": "month",
+          "value": "month"
+        },
+        "options": [
+          {
+            "selected": false,
+            "text": "week",
+            "value": "week"
+          },
+          {
+            "selected": true,
+            "text": "month",
+            "value": "month"
+          },
+          {
+            "selected": false,
+            "text": "year",
+            "value": "year"
+          }
+        ]
+      },
+      {
         "name": "expenses_url",
         "label": "Expenses URL",
         "type": "query",
@@ -92,7 +149,7 @@
         "label": "Timezone",
         "type": "textbox",
         "query": "UTC",
-        "description": "IANA timezone for month buckets, e.g. Australia/Brisbane. Save the dashboard to keep it.",
+        "description": "IANA timezone for month buckets. Set from APP_TZ in the compose file; for a hand-imported dashboard, change it under Settings → Variables.",
         "current": {
           "selected": false,
           "text": "UTC",
@@ -104,7 +161,8 @@
             "text": "UTC",
             "value": "UTC"
           }
-        ]
+        ],
+        "hide": 2
       }
     ]
   },
@@ -113,7 +171,7 @@
       "id": 1,
       "type": "stat",
       "title": "Total cost",
-      "description": "Purchase + running expenses + charging. All-time (ignores the dashboard time range).",
+      "description": "Purchase + running expenses + charging. All-time (ignores the dashboard time range). Follows the Category filter.",
       "datasource": {
         "type": "grafana-postgresql-datasource",
         "uid": "TeslaMate"
@@ -137,7 +195,7 @@
               }
             ]
           },
-          "unit": "prefix:$",
+          "unit": "currency:financial:$",
           "decimals": 0
         },
         "overrides": []
@@ -165,7 +223,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT tco FROM expenses.ownership WHERE car_id = $car_id",
+          "rawSql": "SELECT ((SELECT COALESCE(SUM(e.amount), 0) FROM expenses.expense e JOIN expenses.category c ON c.id = e.category_id WHERE e.car_id = $car_id AND c.kind = 'purchase' AND c.name IN ($category)) + (SELECT COALESCE(SUM(e.amount), 0) FROM expenses.expense e JOIN expenses.category c ON c.id = e.category_id WHERE e.car_id = $car_id AND c.kind = 'running' AND c.name IN ($category)) + (SELECT CASE WHEN 'Charging' IN ($category) THEN charging_total ELSE 0 END FROM expenses.ownership WHERE car_id = $car_id))",
           "refId": "A"
         }
       ]
@@ -174,7 +232,7 @@
       "id": 2,
       "type": "stat",
       "title": "Purchase",
-      "description": "Expenses in capital-cost categories (Initial purchase). All-time (ignores the dashboard time range).",
+      "description": "Expenses in capital-cost categories (Initial purchase). All-time (ignores the dashboard time range). Follows the Category filter.",
       "datasource": {
         "type": "grafana-postgresql-datasource",
         "uid": "TeslaMate"
@@ -198,7 +256,7 @@
               }
             ]
           },
-          "unit": "prefix:$",
+          "unit": "currency:financial:$",
           "decimals": 0
         },
         "overrides": []
@@ -226,7 +284,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT purchase_total FROM expenses.ownership WHERE car_id = $car_id",
+          "rawSql": "SELECT (SELECT COALESCE(SUM(e.amount), 0) FROM expenses.expense e JOIN expenses.category c ON c.id = e.category_id WHERE e.car_id = $car_id AND c.kind = 'purchase' AND c.name IN ($category))",
           "refId": "A"
         }
       ]
@@ -235,7 +293,7 @@
       "id": 3,
       "type": "stat",
       "title": "Running",
-      "description": "Insurance, registration, tyres, filters, alignment, etc. All-time (ignores the dashboard time range).",
+      "description": "Insurance, registration, tyres, filters, alignment, etc. All-time (ignores the dashboard time range). Follows the Category filter.",
       "datasource": {
         "type": "grafana-postgresql-datasource",
         "uid": "TeslaMate"
@@ -259,7 +317,7 @@
               }
             ]
           },
-          "unit": "prefix:$",
+          "unit": "currency:financial:$",
           "decimals": 0
         },
         "overrides": []
@@ -287,7 +345,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT running_total FROM expenses.ownership WHERE car_id = $car_id",
+          "rawSql": "SELECT (SELECT COALESCE(SUM(e.amount), 0) FROM expenses.expense e JOIN expenses.category c ON c.id = e.category_id WHERE e.car_id = $car_id AND c.kind = 'running' AND c.name IN ($category))",
           "refId": "A"
         }
       ]
@@ -296,7 +354,7 @@
       "id": 4,
       "type": "stat",
       "title": "Charging",
-      "description": "Sum of TeslaMate's charging_processes.cost. All-time (ignores the dashboard time range).",
+      "description": "Sum of TeslaMate's charging_processes.cost. All-time (ignores the dashboard time range). Follows the Category filter.",
       "datasource": {
         "type": "grafana-postgresql-datasource",
         "uid": "TeslaMate"
@@ -320,7 +378,7 @@
               }
             ]
           },
-          "unit": "prefix:$",
+          "unit": "currency:financial:$",
           "decimals": 0
         },
         "overrides": []
@@ -348,7 +406,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT charging_total FROM expenses.ownership WHERE car_id = $car_id",
+          "rawSql": "SELECT (SELECT CASE WHEN 'Charging' IN ($category) THEN charging_total ELSE 0 END FROM expenses.ownership WHERE car_id = $car_id)",
           "refId": "A"
         }
       ]
@@ -381,7 +439,7 @@
               }
             ]
           },
-          "unit": "suffix: km",
+          "unit": "currency:financial: km:suffix",
           "decimals": 0
         },
         "overrides": []
@@ -417,8 +475,8 @@
     {
       "id": 6,
       "type": "stat",
-      "title": "Months",
-      "description": "Since the purchase expense (or the first TeslaMate position).",
+      "title": "Time owned",
+      "description": "Time since purchase (the first expense in a capital-cost category), else since TeslaMate's first position. Not affected by the Category filter.",
       "datasource": {
         "type": "grafana-postgresql-datasource",
         "uid": "TeslaMate"
@@ -442,8 +500,7 @@
               }
             ]
           },
-          "unit": "none",
-          "decimals": 1
+          "unit": "none"
         },
         "overrides": []
       },
@@ -457,7 +514,7 @@
           "calcs": [
             "lastNotNull"
           ],
-          "fields": "",
+          "fields": "/.*/",
           "values": false
         }
       },
@@ -470,7 +527,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT GREATEST(EXTRACT(EPOCH FROM now() - owned_since) / 2629746, 0) FROM expenses.ownership WHERE car_id = $car_id",
+          "rawSql": "SELECT CASE WHEN y > 0 THEN y || CASE WHEN y = 1 THEN ' year' ELSE ' years' END || CASE WHEN m > 0 THEN ', ' || m || CASE WHEN m = 1 THEN ' month' ELSE ' months' END ELSE '' END ELSE m || CASE WHEN m = 1 THEN ' month' ELSE ' months' END END FROM (SELECT EXTRACT(YEAR FROM a)::int AS y, EXTRACT(MONTH FROM a)::int AS m FROM (SELECT age(now(), owned_since) AS a FROM expenses.ownership WHERE car_id = $car_id) x) t",
           "refId": "A"
         }
       ]
@@ -479,7 +536,7 @@
       "id": 7,
       "type": "stat",
       "title": "Cost per km — all-in",
-      "description": "Total cost of ownership ÷ distance owned. Includes the purchase price. All-time (ignores the dashboard time range).",
+      "description": "Total cost of ownership ÷ distance owned. Includes the purchase price. All-time (ignores the dashboard time range). Follows the Category filter.",
       "datasource": {
         "type": "grafana-postgresql-datasource",
         "uid": "TeslaMate"
@@ -503,7 +560,7 @@
               }
             ]
           },
-          "unit": "prefix:$",
+          "unit": "currency:financial:$",
           "decimals": 2
         },
         "overrides": []
@@ -531,7 +588,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT tco / NULLIF(distance_km, 0) FROM expenses.ownership WHERE car_id = $car_id",
+          "rawSql": "SELECT ((SELECT COALESCE(SUM(e.amount), 0) FROM expenses.expense e JOIN expenses.category c ON c.id = e.category_id WHERE e.car_id = $car_id AND c.kind = 'purchase' AND c.name IN ($category)) + (SELECT COALESCE(SUM(e.amount), 0) FROM expenses.expense e JOIN expenses.category c ON c.id = e.category_id WHERE e.car_id = $car_id AND c.kind = 'running' AND c.name IN ($category)) + (SELECT CASE WHEN 'Charging' IN ($category) THEN charging_total ELSE 0 END FROM expenses.ownership WHERE car_id = $car_id)) / NULLIF((SELECT distance_km FROM expenses.ownership WHERE car_id = $car_id), 0)",
           "refId": "A"
         }
       ]
@@ -540,7 +597,7 @@
       "id": 8,
       "type": "stat",
       "title": "Cost per km — running",
-      "description": "(Running expenses + charging) ÷ distance owned. Excludes the purchase price. All-time (ignores the dashboard time range).",
+      "description": "(Running expenses + charging) ÷ distance owned. Excludes the purchase price. All-time (ignores the dashboard time range). Follows the Category filter.",
       "datasource": {
         "type": "grafana-postgresql-datasource",
         "uid": "TeslaMate"
@@ -564,7 +621,7 @@
               }
             ]
           },
-          "unit": "prefix:$",
+          "unit": "currency:financial:$",
           "decimals": 2
         },
         "overrides": []
@@ -592,7 +649,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT (running_total + charging_total) / NULLIF(distance_km, 0) FROM expenses.ownership WHERE car_id = $car_id",
+          "rawSql": "SELECT ((SELECT COALESCE(SUM(e.amount), 0) FROM expenses.expense e JOIN expenses.category c ON c.id = e.category_id WHERE e.car_id = $car_id AND c.kind = 'running' AND c.name IN ($category)) + (SELECT CASE WHEN 'Charging' IN ($category) THEN charging_total ELSE 0 END FROM expenses.ownership WHERE car_id = $car_id)) / NULLIF((SELECT distance_km FROM expenses.ownership WHERE car_id = $car_id), 0)",
           "refId": "A"
         }
       ]
@@ -601,7 +658,7 @@
       "id": 9,
       "type": "stat",
       "title": "Running cost per month",
-      "description": "(Running expenses + charging) ÷ months owned. Excludes the purchase price. All-time (ignores the dashboard time range).",
+      "description": "(Running expenses + charging) ÷ months owned. Excludes the purchase price. All-time (ignores the dashboard time range). Follows the Category filter.",
       "datasource": {
         "type": "grafana-postgresql-datasource",
         "uid": "TeslaMate"
@@ -625,7 +682,7 @@
               }
             ]
           },
-          "unit": "prefix:$",
+          "unit": "currency:financial:$",
           "decimals": 0
         },
         "overrides": []
@@ -653,7 +710,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT (running_total + charging_total) / GREATEST(EXTRACT(EPOCH FROM now() - owned_since) / 2629746, 1) FROM expenses.ownership WHERE car_id = $car_id",
+          "rawSql": "SELECT ((SELECT COALESCE(SUM(e.amount), 0) FROM expenses.expense e JOIN expenses.category c ON c.id = e.category_id WHERE e.car_id = $car_id AND c.kind = 'running' AND c.name IN ($category)) + (SELECT CASE WHEN 'Charging' IN ($category) THEN charging_total ELSE 0 END FROM expenses.ownership WHERE car_id = $car_id)) / GREATEST(EXTRACT(EPOCH FROM now() - (SELECT owned_since FROM expenses.ownership WHERE car_id = $car_id)) / 2629746, 1)",
           "refId": "A"
         }
       ]
@@ -662,7 +719,7 @@
       "id": 10,
       "type": "stat",
       "title": "TCO per month",
-      "description": "Total cost of ownership ÷ months owned. All-time (ignores the dashboard time range).",
+      "description": "Total cost of ownership ÷ months owned. All-time (ignores the dashboard time range). Follows the Category filter.",
       "datasource": {
         "type": "grafana-postgresql-datasource",
         "uid": "TeslaMate"
@@ -686,7 +743,7 @@
               }
             ]
           },
-          "unit": "prefix:$",
+          "unit": "currency:financial:$",
           "decimals": 0
         },
         "overrides": []
@@ -714,7 +771,190 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT tco / GREATEST(EXTRACT(EPOCH FROM now() - owned_since) / 2629746, 1) FROM expenses.ownership WHERE car_id = $car_id",
+          "rawSql": "SELECT ((SELECT COALESCE(SUM(e.amount), 0) FROM expenses.expense e JOIN expenses.category c ON c.id = e.category_id WHERE e.car_id = $car_id AND c.kind = 'purchase' AND c.name IN ($category)) + (SELECT COALESCE(SUM(e.amount), 0) FROM expenses.expense e JOIN expenses.category c ON c.id = e.category_id WHERE e.car_id = $car_id AND c.kind = 'running' AND c.name IN ($category)) + (SELECT CASE WHEN 'Charging' IN ($category) THEN charging_total ELSE 0 END FROM expenses.ownership WHERE car_id = $car_id)) / GREATEST(EXTRACT(EPOCH FROM now() - (SELECT owned_since FROM expenses.ownership WHERE car_id = $car_id)) / 2629746, 1)",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "stat",
+      "title": "Running cost per day",
+      "description": "(Running + charging) ÷ days owned. All-time (ignores the dashboard time range). Follows the Category filter.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "TeslaMate"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 0,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "noValue": "–",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "orange",
+                "value": null
+              }
+            ]
+          },
+          "unit": "currency:financial:$",
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "TeslaMate"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT ((SELECT COALESCE(SUM(e.amount), 0) FROM expenses.expense e JOIN expenses.category c ON c.id = e.category_id WHERE e.car_id = $car_id AND c.kind = 'running' AND c.name IN ($category)) + (SELECT CASE WHEN 'Charging' IN ($category) THEN charging_total ELSE 0 END FROM expenses.ownership WHERE car_id = $car_id)) / GREATEST(EXTRACT(EPOCH FROM now() - (SELECT owned_since FROM expenses.ownership WHERE car_id = $car_id)) / 86400, 1)",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "type": "stat",
+      "title": "TCO per day",
+      "description": "Total cost ÷ days owned. All-time (ignores the dashboard time range). Follows the Category filter.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "TeslaMate"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 8,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "noValue": "–",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "orange",
+                "value": null
+              }
+            ]
+          },
+          "unit": "currency:financial:$",
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "TeslaMate"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT ((SELECT COALESCE(SUM(e.amount), 0) FROM expenses.expense e JOIN expenses.category c ON c.id = e.category_id WHERE e.car_id = $car_id AND c.kind = 'purchase' AND c.name IN ($category)) + (SELECT COALESCE(SUM(e.amount), 0) FROM expenses.expense e JOIN expenses.category c ON c.id = e.category_id WHERE e.car_id = $car_id AND c.kind = 'running' AND c.name IN ($category)) + (SELECT CASE WHEN 'Charging' IN ($category) THEN charging_total ELSE 0 END FROM expenses.ownership WHERE car_id = $car_id)) / GREATEST(EXTRACT(EPOCH FROM now() - (SELECT owned_since FROM expenses.ownership WHERE car_id = $car_id)) / 86400, 1)",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "type": "stat",
+      "title": "Distance per day",
+      "description": "Distance ÷ days owned. All-time (ignores the dashboard time range).",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "TeslaMate"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 16,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "noValue": "–",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "orange",
+                "value": null
+              }
+            ]
+          },
+          "unit": "currency:financial: km:suffix",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "TeslaMate"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT distance_km / GREATEST(EXTRACT(EPOCH FROM now() - owned_since) / 86400, 1) FROM expenses.ownership WHERE car_id = $car_id",
           "refId": "A"
         }
       ]
@@ -732,11 +972,11 @@
         "h": 10,
         "w": 8,
         "x": 0,
-        "y": 8
+        "y": 12
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "prefix:$",
+          "unit": "currency:financial:$",
           "decimals": 0
         },
         "overrides": [
@@ -798,7 +1038,7 @@
     {
       "id": 12,
       "type": "timeseries",
-      "title": "Monthly running costs",
+      "title": "Running costs per $period",
       "datasource": {
         "type": "grafana-postgresql-datasource",
         "uid": "TeslaMate"
@@ -808,11 +1048,11 @@
         "h": 10,
         "w": 16,
         "x": 8,
-        "y": 8
+        "y": 12
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "prefix:$",
+          "unit": "currency:financial:$",
           "decimals": 0,
           "custom": {
             "drawStyle": "bars",
@@ -867,7 +1107,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT date_trunc('month', e.occurred_at AT TIME ZONE '$tz') AS time, c.name AS metric, SUM(e.amount) AS value\nFROM expenses.expense e JOIN expenses.category c ON c.id = e.category_id\nWHERE e.car_id = $car_id AND c.kind = 'running' AND $__timeFilter(e.occurred_at)\nGROUP BY 1, 2\nUNION ALL\nSELECT date_trunc('month', (cp.start_date AT TIME ZONE 'UTC') AT TIME ZONE '$tz'), 'Charging', SUM(cp.cost)\nFROM charging_processes cp\nWHERE cp.car_id = $car_id AND $__timeFilter(cp.start_date)\nGROUP BY 1 HAVING SUM(cp.cost) IS NOT NULL\nORDER BY 1",
+          "rawSql": "SELECT date_trunc('$period', e.occurred_at AT TIME ZONE '$tz') AS time, c.name AS metric, SUM(e.amount) AS value\nFROM expenses.expense e JOIN expenses.category c ON c.id = e.category_id\nWHERE e.car_id = $car_id AND c.kind = 'running' AND $__timeFilter(e.occurred_at)\nGROUP BY 1, 2\nUNION ALL\nSELECT date_trunc('$period', (cp.start_date AT TIME ZONE 'UTC') AT TIME ZONE '$tz'), 'Charging', SUM(cp.cost)\nFROM charging_processes cp\nWHERE cp.car_id = $car_id AND $__timeFilter(cp.start_date)\nGROUP BY 1 HAVING SUM(cp.cost) IS NOT NULL\nORDER BY 1",
           "refId": "A"
         }
       ]
@@ -880,16 +1120,16 @@
         "type": "grafana-postgresql-datasource",
         "uid": "TeslaMate"
       },
-      "description": "Running total by month: purchase + expenses + charging, all history (the time range only zooms the chart).",
+      "description": "Running total of everything spent, stepping up once per $period.",
       "gridPos": {
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 18
+        "y": 22
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "prefix:$",
+          "unit": "currency:financial:$",
           "decimals": 0,
           "custom": {
             "drawStyle": "line",
@@ -920,7 +1160,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "WITH m AS (\n  SELECT date_trunc('month', e.occurred_at AT TIME ZONE '$tz') AS t, SUM(e.amount) AS a\n  FROM expenses.expense e WHERE e.car_id = $car_id GROUP BY 1\n  UNION ALL\n  SELECT date_trunc('month', (cp.start_date AT TIME ZONE 'UTC') AT TIME ZONE '$tz'), SUM(cp.cost)\n  FROM charging_processes cp WHERE cp.car_id = $car_id GROUP BY 1\n)\nSELECT t AS time, SUM(SUM(a)) OVER (ORDER BY t) AS \"Cumulative cost\"\nFROM m WHERE a IS NOT NULL GROUP BY t ORDER BY t",
+          "rawSql": "WITH m AS (\n  SELECT date_trunc('$period', e.occurred_at AT TIME ZONE '$tz') AS t, SUM(e.amount) AS a\n  FROM expenses.expense e WHERE e.car_id = $car_id GROUP BY 1\n  UNION ALL\n  SELECT date_trunc('$period', (cp.start_date AT TIME ZONE 'UTC') AT TIME ZONE '$tz'), SUM(cp.cost)\n  FROM charging_processes cp WHERE cp.car_id = $car_id GROUP BY 1\n)\nSELECT t AS time, SUM(SUM(a)) OVER (ORDER BY t) AS \"Cumulative cost\"\nFROM m WHERE a IS NOT NULL GROUP BY t ORDER BY t",
           "refId": "A"
         }
       ]
@@ -938,7 +1178,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 27
+        "y": 31
       },
       "fieldConfig": {
         "defaults": {
@@ -956,7 +1196,7 @@
             "properties": [
               {
                 "id": "unit",
-                "value": "prefix:$"
+                "value": "currency:financial:$"
               },
               {
                 "id": "decimals",
@@ -972,7 +1212,7 @@
             "properties": [
               {
                 "id": "unit",
-                "value": "suffix: km"
+                "value": "currency:financial: km:suffix"
               },
               {
                 "id": "decimals",

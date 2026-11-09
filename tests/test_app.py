@@ -429,3 +429,20 @@ def test_saving_the_default_file_name_keeps_following_the_default(client, admin)
     client.post("/settings", data=data, headers=ORIGIN)
     assert admin.execute("SELECT invoice_name_format AS n FROM expenses.setting").fetchone()["n"] == "%date - %category"
 
+
+
+def test_saving_a_purchase_before_the_first_data_moves_the_dashboard_start(pg, admin, monkeypatch, tmp_path):
+    """The initial purchase is almost always older than TeslaMate's first record."""
+    import json
+    monkeypatch.delenv("BASE_PATH", raising=False)
+    monkeypatch.setenv("APP_TZ", "Australia/Brisbane")
+    monkeypatch.setenv("DASHBOARD_DIR", str(tmp_path))
+    app = create_app(connect=lambda: psycopg.connect(pg.app_url, row_factory=dict_row))
+    app.testing = True
+    target = tmp_path / "cost-of-ownership.json"
+    before = json.loads(target.read_text())["time"]["from"]
+    resp = app.test_client().post("/new", headers=ORIGIN, data=form(
+        admin, category_id=str(category_id(admin, "Initial purchase")), date="2019-03-05", amount="60,000"))
+    assert resp.status_code == 303
+    after = json.loads(target.read_text())["time"]["from"]
+    assert after == "2019-03-01T00:00:00.000Z" and after < before

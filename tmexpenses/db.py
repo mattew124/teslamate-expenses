@@ -167,6 +167,15 @@ def totals(conn, category_id=None):
     ).fetchone()
 
 
+def first_activity(conn):
+    """The earliest thing the dashboard can show: first expense (the purchase, usually) or TeslaMate position.
+    Reads only what the app may read, so it works with the least-privilege role too."""
+    return conn.execute(
+        "SELECT LEAST((SELECT MIN(date AT TIME ZONE 'UTC') FROM public.positions),"
+        " (SELECT MIN(occurred_at) FROM expenses.expense)) AS first"
+    ).fetchone()["first"]
+
+
 def get_expense(conn, expense_id):
     return conn.execute(f"{_SELECT} WHERE e.id = %s", (expense_id,)).fetchone()
 

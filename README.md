@@ -29,7 +29,7 @@
 - **Postgres schema** `expenses` inside the TeslaMate database, so Grafana joins it to
   TeslaMate's charging costs and odometer with no second datasource.
 - **Grafana dashboard** "Cost of Ownership": total cost of ownership, purchase vs running
-  vs charging, cost per km and per month, monthly spend by category, cumulative cost, and
+  vs charging, cost per km, per day and per month, monthly spend by category, cumulative cost, and
   a table of every expense with a clickable invoice link.
 
 ```

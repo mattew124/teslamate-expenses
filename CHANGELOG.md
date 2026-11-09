@@ -7,7 +7,10 @@ Each entry says what an installer must do to upgrade. Where nothing is said, pul
 
 ## Unreleased
 
-Nothing yet.
+- Dashboard: thousands separators and decimal marks that follow the browser's language, with fixed
+  decimals, and cost and distance per day. A Period box (week, month or year) for the cost charts, a time range that starts at your earliest
+  data instead of a fixed five years, a Category filter for the headline figures, and "Months" is now "Time owned", in years and months.
+  The timezone box is gone: the timezone comes from `APP_TZ`.
 
 ## 0.2.0-rc2 - 2026-11-10
 

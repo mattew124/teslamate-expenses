@@ -73,3 +73,17 @@ def test_unwritable_dashboard_dir_warns_but_the_app_starts(tmp_path, monkeypatch
         assert any("dashboard" in m.lower() for m in caplog.messages)
     finally:
         locked.chmod(0o700)
+
+
+def test_render_starts_the_time_range_at_the_earliest_data():
+    from datetime import datetime, timezone
+    dash = dashboard.render("UTC", "", start=datetime(2023, 11, 14, 9, 30, tzinfo=timezone.utc))
+    assert dash["time"] == {"from": "2023-11-01T00:00:00.000Z", "to": "now"}
+    assert dashboard.render("UTC", "")["time"] == SOURCE["time"]
+
+
+def test_period_variable_drives_the_bucketed_charts():
+    assert [o["value"] for o in var(SOURCE, "period")["options"]] == ["week", "month", "year"]
+    for p in SOURCE["panels"]:
+        if p["title"].startswith(("Running costs per", "Cumulative")):
+            assert "date_trunc('$period'" in p["targets"][0]["rawSql"]

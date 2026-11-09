@@ -81,12 +81,25 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None):
         else:
             log.info("SKIP_MIGRATE=1: not touching the schema")
     dashboard_dir = os.environ.get("DASHBOARD_DIR")
-    if dashboard_dir:
+
+    def refresh_dashboard():
+        """Write the dashboard with a time range that starts at the earliest data. Run on start and
+        after every expense change, so a purchase dated before TeslaMate's first record shows at once."""
+        if not dashboard_dir:
+            return
         try:
-            wrote = dashboard.export(dashboard_dir, tz, os.environ.get("BASE_PATH", "").rstrip("/"))
+            try:
+                with connect() as conn:
+                    start = db.first_activity(conn)
+            except Exception as exc:    # no data yet, or no database: Grafana's own default range then
+                log.info("Dashboard time range left at its default (%s)", exc)
+                start = None
+            wrote = dashboard.export(dashboard_dir, tz, os.environ.get("BASE_PATH", "").rstrip("/"), start=start)
             log.info("Grafana dashboard %s in %s", "written" if wrote else "already up to date", dashboard_dir)
         except OSError as exc:
             log.warning("Could not write the Grafana dashboard to %s: %s", dashboard_dir, exc)
+
+    refresh_dashboard()
     # Room for the largest PDF plus the rest of the form.
     app.config["MAX_CONTENT_LENGTH"] = validation.MAX_PDF_BYTES + 1024 * 1024
     # EXPENSES_ENCRYPTION_KEY turns OneDrive on; everything else is set up in the UI.
@@ -316,6 +329,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None):
             return render_template("form.html", **form_context(form_values(request.form), errors)), 400
         with connect() as conn:
             expense_id = db.insert_expense(conn, values)
+        refresh_dashboard()
         log.info("expense %s saved (car %s, category %s)", expense_id, values["car_id"], values["category_id"])
         return redirect(url_for("index", msg="saved"), 303)
 
@@ -349,6 +363,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None):
         with connect() as conn:
             if not db.update_expense(conn, expense_id, values):
                 abort(404)
+        refresh_dashboard()
         log.info("expense %s updated", expense_id)
         return redirect(url_for("index", msg="updated"), 303)
 
@@ -357,6 +372,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None):
         with connect() as conn:
             if not db.delete_expense(conn, expense_id):
                 abort(404)
+        refresh_dashboard()
         log.info("expense %s deleted", expense_id)
         return redirect(url_for("index", msg="deleted"), 303)
 
@@ -847,6 +863,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None):
             imported.append((row, values))
         log.debug("import confirm car=%d rows=%d imported=%d skipped_known=%d renamed=%d rename_failed=%d", car_id,
                   len(chosen), len(imported), len(chosen) - len(imported), renamed, rename_failed)
+        refresh_dashboard()
         learn_from(imported)
         return redirect(url_for("index", msg="imported", n=len(imported), renamed=renamed,
                                 rename_failed=rename_failed), 303)
