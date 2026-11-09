@@ -274,7 +274,8 @@ Currency is shown as `$` and distance in km.
   (`debug`, `info` the default, `warning`, `error`; set in `.env`, restart to change) sets both.
   `info` records startup, schema changes, expenses saved, updated or deleted, and OneDrive
   sign-in and upload results. `debug` adds detail such as retries. Tokens, secrets, vendors,
-  notes and amounts are never logged.
+  notes and amounts are never logged, except that file names, which can contain a vendor,
+  appear at `debug`.
 - **Timezone.** Date and time are entered in `APP_TZ` and stored as `timestamptz`.
   TeslaMate's `positions.date` is naive UTC; the odometer lookup converts before comparing.
 - POSTs must carry a same-origin `Origin`/`Referer` header (CSRF guard). Plain `curl` needs
