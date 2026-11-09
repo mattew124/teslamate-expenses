@@ -82,3 +82,5 @@ ul.category-list li { display: flex; justify-content: space-between; align-items
 ul.category-list form.row { align-items: end; }
 ul.learned-list li { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: .4rem; }
 label.inline { display: flex; gap: .4rem; align-items: baseline; }
+dl.aliases { display: grid; grid-template-columns: max-content 1fr; gap: .2rem 1rem; margin: 0; }
+dl.aliases dd { margin: 0; }

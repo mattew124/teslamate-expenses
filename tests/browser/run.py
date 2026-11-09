@@ -46,6 +46,16 @@ def add_expense(page, amount="123.45", category="Tyres"):
     page.wait_for_url(re.compile(r"msg=saved"))
 
 
+def test_large_pdf_is_accepted(page):
+    """Uploads over 500 KB are spooled to a temp file. The container's root is read-only, so
+    this fails with 'No usable temporary directory' unless TMPDIR points at the tmpfs."""
+    big = b"%PDF-1.4\n" + b"0" * (900 * 1024) + b"\n%%EOF\n"
+    resp = page.request.post(UI + "api/prefill", headers={"Origin": "http://expenses-dev:8080"}, multipart={
+        "invoice_file": {"name": "large.pdf", "mimeType": "application/pdf", "buffer": big}})
+    assert resp.status == 200, f"HTTP {resp.status}: a large PDF upload crashed the app"
+    assert set(resp.json()) >= {"date", "amount", "vendor", "category_id", "odometer_km"}
+
+
 def remove_marked(page):
     page.goto(UI)
     while page.locator(f"tr:has-text('{MARKER}') a:has-text('Edit')").count():
@@ -269,6 +279,7 @@ def main():
         step("no sideways scroll on a phone", test_phone_layout_has_no_sideways_scroll, page)
         step("header stays tidy on a phone", test_header_stays_tidy_on_a_phone, page)
         step("phone list shows amount, invoice and edit", test_list_shows_key_fields_on_a_phone, page)
+        step("a PDF over 500 KB uploads (read-only container)", test_large_pdf_is_accepted, page)
         step("OneDrive page and upload field", test_onedrive_page, page)
         step("Connect OneDrive goes to Microsoft", test_connect_reaches_microsoft, page)
         step("folder browser (read-only)", test_folder_browser, page)

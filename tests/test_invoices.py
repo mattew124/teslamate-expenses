@@ -164,3 +164,79 @@ def test_the_filename_date_beats_a_learned_label():
 def test_learned_vendor_sets_the_category_over_the_folder_but_not_the_filename():
     assert invoices.propose("Registration", "scan.pdf", GARAGE, CATS, LEARNED)["category"] == "Tyres"
     assert invoices.propose("Registration", "261024 - Insurance.pdf", GARAGE, CATS, LEARNED)["category"] == "Insurance"
+
+
+# ---- documents that real-world testing showed the first rules missed ------------------
+
+SCHEDULE = """
+Example Cover
+Policy Schedule & Tax Invoice
+   Period of insurance                              From 9 February 2026 to 9 February 2027 at 4:00pm
+   Basic excess                                     $1,500
+Example Insurer Australia Limited ABN 11 111 111 111, AFS Licence No 123456            01 Feb 2026,22:42:09 (AEST)
+   Total for Example Cover       $XXX        $XXX         $XXX          $XXX
+                                       Annual Premium                       GST                Stamp Duty   Total Annual Premium
+        Example Cover                      $1,342.03                     $134.20                $132.86           $1,609.09
+Your insurance is arranged by us. The insurance product covers the vehicle. Insurance excludes wear.
+"""
+
+RENEWAL = """
+   VEHICLE REGISTRATION                                  Due date:            20 November 2025
+   Amount due                         6 months                      12 months
+   ON or BEFORE due date              $384.30                       $749.05
+   Next registration expiry date                                    20/05/2026              20/11/2026
+   Total Due          $384.30                  $749.05
+"""
+
+
+def test_trailing_filename_date():
+    got = invoices.propose("", "Registration_Renewal_Notice_998IH3_251010.pdf", "", CATS)
+    assert got["date"] == _date(2025, 10, 10) and got["category"] == "Registration"
+
+
+def test_leading_filename_date_still_wins_over_a_trailing_one():
+    assert invoices.propose("", "261024 - x_251010.pdf", "", CATS)["date"] == _date(2026, 10, 24)
+
+
+def test_expiry_and_due_dates_are_not_the_invoice_date():
+    assert invoices.propose("", "notice.pdf", RENEWAL, CATS)["date"] is None
+
+
+def test_long_month_issue_dates_are_read():
+    assert invoices.propose("", "x.pdf", "Date of issue: 9 February 2026", CATS)["date"] == _date(2026, 2, 9)
+    assert invoices.propose("", "x.pdf", "Invoice Date   05/12/2023", CATS)["date"] == _date(2023, 12, 5)
+
+
+def test_the_start_of_the_period_of_insurance_is_the_date():
+    assert invoices.propose("", "Policy.pdf", SCHEDULE, CATS)["date"] == _date(2026, 2, 9)
+
+
+def test_total_from_a_table_with_headers_above_the_figures():
+    assert invoices.propose("", "Policy.pdf", SCHEDULE, CATS)["amount"] == Decimal("1609.09")
+
+
+def test_placeholder_figures_are_not_amounts():
+    assert invoices.propose("", "x.pdf", "Total for Example   $XXX   $XXX", CATS)["amount"] is None
+
+
+def test_several_options_on_a_total_due_line_are_left_for_the_owner():
+    assert invoices.propose("", "notice.pdf", RENEWAL, CATS)["amount"] is None
+
+
+def test_category_from_what_the_document_keeps_talking_about():
+    assert invoices.propose("", "Policy.pdf", SCHEDULE, CATS)["category"] == "Insurance"
+    assert invoices.propose("", "x.pdf", "One mention of insurance only.", CATS)["category"] is None
+
+
+def test_folder_beats_the_wording_of_the_text():
+    assert invoices.propose("Registration", "x.pdf", SCHEDULE, CATS)["category"] == "Registration"
+
+
+def test_vendor_is_the_company_at_the_start_of_a_long_line():
+    assert invoices.propose("", "Policy.pdf", SCHEDULE, CATS)["vendor"] == "Example Insurer Australia Limited"
+
+
+def test_a_sentence_is_not_a_vendor():
+    text = "Example CTP Insurance is provided by Example Insurer Limited\n"
+    assert invoices.propose("", "x.pdf", text, CATS)["vendor"] is None
+    assert invoices.propose("", "x.pdf", "Example Insurer Limited and more\n", CATS)["vendor"] == "Example Insurer Limited"

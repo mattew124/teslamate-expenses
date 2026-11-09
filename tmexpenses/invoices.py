@@ -28,13 +28,20 @@ _LABEL_OK = re.compile(r"[a-z][a-z &/'()-]{1,38}[a-z)]")
 _DATE_FORMATS = ("%d/%m/%Y", "%d/%m/%y", "%d-%m-%Y", "%d.%m.%Y", "%Y-%m-%d", "%d %b %Y", "%d %B %Y")
 
 FILENAME_DATE = re.compile(r"^\s*(?:(\d{4})-(\d{2})-(\d{2})|(\d{4})(\d{2})(\d{2})|(\d{2})(\d{2})(\d{2}))(?!\d)")
-TEXT_DATE = re.compile(r"(?:invoice|tax invoice|issue|issued|statement|payment)?\s*date\s*:?\s*(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})", re.I)
+# Only dates the document labels as its own (never "expiry date", "due date", "next ... date").
+_DATE_VALUE = r"(?:(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})|(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{4}))"
+TEXT_DATE = re.compile(
+    r"(?:(?:tax\s+)?invoice\s+date|date\s+of\s+issue|issue\s+date|date\s+issued|statement\s+date|payment\s+date"
+    r"|date\s+paid|receipt\s+date|period\s+of\s+insurance\s*:?\s*from|policy\s+start(?:\s+date)?|^\s*date)"
+    r"\s*:?\s*" + _DATE_VALUE, re.I | re.M)
+FILENAME_TRAILING_DATE = re.compile(r"(?:^|[\s_\-])(\d{2})(\d{2})(\d{2})(?=\.pdf$)", re.I)
 TOTAL_LINE = re.compile(r"^\W*(?:grand\s+)?total(?:\s+(?:amount|due|paid|inc\.?\s*gst|incl\.?\s*gst|\(inc[^)]*\)))?\b[^\d\n$]*\$?\s*([\d,]+\.\d{2})\s*$", re.I)
 # "Annual premium  $1,380.36" or "Amount paid:  $55.00": a label and its figure in
 # adjacent layout columns (insurers' certificates don't say "Total").
 PAID_LABEL = re.compile(r"(?:annual premium|amount paid|pay annually)\s*:?", re.I)
 MONEY = re.compile(r"\$\s*([\d,]+\.\d{2})")
 ODOMETER = re.compile(r"odometer\s*:?\s*([\d,]+)(?:\s*km)?", re.I)
+_NAME_JOINERS = {"&", "and", "of", "the", "t/as"}
 COMPANY = re.compile(r"([A-Z][\w&'.\- ]{2,60}?\s(?:Pty\.?\s+Ltd\.?|Pty\.?\s+Limited|Limited|Ltd\.?))\b")
 
 
@@ -73,25 +80,65 @@ def _valid(year, month, day):
 
 def _date_from_filename(name):
     m = FILENAME_DATE.match(name)
-    if not m:
-        return None
-    g = m.groups()
-    if g[0]:
-        return _valid(int(g[0]), int(g[1]), int(g[2]))
-    if g[3]:
-        return _valid(int(g[3]), int(g[4]), int(g[5]))
-    return _valid(2000 + int(g[6]), int(g[7]), int(g[8]))
+    if m:
+        g = m.groups()
+        if g[0]:
+            return _valid(int(g[0]), int(g[1]), int(g[2]))
+        if g[3]:
+            return _valid(int(g[3]), int(g[4]), int(g[5]))
+        return _valid(2000 + int(g[6]), int(g[7]), int(g[8]))
+    m = FILENAME_TRAILING_DATE.search(name)       # 'Registration_Renewal_Notice_251010.pdf'
+    return _valid(2000 + int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else None
 
 
 def _date_from_text(text):
-    m = TEXT_DATE.search(text)
-    return _valid(int(m.group(3)), int(m.group(2)), int(m.group(1))) if m else None
+    for m in TEXT_DATE.finditer(text):
+        if m.group(1):
+            found = _valid(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+        else:
+            found = _parse_date(f"{m.group(4)} {m.group(5)} {m.group(6)}")
+        if found:
+            return found
+    return None
 
 
 def _category_in(haystack, categories):
     low = haystack.lower()
     hits = [c for c in categories if c.lower() in low]
     return max(hits, key=len) if hits else None
+
+
+def _category_from_text(text, categories):
+    """The category the document keeps naming (at least three times, and clearly the most),
+    for files whose name and folder say nothing. Longer names are counted first and removed,
+    so 'Cabin air filter' isn't also counted as 'Air filter'."""
+    low, counts = text.lower(), {}
+    for name in sorted(categories, key=len, reverse=True):
+        pattern = re.compile(r"\b" + re.escape(name.lower()) + r"\b")
+        counts[name] = len(pattern.findall(low))
+        low = pattern.sub(" ", low)
+    ranked = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)
+    if ranked and ranked[0][1] >= 3 and (len(ranked) == 1 or ranked[0][1] > ranked[1][1]):
+        return ranked[0][0]
+    return None
+
+
+def _table_totals(text):
+    """Amounts under a 'Total...' heading when the headings sit on one line and the figures on
+    the next ('Annual Premium  GST  Total Annual Premium' / '$100.00  $10.00  $110.00')."""
+    rows = [[c.strip() for c in re.split(r"\s{2,}", line.strip()) if c.strip()] for line in text.splitlines()]
+    found = []
+    for i, headers in enumerate(rows):
+        if len(headers) < 2 or any("$" in h for h in headers):
+            continue
+        for below in rows[i + 1:i + 3]:
+            money = [c for c in below if MONEY.fullmatch(c)]
+            if len(money) == len(headers):
+                for head, figure in zip(headers, money, strict=True):
+                    if head.lower().startswith("total"):
+                        found.append(Decimal(MONEY.fullmatch(figure).group(1).replace(",", "")))
+                break
+    return found
 
 
 def _amount(text):
@@ -108,6 +155,7 @@ def _amount(text):
             m = MONEY.fullmatch(figure)
             if m and PAID_LABEL.fullmatch(label):
                 totals.append(Decimal(m.group(1).replace(",", "")))
+    totals += _table_totals(text)
     # "Total" also heads sub-totals; the grand total is the largest.
     return max(totals) if totals else None
 
@@ -120,9 +168,11 @@ def _vendor(name, category, text):
             if part.lower() == category.lower() and i + 1 < len(parts):
                 return parts[i + 1][:100]
     for column in re.split(r"\s{2,}|\n", text):  # layout text puts columns side by side
-        m = COMPANY.fullmatch(column.strip())
-        if m:
-            return " ".join(m.group(1).split())[:100]
+        m = COMPANY.match(column.strip())
+        name = " ".join(m.group(1).split()) if m else ""
+        # A name is capitalised words ("Example Insurer Limited"); a sentence has lower-case ones.
+        if name and all(w[0].isupper() or w[0].isdigit() or w.lower() in _NAME_JOINERS for w in name.split()):
+            return name[:100]
     return None
 
 
@@ -250,6 +300,8 @@ def propose(folder, name, text, categories, learned=None):
         category = vendors[vendor.lower()]
     if category is None:
         category = _category_in(folder, categories)
+    if category is None:
+        category = _category_from_text(text, categories)
 
     out = {"date": when, "category": category, "vendor": vendor, "amount": amount, "odometer_km": odometer}
     out["missing"] = [f for f in ("date", "category", "amount") if out[f] is None]

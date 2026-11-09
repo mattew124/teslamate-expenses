@@ -75,6 +75,9 @@ CREATE TABLE IF NOT EXISTS expenses.setting (
 --   invoice_date_format  the date in uploaded invoice names (yyyy, yy, mm, dd); NULL = yymmdd
 ALTER TABLE expenses.setting ADD COLUMN IF NOT EXISTS invoice_date_format text
     CHECK (invoice_date_format IS NULL OR length(invoice_date_format) <= 20);
+--   invoice_name_format  the file name template (%date %category %vendor %car %amount); NULL = the original style
+ALTER TABLE expenses.setting ADD COLUMN IF NOT EXISTS invoice_name_format text
+    CHECK (invoice_name_format IS NULL OR length(invoice_name_format) <= 100);
 INSERT INTO expenses.setting (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS expenses.expense (

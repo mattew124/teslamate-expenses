@@ -5,7 +5,9 @@ RUN apt-get update \
  && apt-get upgrade -y --no-install-recommends \
  && rm -rf /var/lib/apt/lists/*
 
-ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PIP_NO_CACHE_DIR=1
+# TMPDIR: the root filesystem is read-only and /dev/shm (tmpfs) is its only writable place. Uploads over
+# 500 KB are spooled to a temp file there instead of failing with 'No usable temporary directory'.
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PIP_NO_CACHE_DIR=1 TMPDIR=/dev/shm
 
 # PDF text (poppler) and OCR for scanned invoices (tesseract), used when importing
 # existing invoices from OneDrive.

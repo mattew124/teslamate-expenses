@@ -104,7 +104,22 @@ names it `261107 Tyres - Tyre Shop.pdf` (date, category, vendor;
 an existing name gets a suffix, never overwritten) and stores the file's OneDrive link as the
 expense's invoice link. It works with a personal Microsoft account (OneDrive Personal).
 The date part is `yymmdd` unless you change it under **Settings → Invoice file name date**
-(for example `yyyy-mm-dd`).
+(for example `yyyy-mm-dd`). The whole name is a template under **Settings → Invoice file name**,
+a single line of `%` aliases (default `%date %category - %vendor`):
+
+| Alias | Becomes |
+|---|---|
+| `%date` | the invoice date, in the date format above |
+| `%category` | the category, e.g. Tyres |
+| `%vendor` | the vendor or shop (left out when blank) |
+| `%car` | the car's name |
+| `%amount` | the amount paid, e.g. 1234.50 |
+| `%%` | a percent sign |
+
+For example `%date - %category - %vendor` gives `261107 - Tyres - Tyre Shop.pdf`. It must include
+`%date` and `%category` or `%vendor`. A blank alias is left out together with the separator before it
+(no vendor gives `261107 - Tyres.pdf`). It applies to new uploads and to renames on import; files
+already in OneDrive keep their names.
 
 The subfolder is set per category on the **Categories** page. The standard categories start
 mapped (Tyres, filters, alignment and rotation to `Maintenance`; Insurance and Registration to
@@ -203,9 +218,9 @@ rows missing a date, category or amount start unticked. The image includes `popp
 `tesseract-ocr` for this; without them the app still runs and simply proposes less.
 
 A blank odometer is filled from TeslaMate's last position before the invoice date. Each row can also
-be **renamed in OneDrive** to `yymmdd - category - vendor` (for example `261024 - Tyres - Tyre Shop.pdf`,
-the date part following the Settings date format) from the values you confirm; a name already taken
-leaves the file as it is, and the expense is still imported. On **+ Add**, choosing the invoice PDF
+be **renamed in OneDrive** to the file name template from **Settings → Invoice file name**, built from the
+values you confirm; a name already taken leaves the file as it is, and the expense is still imported.
+On **+ Add**, choosing the invoice PDF
 fills in the date, amount, vendor, category (when the file name or a learned vendor says) and
 odometer it can read, without touching anything you've already typed.
 

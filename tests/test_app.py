@@ -245,6 +245,31 @@ def test_settings_rejects_non_http_urls(client, admin):
     assert admin.execute("SELECT grafana_url FROM expenses.setting").fetchone()["grafana_url"] is None
 
 
+def test_settings_invoice_name_format(client, admin):
+    q = lambda: admin.execute("SELECT invoice_name_format AS f FROM expenses.setting").fetchone()["f"]
+    base = {"expenses_url": "", "grafana_url": "", "invoice_date_format": ""}
+    assert q() is None
+    ok = client.post("/settings", data={**base, "invoice_name_format": " %date - %category - %vendor "}, headers=ORIGIN)
+    assert ok.status_code == 303 and q() == "%date - %category - %vendor"
+    bad = client.post("/settings", data={**base, "invoice_name_format": "%category"}, headers=ORIGIN)
+    assert bad.status_code == 400 and b"%date" in bad.data and q() == "%date - %category - %vendor"
+    client.post("/settings", data={**base, "invoice_name_format": ""}, headers=ORIGIN)
+    assert q() is None
+
+
+def test_settings_page_describes_every_alias(client):
+    page = client.get("/settings").data.decode()
+    for alias in ("%date", "%category", "%vendor", "%car", "%amount", "%%"):
+        assert alias in page
+    assert "261107 Tyres - Tyre Shop.pdf" in page          # live example of the current setting
+
+
+def test_settings_example_follows_the_saved_template(client, admin):
+    admin.execute("UPDATE expenses.setting SET invoice_name_format = '%date - %category - %vendor', "
+                  "invoice_date_format = 'yyyy-mm-dd'")
+    assert "2026-11-07 - Tyres - Tyre Shop.pdf" in client.get("/settings").data.decode()
+
+
 def test_settings_invoice_date_format(client, admin):
     q = lambda: admin.execute("SELECT invoice_date_format AS f FROM expenses.setting").fetchone()["f"]
     assert q() is None and b"yymmdd" in client.get("/settings").data      # default is shown
