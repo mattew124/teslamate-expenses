@@ -139,7 +139,10 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None):
 
     @app.context_processor
     def onedrive_flag():
-        return {"onedrive_enabled": drive is not None}
+        # `storage` is the provider the app is set up with: its name and icon for the pages. Another
+        # provider (Google Drive, say) is another entry here, not another edit to every template.
+        storage = {"name": "OneDrive", "icon": url_for("static", filename="provider-onedrive.svg")} if drive else None
+        return {"onedrive_enabled": drive is not None, "storage": storage}
 
     @app.context_processor
     def footer():

@@ -34,8 +34,8 @@
   <label>Invoice PDF
     <input type="file" name="invoice_file" accept="application/pdf,.pdf">{{ err('invoice_file') }}
     <span class="or-pick"><span>or</span>
-      <button type="button" id="onedrive-pick" class="secondary">📁 Choose from OneDrive</button></span>
-    <small id="onedrive-pick-hint">Already in OneDrive? Pick it there instead of uploading it again.</small>
+      <button type="button" id="onedrive-pick" class="secondary"><img src="{{ storage.icon }}" alt="" class="provider-icon" width="24" height="24"> Choose from {{ storage.name }}</button></span>
+    <small id="onedrive-pick-hint">Already in {{ storage.name }}? Pick it there instead of uploading it again.</small>
     {% if not expense_id %}<small id="prefill-hint">Choose the PDF next: the fields below are filled in from what can be read in it. Check them before saving.</small>{% endif %}
     {% if onedrive_connected %}
     <small>It's uploaded to the car's OneDrive folder when you save, and the invoice link is filled in for you.{% if values.invoice_url %} Replaces the current link; the old file stays in OneDrive.{% endif %}</small>
@@ -90,7 +90,7 @@
 {% endif %}
 {% if onedrive_connected %}
 <dialog id="onedrive-picker" aria-labelledby="onedrive-picker-title" class="picker">
-  <h2 id="onedrive-picker-title">Choose an invoice from OneDrive</h2>
+  <h2 id="onedrive-picker-title">Choose an invoice from {{ storage.name }}</h2>
   <p class="here"><code id="onedrive-picker-path"></code></p>
   <p id="onedrive-picker-status" role="status"></p>
   <ul class="plain folder-list" id="onedrive-picker-list"></ul>

@@ -821,3 +821,14 @@ def test_a_folder_with_more_than_a_page_of_children_is_followed():
     assert here["path"] == "/X" and here["parent_id"] == "P"
     assert [f["name"] for f in folders] == ["Alpha", "Beta"] and [f["name"] for f in files] == ["a.pdf", "b.pdf"]
     assert asked[1] == NEXT
+
+
+# ---- the storage provider's name and icon come from one place, ready for others ----------------
+
+def test_the_add_form_names_and_pictures_the_provider(client, ms):
+    sign_in(client, ms)
+    page = client.get("/new").data.decode()
+    assert re.search(r'<img src="[^"]*/static/provider-onedrive\.svg" alt="" class="provider-icon"', page)
+    assert "Choose from OneDrive" in page and "Choose an invoice from OneDrive" in page
+    icon = client.get("/static/provider-onedrive.svg")
+    assert icon.status_code == 200 and icon.mimetype == "image/svg+xml" and b"<script" not in icon.data

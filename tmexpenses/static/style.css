@@ -101,4 +101,6 @@ dialog.picker::backdrop { background: rgb(0 0 0 / .5); }
 dialog.picker h2 { margin-top: 0; }
 dialog.picker li button { text-align: left; overflow-wrap: anywhere; }
 .or-pick { display: flex; align-items: center; gap: .75rem; margin-top: .25rem; }
-.or-pick button { flex: 1; padding: .6rem 1rem; font-weight: 600; }
+.or-pick button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+  padding: .5rem 1rem; font-weight: 600; }
+img.provider-icon { width: 1.5rem; height: 1.5rem; }
