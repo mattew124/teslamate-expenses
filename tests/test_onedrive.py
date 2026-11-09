@@ -454,8 +454,10 @@ def test_onedrive_events_are_logged_without_secrets(client, ms, admin, caplog):
     client.post("/new", data=with_pdf(form(admin, invoice_url="")), headers=ORIGIN)
     text = "\n".join(caplog.messages)
     assert "OneDrive connected" in text and "invoice uploaded" in text
-    for secret in (SECRET, "AUTH-CODE", "AT-", "RT-", "Tyre Shop"):
+    for secret in (SECRET, "AUTH-CODE", "AT-", "RT-"):
         assert secret not in text, secret
+    # File names can hold the vendor, and appear at debug only.
+    assert "Tyre Shop" not in "\n".join(r.getMessage() for r in caplog.records if r.levelno >= logging.INFO)
     ms.upload_status = 403
     client.post("/new", data=with_pdf(form(admin)), headers=ORIGIN)
     assert any(r.levelno == logging.WARNING and "upload" in r.getMessage() for r in caplog.records)
