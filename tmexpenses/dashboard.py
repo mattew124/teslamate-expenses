@@ -26,7 +26,8 @@ def render(tz, base_path, source=SOURCE):
     link = variables["expenses_url"]
     here = "'" + (base_path or "").replace("'", "''") + "/'"
     for key in ("query", "definition"):
-        assert _FALLBACK in link[key], "dashboard's app-link placeholder moved"
+        if _FALLBACK not in link[key]:
+            raise ValueError("The dashboard's app-link placeholder moved: update dashboard.py.")
         link[key] = link[key].replace(_FALLBACK, here)
     return dash
 
