@@ -73,7 +73,7 @@ def test_a_tool_failure_is_a_warning_with_its_message(monkeypatch, caplog):
 
 
 def test_import_preview_logs_each_file(client, caplog):
-    client.get("/onedrive/import/1")
+    client.get("/onedrive/import/1?sync=1")
     assert lines(caplog, "import scan") and "listed=3" in lines(caplog, "import scan")[0]
     per_file = lines(caplog, "import file")
     assert len(per_file) == 3 and any('file="261024 - Tyres.pdf"' in m and "found=" in m for m in per_file)

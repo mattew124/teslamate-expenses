@@ -23,6 +23,92 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }));
 
+  // Import page: it opens at once, then reads the folder's PDFs one at a time while saying what it is
+  // doing, instead of the browser waiting on one slow request (scanned PDFs take several seconds each).
+  const importForm = document.getElementById("import-form");
+  if (importForm && importForm.dataset.scanUrl) runImport(importForm);
+
+  async function runImport(f) {
+    const text = document.getElementById("import-status-text");
+    const bar = document.getElementById("import-progress");
+    const rows = f.querySelector("tbody");
+    const submit = f.querySelector("button[type=submit]");
+    const remaining = document.getElementById("import-remaining");
+    // Say what is happening now, and how long this step has taken once it's noticeable.
+    let current = "";
+    let since = Date.now();
+    const render = () => {
+      const seconds = Math.floor((Date.now() - since) / 1000);
+      text.textContent = current + (ticking && seconds >= 3 ? ` (${seconds} s)` : "");
+    };
+    let ticking = true;
+    const ticker = setInterval(render, 1000);
+    const say = (msg) => { current = msg; since = Date.now(); render(); };
+    const stop = (msg, link) => {
+      ticking = false;
+      clearInterval(ticker);
+      bar.hidden = true;
+      say(msg);
+      if (link) {
+        const a = document.createElement("a");
+        a.href = link;
+        a.textContent = " Go to the OneDrive page";
+        text.append(a);
+      }
+    };
+
+    f.addEventListener("submit", () => {
+      submit.disabled = true;
+      submit.textContent = "Importing…";
+    });
+
+    let scan;
+    try {
+      const res = await fetch(f.dataset.scanUrl);
+      scan = await res.json();
+      if (!res.ok) return stop(scan.error || "Couldn't look in the folder.", scan.url);
+    } catch (e) {
+      return stop("Couldn't look in the folder. Reload the page to try again.");
+    }
+    if (!scan.files.length) {
+      return stop(scan.listed ? "Every PDF in the folder already has an expense." : "No PDFs found in that folder.");
+    }
+
+    const total = scan.files.length;
+    bar.max = total;
+    bar.value = 0;
+    f.hidden = false;
+    for (let i = 0; i < total; i++) {
+      const file = scan.files[i];
+      say(`Reading ${i + 1} of ${total}: ${file.name}` +
+          (file.size > 300000 ? " (large or scanned PDFs take a little longer)" : ""));
+      try {
+        const body = new FormData();
+        body.append("n", i);
+        ["id", "name", "folder", "url", "size"].forEach((k) => body.append(k, file[k]));
+        const res = await fetch(f.dataset.rowUrl, { method: "POST", body });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        rows.insertAdjacentHTML("beforeend", await res.text());
+      } catch (e) {
+        const tr = rows.insertRow();
+        const td = tr.insertCell();
+        td.colSpan = 7;
+        td.textContent = `Couldn't read ${file.name} (${e.message}). Reload the page to try again.`;
+      }
+      bar.value = i + 1;
+    }
+    f.elements.count.value = total;
+    submit.disabled = false;
+    ticking = false;
+    clearInterval(ticker);
+    bar.hidden = true;
+    say(`Read ${total} PDF${total === 1 ? "" : "s"}. Check each row, then press Import.`);
+    if (scan.remaining) {
+      remaining.querySelector("small").textContent =
+        `${scan.remaining} more waiting: import these, then open this page again for the next batch.`;
+    }
+  }
+
   const form = document.getElementById("expense-form");
   if (!form) return;
 

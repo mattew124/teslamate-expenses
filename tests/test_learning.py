@@ -66,10 +66,10 @@ def test_an_already_imported_file_isnt_counted_twice(client, admin):
 def test_a_label_is_trusted_only_after_two_confirmations(client, admin):
     confirm(client, admin)
     admin.execute("DELETE FROM expenses.expense")
-    page = client.get("/onedrive/import/1").data.decode()
+    page = client.get("/onedrive/import/1?sync=1").data.decode()
     assert 'name="amount_1"' in page and 'value="77.50"' not in page
     admin.execute("UPDATE expenses.learned_label SET hits = %s", (invoices.LEARN_AFTER,))
-    page = client.get("/onedrive/import/1").data.decode()
+    page = client.get("/onedrive/import/1?sync=1").data.decode()
     assert 'value="77.50"' in page and 'value="2024-02-09"' in page and 'value="45120"' in page
 
 
@@ -77,7 +77,7 @@ def test_a_learned_vendor_preselects_the_category(client, admin):
     confirm(client, admin)
     admin.execute("DELETE FROM expenses.expense")
     admin.execute("UPDATE expenses.learned_vendor SET hits = %s", (invoices.LEARN_AFTER,))
-    page = client.get("/onedrive/import/1").data.decode()
+    page = client.get("/onedrive/import/1?sync=1").data.decode()
     select = page.split('name="category_id_1"')[1].split("</select>")[0]
     assert f'<option value="{cat(admin, "Tyres")}" selected>' in select
 

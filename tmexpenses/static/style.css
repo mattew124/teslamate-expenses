@@ -84,3 +84,9 @@ ul.learned-list li { display: flex; justify-content: space-between; align-items:
 label.inline { display: flex; gap: .4rem; align-items: baseline; }
 dl.aliases { display: grid; grid-template-columns: max-content 1fr; gap: .2rem 1rem; margin: 0; }
 dl.aliases dd { margin: 0; }
+.import-status { max-width: 40rem; }
+.import-status progress { width: 100%; height: .6rem; }
+.import-status p { margin: .4rem 0 0; overflow-wrap: anywhere; }
+.import-table label.inline { display: flex; align-items: flex-start; gap: .4rem; margin-top: .25rem; }
+.import-table label.inline small { display: inline; }
+.import-table label.inline input[type=checkbox] { flex: none; width: auto; padding: 0; margin: .15rem 0 0; }
