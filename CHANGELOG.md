@@ -22,6 +22,7 @@ anyone upgrading to it, including its action-needed items.
 
 ### Documentation
 
+- `CONTRIBUTING.md`, plus pull request and issue templates with checklists for contributors.
 - README setup follows a real deployment: back up first, set `FQDN_TM` before starting,
   check the app started, and recreate Grafana.
 - README: the app creates its own tables when OneDrive is turned on, so there is no

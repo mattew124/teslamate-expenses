@@ -309,6 +309,8 @@ Currency is shown as `$` and distance in km.
 
 ## Development
 
+Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) first.
+
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/python -m pytest -q     # starts a throwaway postgres:18 container
