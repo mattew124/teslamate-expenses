@@ -7,6 +7,7 @@ cost of ownership.
 
 import hmac
 import os
+from decimal import Decimal
 from datetime import date, datetime, timedelta, timezone
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
@@ -30,11 +31,14 @@ MESSAGES = {
     "disconnected": "OneDrive disconnected.",
     "imported": "Invoices imported.",
     "category_folder": "OneDrive folder saved.",
+    "learned_deleted": "Removed.",
 }
 
 # PDFs read per page: each is downloaded and text-extracted (OCR for scans) while
 # the request waits, so a big folder is worked through in rounds.
 IMPORT_BATCH = 10
+# Fields of an import row compared with what the owner submits, to learn from corrections.
+LEARN_FIELDS = ("date", "category_id", "vendor", "amount", "odometer_km")
 
 
 
@@ -317,6 +321,25 @@ def create_app(connect=None, onedrive_transport=None):
         return render_template("categories.html", categories=cats, error=error,
                                message=MESSAGES.get(request.args.get("msg", ""))), (400 if error else 200)
 
+    @app.get("/learned")
+    def learned_page():
+        with connect() as conn:
+            label_rows, vendor_rows = db.learned_rows(conn)
+        return render_template("learned.html", labels=label_rows, vendors=vendor_rows, after=invoices.LEARN_AFTER,
+                               message=MESSAGES.get(request.args.get("msg", "")))
+
+    @app.post("/learned/label/delete")
+    def learned_label_delete():
+        with connect() as conn:
+            db.delete_label(conn, request.form.get("field", ""), request.form.get("label", ""))
+        return redirect(url_for("learned_page", msg="learned_deleted"), 303)
+
+    @app.post("/learned/vendor/delete")
+    def learned_vendor_delete():
+        with connect() as conn:
+            db.delete_vendor(conn, request.form.get("vendor", ""))
+        return redirect(url_for("learned_page", msg="learned_deleted"), 303)
+
     @app.post("/categories/<int:category_id>/folder")
     def category_folder(category_id):
         try:
@@ -520,13 +543,14 @@ def create_app(connect=None, onedrive_transport=None):
     def import_row(n, **fields):
         return {"n": n, "include": False, "date": "", "category_id": "", "vendor": "",
                 "amount": "", "odometer_km": "", "url": "", "name": "", "folder": "",
-                "note": "", **fields}
+                "note": "", "id": "", "guess": {}, **fields}
 
     def render_import(car, rows, remaining=0, errors=None, status=200, notice=None):
         with connect() as conn:
             categories = db.categories(conn)
         return render_template("import.html", car=car, rows=rows, remaining=remaining,
-                               errors=errors or {}, categories=categories, notice=notice), status
+                               errors=errors or {}, categories=categories, notice=notice,
+                               learn_after=invoices.LEARN_AFTER), status
 
     @app.get("/onedrive/import/<int:car_id>")
     def onedrive_import(car_id):
@@ -535,6 +559,7 @@ def create_app(connect=None, onedrive_transport=None):
         with connect() as conn:
             folder = db.car_folders(conn).get(car_id)
             categories = db.categories(conn)
+            learned = db.learned(conn, invoices.LEARN_AFTER)
         if not folder:
             return redirect(url_for("onedrive_page"), 303)
         by_name = {c["name"]: c["id"] for c in categories}
@@ -546,10 +571,10 @@ def create_app(connect=None, onedrive_transport=None):
             pending = [f for f in files if f["web_url"] not in known]
             rows = []
             for n, f in enumerate(pending[:IMPORT_BATCH]):
-                row = import_row(n, url=f["web_url"], name=f["name"], folder=f["folder"])
+                row = import_row(n, url=f["web_url"], name=f["name"], folder=f["folder"], id=f["id"])
                 try:
                     guess = invoices.propose(f["folder"], f["name"], invoices.extract_text(
-                        drive.download(token, f["id"])), list(by_name))
+                        drive.download(token, f["id"])), list(by_name), learned)
                 except onedrive.OneDriveError as exc:
                     row["note"] = str(exc)
                     rows.append(row)
@@ -562,6 +587,8 @@ def create_app(connect=None, onedrive_transport=None):
                     include=not guess["missing"],
                     note=("Couldn't read the " + ", ".join(guess["missing"]) + ": fill in to import."
                           if guess["missing"] else ""))
+                # What was proposed, sent back with the form so confirming can tell what the owner changed.
+                row["guess"] = {k: row[k] for k in LEARN_FIELDS}
                 rows.append(row)
         except onedrive.NotConnected:
             return redirect(url_for("onedrive_page"), 303)
@@ -571,6 +598,41 @@ def create_app(connect=None, onedrive_transport=None):
             return render_onedrive(status=502, notice=str(exc))
         return render_import(car, rows, remaining=len(pending) - len(rows), status=200,
                              notice=None if files else "No PDFs found in that folder.")
+
+    def learn_from(imported):
+        """Remember what the owner's corrections show: the label printed beside a value they
+        changed, and which category a vendor's invoices get. Best effort: whatever goes
+        wrong here must never undo or block the import that has just been saved."""
+        try:
+            token = None
+            with connect() as conn:
+                for row, values in imported:
+                    if row["vendor"]:
+                        db.record_vendor(conn, row["vendor"].strip().lower()[:100], values["category_id"])
+                    typed = {"amount": values["amount"], "odometer_km": values["odometer_km"],
+                             "date": values["occurred_at"].astimezone(ZoneInfo(tz)).date()}
+                    guess = row["guess"]
+                    changed = [f for f in invoices.LEARNABLE if typed[f] is not None and not same_value(f, typed[f], guess.get(f))]
+                    if not changed or not row["id"]:
+                        continue
+                    token = token or access_token()
+                    text = invoices.extract_text(drive.download(token, row["id"]))
+                    for field in changed:
+                        for label in invoices.find_labels(text, field, typed[field]):
+                            db.record_label(conn, field, label)
+        except Exception:
+            app.logger.warning("learning from the import failed", exc_info=True)
+
+    def same_value(field, typed, guessed):
+        """Did the owner keep what was proposed? (guess is the form text it was shown as)"""
+        try:
+            if field == "amount":
+                return Decimal(guessed) == typed
+            if field == "date":
+                return guessed == typed.isoformat()
+            return float(guessed) == float(typed)
+        except (ArithmeticError, ValueError, TypeError):
+            return False
 
     @app.post("/onedrive/import/<int:car_id>")
     def onedrive_import_confirm(car_id):
@@ -587,7 +649,8 @@ def create_app(connect=None, onedrive_transport=None):
 
             row = import_row(n, include=bool(f("include")), date=f("date"), category_id=f("category_id"),
                              vendor=f("vendor"), amount=f("amount"), odometer_km=f("odometer_km"),
-                             url=f("url"), name=f("name"), folder=f("folder"))
+                             url=f("url"), name=f("name"), folder=f("folder"), id=f("id"),
+                             guess={k: f(f"guess_{k}") for k in LEARN_FIELDS})
             rows.append(row)
             if not row["include"]:
                 continue
@@ -600,15 +663,18 @@ def create_app(connect=None, onedrive_transport=None):
             if row_errors:
                 errors[n] = " ".join(row_errors.values())
             else:
-                chosen.append(values)
+                chosen.append((row, values))
         if errors or not chosen:
             return render_import(car, rows, errors=errors, status=400,
                                  notice=None if errors else "Tick at least one invoice to import.")
+        imported = []
         with connect() as conn:
-            known = db.known_invoice_urls(conn, [v["invoice_url"] for v in chosen])
-            for values in chosen:
+            known = db.known_invoice_urls(conn, [v["invoice_url"] for _, v in chosen])
+            for row, values in chosen:
                 if values["invoice_url"] not in known:  # a double submit imports once
                     db.insert_expense(conn, values)
+                    imported.append((row, values))
+        learn_from(imported)
         return redirect(url_for("index", msg="imported"), 303)
 
     @app.route("/settings", methods=["GET", "POST"])

@@ -202,6 +202,15 @@ by OCR, which is slower and rougher. An amount is never guessed without a clear 
 rows missing a date, category or amount start unticked. The image includes `poppler-utils` and
 `tesseract-ocr` for this; without them the app still runs and simply proposes less.
 
+The importer **learns from your corrections**. When you change or fill in a date, amount or
+odometer, it re-reads that PDF and finds your value in the text: the label printed beside it
+(for example `Annual premium` or `Date of issue`) is remembered, never the value itself. It also
+remembers which category you gave each vendor's invoices. A label or vendor is used for later
+guesses once you've confirmed it twice; a learned label that finds two different values in one
+PDF leaves the field blank rather than guessing. Nothing is learned if your value isn't in the
+PDF text. **Import page → See and remove what it has learned** lists everything and lets you
+delete it. This stores only short labels and vendor names, in the `expenses` schema.
+
 ## What the dashboard counts
 
 All of it lives in the `expenses.ownership` view (`tmexpenses/schema.sql`), one row per car:
