@@ -153,28 +153,36 @@ def test_dev_script_syntax():
     subprocess.run(["bash", "-n", str(ROOT / "scripts" / "dev.sh")], check=True)
 
 
-def onedrive_link_section():
-    start = SCRIPT.index("onedrive_link() {")
+def function_body(name):
+    start = SCRIPT.index(f"{name}() {{")
     return SCRIPT[start:SCRIPT.index("\n}\n", start)]
 
 
-def test_onedrive_link_never_copies_a_real_folder():
-    """Worktrees share the main dev stack's sign-in, never the folder it's pointed at."""
-    link = onedrive_link_section()
-    assert "expenses.onedrive_account" in link
-    source_reads = [line for line in link.splitlines() if "COPY (SELECT" in line]
-    assert source_reads and all("car_folder" not in line for line in source_reads)
+def test_saved_onedrive_sign_in_never_includes_a_folder():
+    """Worktrees share a saved sign-in, never the folder a stack is pointed at."""
+    save, link = function_body("onedrive_save"), function_body("onedrive_link")
+    assert "expenses.onedrive_account" in save and "car_folder" not in save
     assert "DELETE FROM expenses.car_folder" in link
 
 
-def test_onedrive_link_only_runs_from_a_worktree():
-    assert 'if [ -z "$INSTANCE" ]' in onedrive_link_section()
+def test_saved_onedrive_sign_in_is_private_and_outside_the_repo():
+    save = function_body("onedrive_save")
+    assert "umask 077" in save
+    assert 'ONEDRIVE_DEV_FILE="${ONEDRIVE_DEV_FILE:-$HOME/.config/' in SCRIPT
+    assert "outside the repository" in function_body("onedrive_file_check")
+    assert "onedrive_file_check" in save and "onedrive_file_check" in function_body("onedrive_link")
 
 
-def test_onedrive_link_only_reads_the_source_stack():
-    for line in onedrive_link_section().splitlines():
-        if "source_dev_psql" in line:
-            assert not re.search(r"(?i)\b(insert|update|delete|truncate)\b", line), line
+def test_onedrive_link_needs_no_other_stack():
+    link = function_body("onedrive_link")
+    assert "docker exec" not in link and "ONEDRIVE_SOURCE_DB" not in SCRIPT
+    assert "--git-common-dir" not in link
+
+
+def test_onedrive_link_keeps_the_saved_sign_in_fresh():
+    """Microsoft replaces the refresh token when it's used, so the file gets the new one."""
+    link = function_body("onedrive_link")
+    assert link.index("onedrive-test-folder.py") < link.index("onedrive_save")
 
 
 def test_real_uploads_are_kept_to_the_test_folder():

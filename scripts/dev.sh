@@ -15,8 +15,10 @@
 #   scripts/dev.sh test-browser [--onedrive]
 #                                    run the browser tests against the dev stack;
 #                                    --onedrive fails if the real OneDrive checks can't run
-#   scripts/dev.sh onedrive-link     worktree only: reuse the main dev stack's OneDrive
-#                                    sign-in here, pointed at the /Expenses test folder
+#   scripts/dev.sh onedrive-save     keep this stack's OneDrive sign-in in a file outside
+#                                    the repository (ONEDRIVE_DEV_FILE)
+#   scripts/dev.sh onedrive-link     load that sign-in into this stack, pointed at the
+#                                    /Expenses test folder
 #   scripts/dev.sh schema            regenerate db/teslamate-schema.sql from TeslaMate
 #   scripts/dev.sh psql [args]       psql on the test database
 #   scripts/dev.sh logs              follow the app's logs
@@ -316,36 +318,54 @@ test_browser() {
         teslamate-expenses:browser-tests python3 /tests/run.py
 }
 
-# ---- a real OneDrive for worktrees ---------------------------------------------
+# ---- a real OneDrive for dev stacks ---------------------------------------------
 
-# The main dev stack's database holds the OneDrive sign-in. Only that one row is read, so
-# its code can be any version; the container just has to be running.
-ONEDRIVE_SOURCE_DB="${ONEDRIVE_SOURCE_DB:-teslamate-expenses-dev-dev-db-1}"
-source_dev_psql() { docker exec -i "$ONEDRIVE_SOURCE_DB" psql -X -At -v ON_ERROR_STOP=1 -U teslamate -d teslamate "$@"; }
+# One saved sign-in, in a file any worktree can load, so no other stack has to stay around.
+# It holds the encryption key beside what it encrypts, so it opens the real account: keep it
+# private (0600) and out of the repository.
+ONEDRIVE_DEV_FILE="${ONEDRIVE_DEV_FILE:-$HOME/.config/teslamate-expenses/onedrive-dev}"
 
-# Copies the sign-in (never the car folders: the source's may be real invoices), then points
-# every car here at the test folder. Secrets stay encrypted and are never printed.
-onedrive_link() {
-    if [ -z "$INSTANCE" ]; then
-        echo "dev: this stack is where the sign-in lives; run onedrive-link from a worktree" >&2
-        exit 1
-    fi
+onedrive_file_check() {
+    local repo
+    repo="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
+    case "$ONEDRIVE_DEV_FILE" in
+        "$repo"/*|"$ROOT"/*)
+            echo "dev: ONEDRIVE_DEV_FILE must be outside the repository: $ONEDRIVE_DEV_FILE" >&2
+            exit 1 ;;
+    esac
+}
+
+# Sign-in only, never the car folders: a stack's folder may hold real invoices.
+onedrive_save() {
+    onedrive_file_check
     ensure_env
-    local app source_env key current
+    [ -n "$(compose ps -q dev-db)" ] || { echo "dev: start this stack first: scripts/dev.sh up" >&2; exit 1; }
+    local row key
+    row="$(dev_psql -At -c "COPY (SELECT client_id, client_secret, secret_expires, account, refresh_token FROM expenses.onedrive_account WHERE refresh_token IS NOT NULL) TO STDOUT")"
+    [ -n "$row" ] || { echo "dev: this stack isn't signed in: connect it on its OneDrive page first" >&2; exit 1; }
+    key="$(sed -n 's/^DEV_ENCRYPTION_KEY=//p' "$ENVF")"
+    ( umask 077
+      mkdir -p "$(dirname "$ONEDRIVE_DEV_FILE")"
+      printf 'DEV_ENCRYPTION_KEY=%s\nONEDRIVE_ROW=%s\n' "$key" "$row" > "$ONEDRIVE_DEV_FILE.new"
+      mv "$ONEDRIVE_DEV_FILE.new" "$ONEDRIVE_DEV_FILE" )
+    echo "dev: OneDrive sign-in saved to $ONEDRIVE_DEV_FILE"
+}
+
+# Then points every car here at the test folder. Secrets stay encrypted and are never printed.
+onedrive_link() {
+    onedrive_file_check
+    ensure_env
+    [ -f "$ONEDRIVE_DEV_FILE" ] || {
+        echo "dev: no saved sign-in at $ONEDRIVE_DEV_FILE: connect a stack on its OneDrive page, then run onedrive-save there" >&2
+        exit 1
+    }
+    local app key row current
     app="$(compose ps -q expenses-dev)"
     [ -n "$app" ] || { echo "dev: start this stack first: scripts/dev.sh up" >&2; exit 1; }
-    if [ "$(docker inspect -f '{{.State.Running}}' "$ONEDRIVE_SOURCE_DB" 2>/dev/null)" != true ]; then
-        echo "dev: the main dev stack's database ($ONEDRIVE_SOURCE_DB) isn't running" >&2
-        exit 1
-    fi
-    if [ "$(source_dev_psql -c "SELECT count(*) FROM expenses.onedrive_account WHERE refresh_token IS NOT NULL")" != 1 ]; then
-        echo "dev: the main dev stack isn't signed in to OneDrive: connect it on its OneDrive page" >&2
-        exit 1
-    fi
-    # The row is encrypted with the source's key, so this stack uses the same one.
-    source_env="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/.dev/env"
-    key="$(sed -n 's/^DEV_\(ENCRYPTION\|ONEDRIVE_TOKEN\)_KEY=//p' "$source_env" | head -n 1)"
-    [ -n "$key" ] || { echo "dev: no encryption key in $source_env" >&2; exit 1; }
+    key="$(sed -n 's/^DEV_ENCRYPTION_KEY=//p' "$ONEDRIVE_DEV_FILE")"
+    row="$(sed -n 's/^ONEDRIVE_ROW=//p' "$ONEDRIVE_DEV_FILE")"
+    [ -n "$key" ] && [ -n "$row" ] || { echo "dev: $ONEDRIVE_DEV_FILE is incomplete: run onedrive-save again" >&2; exit 1; }
+    # The row is encrypted with that key, so this stack uses the same one.
     current="$(sed -n 's/^DEV_ENCRYPTION_KEY=//p' "$ENVF")"
     if [ "$key" != "$current" ]; then
         ( umask 077
@@ -364,7 +384,7 @@ DELETE FROM expenses.car_folder;
 CREATE TEMP TABLE incoming (client_id text, client_secret text, secret_expires date, account text, refresh_token text) ON COMMIT DROP;
 COPY incoming FROM STDIN;
 SQL
-        source_dev_psql -c "COPY (SELECT client_id, client_secret, secret_expires, account, refresh_token FROM expenses.onedrive_account) TO STDOUT"
+        printf '%s\n' "$row"
         cat <<'SQL'
 \.
 INSERT INTO expenses.onedrive_account (id, client_id, client_secret, secret_expires, account, refresh_token)
@@ -376,6 +396,7 @@ COMMIT;
 SQL
     } | dev_psql
     compose exec -T expenses-dev python - < scripts/onedrive-test-folder.py
+    onedrive_save >/dev/null   # Microsoft replaced the refresh token: keep the newest
 }
 
 case "${1:-}" in
@@ -395,6 +416,7 @@ case "${1:-}" in
     info) info ;;
     test-browser)
         if [ "${2:-}" = --onedrive ]; then test_browser 1; else test_browser 0; fi ;;
+    onedrive-save) onedrive_save ;;
     onedrive-link) onedrive_link ;;
     schema)
         require_source
@@ -405,5 +427,5 @@ case "${1:-}" in
         git --no-pager diff --stat -- "$SCHEMA" || true ;;
     psql) ensure_env; shift; dev_psql "$@" ;;
     logs) ensure_env; compose logs -f expenses-dev ;;
-    *) sed -n '3,21p' "$0" >&2; exit 2 ;;
+    *) sed -n '3,23p' "$0" >&2; exit 2 ;;
 esac

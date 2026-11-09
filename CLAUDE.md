@@ -50,8 +50,9 @@ Parallel sessions each get a git worktree under `.claude/worktrees/<name>/`, and
 2. One feature or fix per worktree. Commit on its branch, push it, and open a pull
    request so CI runs. Merging and releasing happen from the main checkout.
 3. Anything touching OneDrive needs a real-account run before it's done: `scripts/dev.sh onedrive-link`,
-   then `scripts/dev.sh test-browser --onedrive`. The link reuses the main dev stack's sign-in and points
-   this stack at the `/Expenses test` folder; never point a test at a folder holding real invoices.
+   then `scripts/dev.sh test-browser --onedrive`. The link loads a saved sign-in from a private file outside
+   the repository (`onedrive-save` writes it; `ONEDRIVE_DEV_FILE` moves it) and points this stack at the
+   `/Expenses test` folder. Never commit that file, and never point a test at a folder holding real invoices.
 4. When the branch is merged or abandoned, run `scripts/dev.sh destroy` before the
    worktree is removed. `scripts/dev.sh list` shows every dev stack still running.
 

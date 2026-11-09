@@ -142,7 +142,7 @@ def test_real_upload(page):
     The expense is deleted again; the file stays (the app has no delete) for the import check."""
     page.goto(UI + "onedrive")
     if not page.locator("button:has-text('Disconnect')").count():
-        raise Skip("dev stack isn't connected to OneDrive (scripts/dev.sh onedrive-link from a worktree)")
+        raise Skip("dev stack isn't connected to OneDrive (scripts/dev.sh onedrive-link)")
     if not in_test_folder(page):
         raise Skip(f"cars aren't pointed at /{TEST_FOLDER}, so nothing was written")
     page.goto(UI + "new")
