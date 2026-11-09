@@ -8,6 +8,7 @@ cost of ownership.
 import hmac
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 from datetime import date, datetime, time as dtime, timedelta, timezone
 from urllib.parse import urlparse
@@ -927,8 +928,11 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None):
         folder_id = None if wanted == "root" else (wanted or car_folder["folder_id"])
         try:
             token = access_token()
-            here = drive.folder(token, folder_id)
-            folders, files = drive.contents(token, folder_id)
+            # Two independent Graph calls, each a second or more: ask both at once.
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                asked_here = pool.submit(drive.folder, token, folder_id)
+                folders, files = drive.contents(token, folder_id)
+                here = asked_here.result()
         except onedrive.SignInExpired as exc:
             return jsonify(error=str(exc), url=url_for("onedrive_page")), 409
         except onedrive.OneDriveError as exc:

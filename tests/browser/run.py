@@ -44,7 +44,7 @@ def step(name, fn, *args):
             print(f"SKIP {name}\n     {why}")
     except Exception as exc:  # keep going: report every failure in one run
         failed.append(name)
-        print(f"FAIL {name}\n     {str(exc).splitlines()[0][:300]}")
+        print(f"FAIL {name}\n     " + "\n     ".join(str(exc).splitlines()[:12]))
 
 
 def shot(page, name):
@@ -162,6 +162,14 @@ def test_real_upload(page):
 
 
 def test_onedrive_picker(page):
+    expect.set_options(timeout=20000)       # real Microsoft takes seconds per folder
+    try:
+        picker_checks(page)
+    finally:
+        expect.set_options(timeout=5000)
+
+
+def picker_checks(page):
     """The Add form's file picker (read-only): opens in the car's folder, goes up and back down,
     and choosing a PDF links it. Needs a connected drive whose car folder holds a PDF."""
     page.goto(UI + "onedrive")
@@ -178,17 +186,31 @@ def test_onedrive_picker(page):
     if "Choose a OneDrive folder" in dialog.locator("#onedrive-picker-status").inner_text():
         raise Skip("this car has no OneDrive folder")
     here = start.inner_text()
+    expect(dialog.get_by_text("⬑ Up")).to_be_visible()    # in the car's folder, so there is a way up
+    shot(page, "form-onedrive-picker")                     # before going up: the top of the drive has no Up
     dialog.get_by_text("⬑ Up").click()
     expect(start).not_to_have_text(here)
-    shot(page, "form-onedrive-picker")
+    expect(dialog.get_by_text("⬑ Up")).to_have_count(0)   # nothing above the top of the drive
     expect(dialog.locator("#onedrive-picker-list li button", has_text="📁").first).to_be_visible()
     dialog.get_by_text("Cancel").click()
     expect(dialog).not_to_be_visible()
     page.click("#onedrive-pick")
     expect(start).to_have_text(here)         # reopening starts at the car's folder again
+    items = dialog.locator("#onedrive-picker-list li button")
     pdf = dialog.locator("#onedrive-picker-list li button", has_text="📄")
     if not pdf.count():
-        raise Skip("no PDF in the car's folder to choose")
+        # Uploads go into category subfolders, so look in each folder in turn, as a person would.
+        names = [t[2:] for t in items.all_inner_texts() if t.startswith("📁")]
+        for name in names:
+            dialog.get_by_role("button", name="📁 " + name, exact=True).click()
+            expect(dialog.locator("#onedrive-picker-path")).not_to_have_text(here)
+            expect(dialog.locator("#onedrive-picker-status")).not_to_have_text("Loading…")
+            if pdf.count():
+                break
+            dialog.get_by_text("⬑ Up").click()
+            expect(dialog.locator("#onedrive-picker-path")).to_have_text(here)
+    if not pdf.count():
+        raise Skip("no PDF in the car's folder or the folders directly in it")
     pdf.first.click()
     expect(page.locator("input[name=invoice_url]")).to_have_value(re.compile(r"^https://"))
 
