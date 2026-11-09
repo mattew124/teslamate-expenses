@@ -9,7 +9,7 @@ no clear "Total" line: a wrong cost silently skews the whole TCO.
 import os
 import re
 import shutil
-import subprocess
+import subprocess  # nosec B404 - runs poppler and tesseract, list arguments only
 import tempfile
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
@@ -50,7 +50,7 @@ def extract_text(pdf):
     tesseract) for scans. '' when nothing can be read or the tools are missing:
     the caller then just has less to propose, never an error."""
     # The container's root is read-only; /dev/shm is its one writable (in-memory) place.
-    scratch = "/dev/shm" if os.access("/dev/shm", os.W_OK) else None
+    scratch = "/dev/shm" if os.access("/dev/shm", os.W_OK) else None  # nosec B108 - private TemporaryDirectory in the only writable place
     with tempfile.TemporaryDirectory(prefix="tmexp-", dir=scratch) as tmp:
         path = Path(tmp) / "in.pdf"
         path.write_bytes(pdf)
@@ -65,7 +65,7 @@ def extract_text(pdf):
 
 def _run(cmd, timeout):
     try:
-        done = subprocess.run(cmd, capture_output=True, timeout=timeout, check=False)
+        done = subprocess.run(cmd, capture_output=True, timeout=timeout, check=False)  # nosec B603 - fixed tool names, our own temp path, no shell
     except (OSError, subprocess.SubprocessError):
         return ""
     return done.stdout.decode("utf-8", "replace") if done.returncode == 0 else ""
@@ -151,7 +151,7 @@ def _amount(text):
             except InvalidOperation:
                 pass
         columns = [c.strip() for c in re.split(r"\s{2,}", line.strip())]
-        for label, figure in zip(columns, columns[1:]):
+        for label, figure in zip(columns, columns[1:], strict=False):
             m = MONEY.fullmatch(figure)
             if m and PAID_LABEL.fullmatch(label):
                 totals.append(Decimal(m.group(1).replace(",", "")))
