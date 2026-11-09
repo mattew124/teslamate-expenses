@@ -232,6 +232,12 @@ the same amount as one within 14 days either side asks first: it lists the match
 server asks again if the page's own check was skipped. The import preview does the same per file, leaving a
 likely duplicate unticked with a link to the expense it resembles.
 
+The vendor is the name the document trades under: a line such as `Example Insurer Limited ABN … trading as
+Brand Cover` gives `Brand Cover`, not the legal company (only when the words before "trading as" read as a
+company name, so a footnote about someone else's insurer doesn't count). A vendor in the file name
+(`261030 - Wheel Alignment - Tesla.pdf`) still comes first, and without a trading name the company named at the
+start of a line is used.
+
 The importer **learns from your corrections**. When you change or fill in a date, amount or
 odometer, it re-reads that PDF and finds your value in the text: the label printed beside it
 (for example `Annual premium` or `Date of issue`) is remembered, never the value itself. It also
