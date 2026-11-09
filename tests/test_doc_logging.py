@@ -17,7 +17,8 @@ from tests.test_app import form
 
 
 @pytest.fixture(autouse=True)
-def debug_level(caplog):
+def debug_level(caplog, monkeypatch):
+    monkeypatch.setenv("LOG_LEVEL", "debug")   # create_app sets the logger's level from this
     caplog.set_level(logging.DEBUG, logger="tmexpenses")
 
 
