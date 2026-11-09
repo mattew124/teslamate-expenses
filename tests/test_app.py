@@ -409,3 +409,23 @@ def test_no_fqdn_or_a_bad_one_leaves_urls_empty(blank_db, monkeypatch):
         assert stored_urls(blank_db) == (None, None), bad
         with psycopg.connect(blank_db, autocommit=True) as conn:
             conn.execute("DROP SCHEMA expenses CASCADE")
+
+
+def test_settings_file_name_defaults_are_real_text_you_can_edit(client, admin):
+    """A placeholder vanishes as soon as you type, so the defaults are filled in as values."""
+    page = client.get("/settings").data.decode()
+    assert 'name="invoice_date_format" maxlength="20" value="yymmdd"' in page
+    assert 'name="invoice_name_format" maxlength="100" value="%date %category - %vendor"' in page
+
+
+def test_saving_the_default_file_name_keeps_following_the_default(client, admin):
+    """The text is the default, so it's stored as 'default' (NULL) rather than frozen as a copy."""
+    data = {"expenses_url": "", "grafana_url": "", "invoice_date_format": "yymmdd",
+            "invoice_name_format": "%date %category - %vendor"}
+    assert client.post("/settings", data=data, headers=ORIGIN).status_code == 303
+    row = admin.execute("SELECT invoice_date_format AS d, invoice_name_format AS n FROM expenses.setting").fetchone()
+    assert row["d"] is None and row["n"] is None
+    data["invoice_name_format"] = "%date - %category"
+    client.post("/settings", data=data, headers=ORIGIN)
+    assert admin.execute("SELECT invoice_name_format AS n FROM expenses.setting").fetchone()["n"] == "%date - %category"
+

@@ -14,16 +14,16 @@
     {% if errors.expenses_url %}<span class="error">{{ errors.expenses_url }}</span>{% endif %}
     <small>Where you open this app. The Grafana dashboard's “Add / edit expenses” link goes here.</small></label>
   <label>Invoice file name date
-    <input type="text" name="invoice_date_format" maxlength="20" value="{{ values.invoice_date_format or '' }}"
-           placeholder="yymmdd">
+    <input type="text" name="invoice_date_format" maxlength="20" value="{{ values.invoice_date_format or date_default }}"
+           placeholder="{{ date_default }}" autocomplete="off" spellcheck="false">
     {% if errors.invoice_date_format %}<span class="error">{{ errors.invoice_date_format }}</span>{% endif %}
     <small>The date at the start of invoice PDFs uploaded to OneDrive, e.g. <code>261107</code>. Use yyyy, yy, mm and dd, with - _ . or a space between (<code>yyyy-mm-dd</code> gives <code>2026-11-07</code>). Blank uses <code>yymmdd</code>.</small></label>
   <label>Invoice file name
-    <input type="text" name="invoice_name_format" maxlength="100" value="{{ values.invoice_name_format or '' }}"
-           placeholder="%date %category - %vendor" autocomplete="off" spellcheck="false">
+    <input type="text" name="invoice_name_format" maxlength="100" value="{{ values.invoice_name_format or name_default }}"
+           placeholder="{{ name_default }}" autocomplete="off" spellcheck="false">
     {% if errors.invoice_name_format %}<span class="error">{{ errors.invoice_name_format }}</span>{% endif %}
-    <small>How uploaded invoices, and files you rename on import, are named. <code>.pdf</code> is added for you; blank uses
-      <code>%date %category - %vendor</code>. It must include <code>%date</code> and <code>%category</code> or <code>%vendor</code>.
+    <small>How uploaded invoices, and files you rename on import, are named. <code>.pdf</code> is added for you; clear it to go back to
+      <code>{{ name_default }}</code>. It must include <code>%date</code> and <code>%category</code> or <code>%vendor</code>.
       Example with these settings: <code>{{ example }}</code></small></label>
   <dl class="aliases">
     {% for alias, text in aliases.items() %}<dt><code>%{{ alias }}</code></dt><dd>{{ text }}</dd>

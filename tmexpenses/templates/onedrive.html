@@ -34,7 +34,9 @@
       <li><strong>Redirect URI:</strong> choose the platform <strong>Web</strong> and enter exactly this address, then <strong>Register</strong>:
         <code class="copy">{{ callback_url }}</code>
         <button type="button" class="linklike" data-copy="{{ callback_url }}">Copy address</button>
-        <small>It must match character for character. Microsoft only accepts <code>http://</code> for <code>localhost</code>.</small></li>
+        <small>It must match character for character. Microsoft only accepts <code>http://</code> for <code>localhost</code>.
+          A newly added address can take a few minutes to take effect: if Connect OneDrive shows
+          “invalid request” straight after adding it, wait a few minutes and try again.</small></li>
       <li><strong>Authentication:</strong> leave <strong>Allow public client flows</strong> at <strong>No</strong> (the default).
         <small>With it on, Microsoft treats the app as a public client and every later sign-in refresh fails
           with <code>AADSTS90023: Public clients can't send a client secret</code>.</small></li>
@@ -97,7 +99,8 @@
     </li>
     {% endfor %}
   </ul>
-  <small>Invoices are named by date, category and vendor, e.g. “2026-11-07 Tyres - Tyre Shop.pdf”.
+  <small>Uploaded invoices are named from the template under <a href="{{ url_for('settings') }}">Settings</a>,
+    e.g. “{{ name_example }}”.
     The folder can be renamed or moved in OneDrive later without breaking uploads.</small>
 </section>
 {% endif %}

@@ -429,11 +429,12 @@ def create_app(connect=None, onedrive_transport=None):
         with connect() as conn:
             account = db.onedrive_account(conn)
             cars, folders = db.cars(conn), db.car_folders(conn)
+            settings_row = db.get_settings(conn)
         expires = account and account["secret_expires"]
         ctx = {
             "account": account, "cars": cars, "folders": folders,
             "connected": bool(account and account["refresh_token"]),
-            "callback_url": callback_url(), "errors": errors or {},
+            "callback_url": callback_url(), "errors": errors or {}, "name_example": name_example(settings_row),
             "values": request.form if errors else {}, "message": message, "notice": notice,
             "secret_days_left": (expires - date.today()).days if expires else None,
         }
@@ -878,9 +879,13 @@ def create_app(connect=None, onedrive_transport=None):
             except ValueError as exc:
                 errors["multi_amount"] = str(exc)
             if not errors:
+                # The fields show the defaults as real text, so saving them unchanged means "default".
+                date_pattern = values["invoice_date_format"]
+                name_format = values["invoice_name_format"]
                 with connect() as conn:
                     db.save_settings(conn, values["expenses_url"], values["grafana_url"],
-                                     values["invoice_date_format"], values["invoice_name_format"],
+                                     None if date_pattern == validation.DEFAULT_DATE_PATTERN else date_pattern,
+                                     None if name_format == validation.DEFAULT_NAME_FORMAT else name_format,
                                      values["multi_amount"])
                 log.info("settings saved")
                 return redirect(url_for("settings", msg="settings"), 303)
@@ -888,6 +893,7 @@ def create_app(connect=None, onedrive_transport=None):
             with connect() as conn:
                 values = db.get_settings(conn)
         return render_template("settings.html", values=values, errors=errors, aliases=validation.NAME_ALIASES,
+                               date_default=validation.DEFAULT_DATE_PATTERN, name_default=validation.DEFAULT_NAME_FORMAT,
                                multi_choices=validation.MULTI_AMOUNT_CHOICES, example=name_example(values),
                                message=MESSAGES.get(request.args.get("msg", ""))), (400 if errors else 200)
 
