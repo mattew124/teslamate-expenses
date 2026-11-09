@@ -5,6 +5,7 @@ crash's traceback goes to the same place. Under gunicorn it shares gunicorn's ha
 its format); gunicorn's own level comes from the same LOG_LEVEL via gunicorn.conf.py.
 
 Never log tokens, secrets, notes, vendors, amounts or invoice contents.
+File names can contain a vendor, so they appear at debug only.
 """
 import logging
 
