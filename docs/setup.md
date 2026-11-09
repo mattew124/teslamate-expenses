@@ -7,6 +7,7 @@
 
 1. **Configure.** `cp .env.example .env` and set `DATABASE_USER` and `DATABASE_PASS` to the same
     values TeslaMate and its other add-ons use (they're in TeslaMate's compose file).
+
 2. **Run it.** Pin a released image with `EXPENSES_IMAGE`, or leave it unset to build locally.
 
     ```bash
@@ -15,7 +16,9 @@
     ```
 
     It joins TeslaMate's compose network (`TESLAMATE_NETWORK`, default `teslamate_default`).
+
 3. **OneDrive (optional).** See [OneDrive uploads](onedrive.md).
+
 4. **Grafana.** The app writes its own dashboard, with your `APP_TZ` as the default timezone, to
     the `teslamate-expenses-dashboards` volume each time it starts, so the dashboard always matches
     the version you run. Give TeslaMate's Grafana that volume and `grafana/provider.yml`, in
@@ -36,6 +39,7 @@
     on Grafana 13). Provisioned dashboards can't be edited in Grafana; to customise, import
     `grafana/cost-of-ownership.json` by hand instead (Dashboards → New → Import), set the
     **Timezone** box to your IANA zone and save, and set `DASHBOARD_DIR=` empty in `.env`.
+
 5. **Link the two.** Set `FQDN_TM` in `.env` to the same value as TeslaMate's compose variable. On
     first start the app uses it to pre-fill its **Settings** page (the same idea as TeslaMate's): this
     app at `https://$FQDN_TM$BASE_PATH/` and the dashboard at `https://$FQDN_TM/grafana/d/tm-expenses-tco`

@@ -38,11 +38,14 @@ folders of the same name); a blank box means a folder named after the category.
     OneDrive) before they go into the database, so a database dump or backup on its own can't
     open the drive. Keep the key out of those backups. If you lose or change it, enter the
     secret and connect again.
+
 2. **Register an app with Microsoft** (once per installation; see
     [Registering the app](#registering-the-app) below), then enter its client ID and secret on
     the app's **OneDrive** page. The page shows the exact redirect URI to register.
+
 3. **Connect OneDrive.** You sign in on Microsoft's page and come straight back. The app asks
     for delegated `Files.ReadWrite` and `offline_access`.
+
 4. **Choose a folder for each car** by browsing your OneDrive, creating one with **New folder**
     if it doesn't exist yet. Uploads go by the folder's ID, so renaming or moving it later
     doesn't break them.
