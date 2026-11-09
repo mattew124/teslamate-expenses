@@ -24,14 +24,18 @@ Rules of thumb:
 
 ## Candidates and stable releases
 
-1. Merge the work to `main` (pull request, CI green).
+1. Merge the work to `main` (pull request, CI green). Add each change to "Unreleased" in
+   `CHANGELOG.md` as you go, and note any action installers must take.
 2. Tag a **release candidate**: `git tag -a v0.3.0-rc1 -m "v0.3.0-rc1" && git push origin v0.3.0-rc1`.
    The Release workflow runs the tests, builds `ghcr.io/<owner>/teslamate-expenses:0.3.0-rc1` for
    amd64 and arm64, and prints the digest in the run summary. A pre-release tag never moves `:latest`.
 3. Test that digest from a worktree: `scripts/dev.sh up --image <ref>@<digest>`, `scripts/dev.sh onedrive-link`,
    then `scripts/dev.sh test-browser --onedrive` (it fails if the real OneDrive checks can't run), then
    look at the pages yourself.
-4. Fix anything on `main` and tag `-rc2`, `-rc3`, and so on.
+4. Fix anything on `main` and tag `-rc2`, `-rc3`, and so on. Fixes found while testing a
+   candidate go into the next candidate of the same version. Move to the next MINOR only when
+   the new work is itself a new feature or an additive schema change. A PATCH (`0.2.1`) only
+   follows a version that has been released as stable, never one that has only had candidates.
 5. When a candidate passes, tag the **same commit** `v0.3.0`. This publishes `0.3.0` and moves `:latest`.
 6. Pin production to the digest of the stable build (the run summary shows it), not to `:latest`.
    The stable tag is a fresh build, so its digest differs from the candidate's: give it the same
