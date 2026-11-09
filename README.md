@@ -125,8 +125,7 @@ The subfolder is set per category on the **Categories** page. The standard categ
 mapped (Tyres, filters, alignment and rotation to `Maintenance`; Insurance and Registration to
 folders of the same name); a blank box means a folder named after the category.
 
-1. **Turn it on.** Add a key to `.env`, re-run `scripts/provision-db.sh` (it adds two tables)
-   and restart the app:
+1. **Turn it on.** Add a key to `.env` and restart the app, which creates its own tables:
 
    ```bash
    EXPENSES_ENCRYPTION_KEY=<output of: openssl rand -base64 32 | tr '+/' '-_'>
