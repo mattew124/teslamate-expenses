@@ -106,8 +106,11 @@ ensure_env() {
               "$(openssl rand -hex 24)" "$(openssl rand -hex 24)" > "$ENVF" )
     fi
     # Added later than the passwords, so older .dev/env files get it too.
-    grep -q '^DEV_ONEDRIVE_TOKEN_KEY=' "$ENVF" ||
-        printf 'DEV_ONEDRIVE_TOKEN_KEY=%s\n' "$(openssl rand -base64 32 | tr '+/' '-_')" >> "$ENVF"
+    # (Renamed from DEV_ONEDRIVE_TOKEN_KEY: keep the old value so saved dev sign-ins still decrypt.)
+    grep -q '^DEV_ENCRYPTION_KEY=' "$ENVF" || {
+        old=$(sed -n 's/^DEV_ONEDRIVE_TOKEN_KEY=//p' "$ENVF")
+        printf 'DEV_ENCRYPTION_KEY=%s\n' "${old:-$(openssl rand -base64 32 | tr '+/' '-_')}" >> "$ENVF"
+    }
 }
 
 # ---- reading TeslaMate (never writes) ----------------------------------------
