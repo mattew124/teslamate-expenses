@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="14" fill="#0b6bcb"/>
+  <!-- a receipt with a torn bottom edge -->
+  <path d="M17 10h30v44l-5-4-5 4-5-4-5 4-5-4-5 4z" fill="#fff"/>
+  <path d="M23 20h18M23 28h18M23 36h10" stroke="#0b6bcb" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+  <!-- a lightning bolt over the corner -->
+  <path d="M46 30l-11 16h7l-3 12 13-18h-8z" fill="#f5a623" stroke="#0b6bcb" stroke-width="2" stroke-linejoin="round"/>
+</svg>
