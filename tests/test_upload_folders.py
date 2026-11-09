@@ -57,7 +57,7 @@ def test_existing_subfolder_is_reused_whatever_its_case(client, ms, admin):
     client.post("/onedrive/browse/1/new-folder", data={"parent_id": "INV", "name": "maintenance"}, headers=ORIGIN)
     ms.created.clear()
     upload(client, admin)
-    upload(client, admin, category="Wheel alignment")
+    upload(client, admin, category="Wheel alignment", amount="999.00")      # not a duplicate of the first
     assert ms.created == []
     assert len(ms.uploads()) == 2
 

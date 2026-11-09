@@ -388,7 +388,7 @@ def test_refresh_token_rotation_is_saved(client, ms, admin):
     choose_folder(client)
     before = len([c for c in ms.calls if c[1].endswith("/token")])
     client.post("/new", data=with_pdf(form(admin)), headers=ORIGIN)
-    client.post("/new", data=with_pdf(form(admin)), headers=ORIGIN)
+    client.post("/new", data=with_pdf(form(admin, date="2027-03-01")), headers=ORIGIN)   # a different expense
     sent = [parse_qs(c[2].decode()).get("refresh_token") for c in ms.calls if c[1].endswith("/token")]
     used = sent[before:]
     # each refresh spends the newest token: no token is ever sent twice
@@ -459,7 +459,7 @@ def test_onedrive_events_are_logged_without_secrets(client, ms, admin, caplog):
     # File names can hold the vendor, and appear at debug only.
     assert "Tyre Shop" not in "\n".join(r.getMessage() for r in caplog.records if r.levelno >= logging.INFO)
     ms.upload_status = 403
-    client.post("/new", data=with_pdf(form(admin)), headers=ORIGIN)
+    client.post("/new", data=with_pdf({**form(admin), "confirm_duplicate": "1"}), headers=ORIGIN)
     assert any(r.levelno == logging.WARNING and "upload" in r.getMessage() for r in caplog.records)
     client.post("/onedrive/disconnect", headers=ORIGIN)
     assert "OneDrive disconnected" in "\n".join(caplog.messages)

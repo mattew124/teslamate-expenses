@@ -113,14 +113,64 @@ document.addEventListener("DOMContentLoaded", () => {
   if (!form) return;
 
   // An upload can take a few seconds: say so, and stop a second click sending it twice.
-  form.addEventListener("submit", () => {
+  function markSending() {
     const file = form.elements.invoice_file;
     const save = form.querySelector("button[type=submit]");
     if (file && file.files.length) {
       save.disabled = true;
       save.textContent = "Uploading…";
     }
+  }
+
+  // Adding: ask the server whether this looks like an expense already recorded (same car and amount,
+  // close dates) before anything is sent, so a chosen PDF isn't lost and nothing is uploaded twice.
+  // The server checks again, so this only makes the question smoother.
+  const dupBox = document.getElementById("duplicate-warning");
+  let confirmed = false;
+  function sendNow() {
+    confirmed = true;
+    markSending();
+    form.submit();
+  }
+  form.addEventListener("submit", async (ev) => {
+    if (!form.dataset.duplicatesUrl || confirmed || form.elements.confirm_duplicate.value) {
+      markSending();
+      return;
+    }
+    ev.preventDefault();
+    const { car_id, date, time, amount } = form.elements;
+    let matches = [];
+    try {
+      const q = new URLSearchParams({ car_id: car_id.value, date: date.value, time: time.value, amount: amount.value });
+      const res = await fetch(form.dataset.duplicatesUrl + "?" + q);
+      if (res.ok) matches = (await res.json()).matches;
+    } catch (e) { /* the server will ask if it matters */ }
+    if (!matches.length) return sendNow();
+    const list = document.getElementById("duplicate-list");
+    list.textContent = "";
+    matches.forEach((m) => {
+      const li = document.createElement("li");
+      li.append([m.date, m.category, m.vendor, m.amount_text].filter(Boolean).join(" · ") + " — ");
+      const a = document.createElement("a");
+      a.href = m.edit_url;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = "open it";
+      li.append(a);
+      list.append(li);
+    });
+    dupBox.hidden = false;
+    dupBox.scrollIntoView({ behavior: "smooth", block: "start" });
   });
+  const dupSave = document.getElementById("duplicate-save");   // only in the inline version of the warning
+  const dupCancel = document.getElementById("duplicate-cancel");
+  if (dupSave) {
+    dupSave.addEventListener("click", () => {
+      form.elements.confirm_duplicate.value = "1";      // tells the server too: it checks again
+      sendNow();
+    });
+  }
+  if (dupCancel) dupCancel.addEventListener("click", () => { dupBox.hidden = true; });
   const odo = form.elements.odometer_km;
   const hint = document.getElementById("odometer-hint");
 

@@ -373,3 +373,22 @@ def test_the_options_choice_applies_to_the_add_page_prefill(client, admin, monke
     assert send() == "749.05"
     admin.execute("UPDATE expenses.setting SET multi_amount = 'min'")
     assert send() == "384.30"
+
+
+# ---- a file that looks like an expense already recorded ----------------------------------
+
+def test_the_preview_flags_a_file_that_looks_like_an_existing_expense(client, admin):
+    existing = admin.execute(
+        "INSERT INTO expenses.expense (car_id, category_id, occurred_at, amount, vendor) VALUES (1, %s, '2026-10-23 02:00+00', 1234.50, 'Other') RETURNING id",
+        (cat(admin, "Tyres"),)).fetchone()["id"]
+    page = client.get("/onedrive/import/1?sync=1").data.decode()
+    tyres_row = page.split('name="include_0"')[1].split("</tr>")[0]
+    assert "Possible duplicate" in tyres_row and f"/{existing}/edit" in tyres_row
+    assert " checked>" not in tyres_row                      # left unticked: the owner decides
+    assert page.count("Possible duplicate") == 1             # only the matching file
+
+
+def test_the_per_file_read_flags_it_too(client, admin):
+    admin.execute("INSERT INTO expenses.expense (car_id, category_id, occurred_at, amount) VALUES (1, %s, '2026-10-24 02:00+00', 1234.50)",
+                  (cat(admin, "Tyres"),))
+    assert "Possible duplicate" in read(client).data.decode()
