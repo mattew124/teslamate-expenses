@@ -510,6 +510,12 @@ def test_setup_page_has_the_full_registration_walkthrough(client):
     assert f'data-copy="{CALLBACK}"' in page        # one-click copy of the exact address
 
 
+def test_setup_page_warns_that_a_new_redirect_uri_takes_a_few_minutes(client):
+    """A freshly added redirect URI can be refused ("invalid request") for a few minutes."""
+    page = client.get("/onedrive").data.decode()
+    assert "few minutes" in page and "invalid request" in page.lower()
+
+
 def test_connect_never_relies_on_a_form_redirect(client, ms):
     """Chrome applies form-action to the redirect after a form POST, so Connect
     hands the browser a link instead, and the CSP stays same-origin everywhere."""
