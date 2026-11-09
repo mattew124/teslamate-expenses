@@ -6,6 +6,7 @@ chose them), the PDF text second, and an amount is never guessed when there is
 no clear "Total" line: a wrong cost silently skews the whole TCO.
 """
 
+import logging
 import os
 import re
 import shutil
@@ -14,6 +15,10 @@ import tempfile
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+
+from .docinfo import Timer
+
+log = logging.getLogger("tmexpenses.invoices")
 
 TEXT_TIMEOUT = 30
 OCR_TIMEOUT = 120
@@ -48,27 +53,48 @@ COMPANY = re.compile(r"([A-Z][\w&'.\- ]{2,60}?\s(?:Pty\.?\s+Ltd\.?|Pty\.?\s+Limi
 def extract_text(pdf):
     """Text of a PDF via poppler's pdftotext, falling back to OCR (pdftoppm +
     tesseract) for scans. '' when nothing can be read or the tools are missing:
-    the caller then just has less to propose, never an error."""
+    the caller then just has less to propose, never an error (the log says why)."""
+    timer = Timer()
     # The container's root is read-only; /dev/shm is its one writable (in-memory) place.
     scratch = "/dev/shm" if os.access("/dev/shm", os.W_OK) else None  # nosec B108 - private TemporaryDirectory in the only writable place
+    method, ocr_pages = "text", 0
     with tempfile.TemporaryDirectory(prefix="tmexp-", dir=scratch) as tmp:
         path = Path(tmp) / "in.pdf"
         path.write_bytes(pdf)
         text = _run(["pdftotext", "-layout", str(path), "-"], TEXT_TIMEOUT)
-        if len(text.strip()) >= MIN_TEXT_CHARS or not (shutil.which("pdftoppm") and shutil.which("tesseract")):
-            return text
-        stem = str(Path(tmp) / "page")
-        _run(["pdftoppm", "-r", "200", "-l", str(OCR_MAX_PAGES), "-png", str(path), stem], OCR_TIMEOUT)
-        return "\n".join(_run(["tesseract", str(png), "-", "--psm", "6"], OCR_TIMEOUT)
-                         for png in sorted(Path(tmp).glob("page*.png")))
+        if len(text.strip()) < MIN_TEXT_CHARS:
+            if shutil.which("pdftoppm") and shutil.which("tesseract"):
+                stem = str(Path(tmp) / "page")
+                _run(["pdftoppm", "-r", "200", "-l", str(OCR_MAX_PAGES), "-png", str(path), stem], OCR_TIMEOUT)
+                pages = sorted(Path(tmp).glob("page*.png"))
+                ocr_pages = len(pages)
+                text = "\n".join(_run(["tesseract", str(png), "-", "--psm", "6"], OCR_TIMEOUT) for png in pages)
+                method = "ocr" if text.strip() else "none"
+            else:
+                method = "none"
+                log.warning("extract: no text layer and OCR isn't installed (pdftoppm, tesseract)")
+    log.debug("extract method=%s chars=%d ocr_pages=%d bytes=%d ms=%d", method, len(text.strip()), ocr_pages,
+              len(pdf), timer.ms)
+    return text
 
 
 def _run(cmd, timeout):
     try:
         done = subprocess.run(cmd, capture_output=True, timeout=timeout, check=False)  # nosec B603 - fixed tool names, our own temp path, no shell
-    except (OSError, subprocess.SubprocessError):
+    except FileNotFoundError:
+        log.warning("extract: %s isn't installed", cmd[0])
         return ""
-    return done.stdout.decode("utf-8", "replace") if done.returncode == 0 else ""
+    except subprocess.TimeoutExpired:
+        log.warning("extract: %s timed out after %ds", cmd[0], timeout)
+        return ""
+    except (OSError, subprocess.SubprocessError) as exc:
+        log.warning("extract: %s failed: %s", cmd[0], exc)
+        return ""
+    if done.returncode != 0:
+        log.warning("extract: %s exited %d: %s", cmd[0], done.returncode,
+                    done.stderr.decode("utf-8", "replace").strip()[:200])
+        return ""
+    return done.stdout.decode("utf-8", "replace")
 
 
 def _valid(year, month, day):

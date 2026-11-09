@@ -20,12 +20,15 @@ is called with raw=True and returns (status, bytes).
 import base64
 import hashlib
 import json
+import logging
 import secrets
 import urllib.error
 import urllib.request
 from urllib.parse import quote, urlencode
 
 from cryptography.fernet import Fernet, InvalidToken
+
+log = logging.getLogger("tmexpenses.onedrive")
 
 AUTHORITY = "https://login.microsoftonline.com/consumers/oauth2/v2.0"
 GRAPH = "https://graph.microsoft.com/v1.0"
@@ -214,9 +217,12 @@ class OneDrive:
         status, item = self.transport("PATCH", f"{GRAPH}/me/drive/items/{quote(item_id, safe='')}", body, {
             "Authorization": f"Bearer {access_token}", "Content-Type": "application/json"})
         if status == 409:
+            log.warning("rename item=%s to=%r: name already exists", item_id, new_name)
             raise OneDriveError(f"A file called “{new_name}” already exists there.")
         if status != 200 or not str(item.get("webUrl", "")).startswith("https://"):
+            log.warning("rename item=%s to=%r: %s", item_id, new_name, graph_error(status, item))
             raise OneDriveError("OneDrive didn't rename the file: " + graph_error(status, item))
+        log.debug("rename item=%s to=%r", item_id, new_name)
         return item["webUrl"]
 
     def ensure_subfolder(self, access_token, parent_id, name):
@@ -229,7 +235,9 @@ class OneDrive:
         if found:
             return found
         try:
-            return self.create_folder(access_token, parent_id, name)["id"]
+            made = self.create_folder(access_token, parent_id, name)["id"]
+            log.debug("subfolder created name=%r parent=%s", name, parent_id)
+            return made
         except OneDriveError:
             found = find()   # lost the race: it exists now
             if found:
@@ -246,6 +254,7 @@ class OneDrive:
             "Authorization": f"Bearer {access_token}", "Content-Type": "application/pdf",
         })
         if status not in (200, 201) or not str(body.get("webUrl", "")).startswith("https://"):
+            log.warning("upload folder=%s name=%r refused: %s", folder_id, filename, graph_error(status, body))
             raise OneDriveError("OneDrive refused the upload: " + graph_error(status, body))
         return body["webUrl"]
 
@@ -271,6 +280,7 @@ class OneDrive:
                     break
 
         walk(folder_id, "", 0)
+        log.debug("list folder=%s pdfs=%d", folder_id, len(found))
         return sorted(found, key=lambda f: (f["folder"].lower(), f["name"].lower()))
 
     def download(self, access_token, item_id):
@@ -283,5 +293,7 @@ class OneDrive:
             raise OneDriveError("That file can't be downloaded (missing or over 20 MB).")
         status, content = self.transport("GET", link, None, {}, raw=True)
         if status != 200:
+            log.warning("download item=%s refused: HTTP %s", item_id, status)
             raise OneDriveError(f"OneDrive didn't give the file (HTTP {status}).")
+        log.debug("download item=%s bytes=%d", item_id, len(content))
         return content

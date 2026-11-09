@@ -6,6 +6,7 @@ cost of ownership.
 """
 
 import hmac
+import logging
 import os
 from decimal import Decimal
 from datetime import date, datetime, time as dtime, timedelta, timezone
@@ -17,7 +18,9 @@ from flask import Flask, abort, jsonify, make_response, redirect, render_templat
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from . import dashboard, db, invoices, logs, onedrive, validation
+from . import dashboard, db, docinfo, invoices, logs, onedrive, validation
+
+log = logging.getLogger("tmexpenses.app")
 
 MESSAGES = {
     "saved": "Expense saved.",
@@ -37,6 +40,9 @@ MESSAGES = {
 # PDFs read per page: each is downloaded and text-extracted (OCR for scans) while
 # the request waits, so a big folder is worked through in rounds.
 IMPORT_BATCH = 10
+# ...and stop reading more files once a round has taken this long (OCR can take 10+ seconds a file,
+# and a request that outlasts gunicorn's 120 s timeout is killed), leaving the rest for the next round.
+IMPORT_BUDGET_SECONDS = 75
 # Fields of an import row compared with what the owner submits, to learn from corrections.
 LEARN_FIELDS = ("date", "category_id", "vendor", "amount", "odometer_km")
 
@@ -217,9 +223,13 @@ def create_app(connect=None, onedrive_transport=None):
         name = validation.invoice_filename(
             values["occurred_at"], category, values["vendor"], settings_row["invoice_date_format"],
             settings_row["invoice_name_format"], car=car_name, amount=values["amount"])
+        timer = docinfo.Timer()
         token = access_token()
         subfolder = validation.safe_folder_name(category_row["upload_folder"] or category)
-        return drive.upload(token, drive.ensure_subfolder(token, folder["folder_id"], subfolder), name, pdf)
+        link = drive.upload(token, drive.ensure_subfolder(token, folder["folder_id"], subfolder), name, pdf)
+        log.debug("upload name=%s subfolder=%s bytes=%d sha256=%s category=%r ms=%d",
+                  docinfo.quote(name), subfolder, len(pdf), docinfo.sha12(pdf), category, timer.ms)
+        return link
 
     def form_values(form):
         """Echo the raw submission back into the form after a validation error."""
@@ -584,16 +594,26 @@ def create_app(connect=None, onedrive_transport=None):
             with connect() as conn:
                 known = db.known_invoice_urls(conn, [f["web_url"] for f in files])
             pending = [f for f in files if f["web_url"] not in known]
-            rows = []
+            log.debug("import scan car=%d listed=%d already_imported=%d pending=%d batch=%d", car_id, len(files),
+                      len(files) - len(pending), len(pending), min(len(pending), IMPORT_BATCH))
+            rows, round_timer = [], docinfo.Timer()
             for n, f in enumerate(pending[:IMPORT_BATCH]):
+                if n and round_timer.ms > IMPORT_BUDGET_SECONDS * 1000:
+                    log.debug("import scan stopped after %d files: over the %ds budget", n, IMPORT_BUDGET_SECONDS)
+                    break
                 row = import_row(n, url=f["web_url"], name=f["name"], folder=f["folder"], id=f["id"])
+                timer = docinfo.Timer()
                 try:
-                    guess = invoices.propose(f["folder"], f["name"], invoices.extract_text(
-                        drive.download(token, f["id"])), list(by_name), learned)
+                    pdf = drive.download(token, f["id"])
+                    guess = invoices.propose(f["folder"], f["name"], invoices.extract_text(pdf), list(by_name), learned)
                 except onedrive.OneDriveError as exc:
+                    log.warning("import file=%s folder=%s skipped: %s", docinfo.quote(f["name"]), docinfo.quote(f["folder"]), exc)
                     row["note"] = str(exc)
                     rows.append(row)
                     continue
+                have, missing = docinfo.found(guess)
+                log.debug("import file=%s folder=%s size=%s sha256=%s found=%s missing=%s ms=%d", docinfo.quote(f["name"]),
+                          docinfo.quote(f["folder"]), f["size"], docinfo.sha12(pdf), have, missing, timer.ms)
                 row.update(
                     date=guess["date"].isoformat() if guess["date"] else "",
                     category_id=str(by_name.get(guess["category"], "")),
@@ -647,8 +667,9 @@ def create_app(connect=None, onedrive_transport=None):
                     for field in changed:
                         for label in invoices.find_labels(text, field, typed[field]):
                             db.record_label(conn, field, label)
+                            log.debug("learned field=%s label=%r file=%s", field, label, docinfo.quote(row["name"]))
         except Exception:
-            app.logger.warning("learning from the import failed", exc_info=True)
+            log.warning("learning from the import failed", exc_info=True)
 
     def same_value(field, typed, guessed):
         """Did the owner keep what was proposed? (guess is the form text it was shown as)"""
@@ -713,11 +734,14 @@ def create_app(connect=None, onedrive_transport=None):
                     token = token or access_token()
                     values["invoice_url"] = drive.rename(token, row["id"], target)
                     renamed += 1
-                except onedrive.OneDriveError:
+                except onedrive.OneDriveError as exc:
                     rename_failed += 1           # import it anyway, still pointing at the old name
+                    log.warning("import rename item=%s to=%s failed: %s", row["id"], docinfo.quote(target), exc)
             with connect() as conn:
                 db.insert_expense(conn, values)
             imported.append((row, values))
+        log.debug("import confirm car=%d rows=%d imported=%d skipped_known=%d renamed=%d rename_failed=%d", car_id,
+                  len(chosen), len(imported), len(chosen) - len(imported), renamed, rename_failed)
         learn_from(imported)
         return redirect(url_for("index", msg="imported", n=len(imported), renamed=renamed,
                                 rename_failed=rename_failed), 303)
@@ -771,17 +795,24 @@ def create_app(connect=None, onedrive_transport=None):
     @app.post("/api/prefill")
     def api_prefill():
         """Read a chosen invoice PDF and propose the form's fields, for the Add page."""
+        timer = docinfo.Timer()
         upload = request.files.get("invoice_file")
+        filename = upload and upload.filename
         try:
-            pdf = validation.parse_invoice_pdf(upload and upload.filename, upload.read() if upload else b"")
+            pdf = validation.parse_invoice_pdf(filename, upload.read() if upload else b"")
         except ValueError as exc:
+            log.debug("prefill file=%s refused: %s", docinfo.quote(filename), exc)
             return jsonify(error=str(exc)), 400
         if pdf is None:
+            log.debug("prefill refused: no file sent")
             return jsonify(error="Choose a PDF first."), 400
         with connect() as conn:
             categories = db.categories(conn)
             learned = db.learned(conn, invoices.LEARN_AFTER)
         guess = invoices.propose("", upload.filename, invoices.extract_text(pdf), [c["name"] for c in categories], learned)
+        have, missing = docinfo.found(guess)
+        log.debug("prefill file=%s bytes=%d sha256=%s found=%s missing=%s ms=%d", docinfo.quote(filename), len(pdf),
+                  docinfo.sha12(pdf), have, missing, timer.ms)
         by_name = {c["name"]: c["id"] for c in categories}
         return jsonify(
             date=guess["date"].isoformat() if guess["date"] else None,

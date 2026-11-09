@@ -204,8 +204,8 @@ to revoke the app's access entirely, remove it at
 ### Importing invoices you already have
 
 Invoices already in a car's OneDrive folder (and its subfolders) can be turned into expenses:
-**OneDrive → Import existing invoices** beside the car. The app reads up to 10 PDFs not yet
-linked to an expense, guesses each one's date, category, vendor, amount and odometer, and shows
+**OneDrive → Import existing invoices** beside the car. The app reads up to 10 PDFs at a time (fewer if a round is
+taking over about 75 seconds, as scans do) that aren't yet linked to an expense, guesses each one's date, category, vendor, amount and odometer, and shows
 them in a table to check, correct and untick. **Nothing is saved until you press Import**, and a
 file already linked to an expense never appears again, so you can work through a big folder in
 rounds.
@@ -257,7 +257,8 @@ Currency is shown as `$` and distance in km.
   (`debug`, `info` the default, `warning`, `error`; set in `.env`, restart to change) sets both.
   `info` records startup, schema changes, expenses saved, updated or deleted, and OneDrive
   sign-in and upload results. `debug` adds detail such as retries. Tokens, secrets, vendors,
-  notes and amounts are never logged.
+  notes and amounts are never logged, except that file names, which can contain a vendor,
+  appear at `debug`.
 - **Timezone.** Date and time are entered in `APP_TZ` and stored as `timestamptz`.
   TeslaMate's `positions.date` is naive UTC; the odometer lookup converts before comparing.
 - POSTs must carry a same-origin `Origin`/`Referer` header (CSRF guard). Plain `curl` needs

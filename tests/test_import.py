@@ -52,7 +52,11 @@ class ImportDrive(FakeMicrosoft):
 
 @pytest.fixture()
 def ms():
-    return ImportDrive()
+    from tests.test_onedrive import CHILDREN, FOLDERS
+    snapshot = ({k: dict(v) for k, v in FOLDERS.items()}, {k: list(v) for k, v in CHILDREN.items()})
+    yield ImportDrive()
+    FOLDERS.clear(); FOLDERS.update(snapshot[0])      # undo folders a test created
+    CHILDREN.clear(); CHILDREN.update(snapshot[1])
 
 
 @pytest.fixture()
@@ -258,3 +262,12 @@ def test_rename_uses_the_values_the_owner_typed(client, ms, admin, dashed):
     client.post("/onedrive/import/1", data=data, headers=ORIGIN)
     ((_, body),) = renames(ms)
     assert body["name"] == "261109 - Tyres - Typed Vendor.pdf"
+
+
+def test_a_slow_round_stops_early_and_defers_the_rest(client, monkeypatch):
+    """OCR can take 10+ s a file; gunicorn kills a request at 120 s. Past the time budget the
+    page stops reading files and leaves the rest for the next round."""
+    monkeypatch.setattr("tmexpenses.IMPORT_BUDGET_SECONDS", -1)      # already used up
+    page = client.get("/onedrive/import/1").data.decode()
+    assert page.count('name="include_') == 1          # always at least one file per round
+    assert "2 more waiting" in page
