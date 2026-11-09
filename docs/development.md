@@ -21,6 +21,10 @@ scripts/dev.sh refresh        # re-copy TeslaMate data, keeping your test expens
 scripts/dev.sh reset          # wipe the test database
 scripts/dev.sh schema         # regenerate db/teslamate-schema.sql after a TeslaMate upgrade
 scripts/dev.sh setup          # in a new worktree: create .venv
+scripts/dev.sh down           # stop the stack, keeping its data
+scripts/dev.sh logs           # follow the app's log
+scripts/dev.sh psql           # a psql shell on the test database
+scripts/dev.sh onedrive-save  # save a OneDrive sign-in for the dev stack to reuse
 ```
 
 Each git worktree gets its own stack and test database at `/expenses-dev/<worktree>/`, so
@@ -80,3 +84,11 @@ git grep -n '^<!-- screenshot:' -- docs
 
 Version numbering and the candidate-to-stable steps are in
 [RELEASING.md](https://github.com/mattew124/teslamate-expenses/blob/main/RELEASING.md).
+
+### Keeping the docs in step with the code
+
+Three things check this, from cheapest to most thorough:
+
+- `tests/test_docs_drift.py` fails when the app reads a setting, or `scripts/dev.sh` offers a command, that no page mentions.
+- The *Docs sync* workflow reads each pull request's code changes and, if a page has fallen behind, commits a Markdown-only fix to the branch. It needs a `CLAUDE_CODE_OAUTH_TOKEN` repository secret (from `claude setup-token`), and it skips drafts, forks and bots.
+- `/docs-sync` in Claude Code sweeps the whole repo for drift on demand.
