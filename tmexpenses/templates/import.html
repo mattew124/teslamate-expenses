@@ -21,6 +21,8 @@
       <td data-label="File"><div class="file">
         <a href="{{ r.url }}" target="_blank" rel="noopener noreferrer">{{ r.name }} ↗</a>
         {% if r.folder %}<br><small>{{ r.folder }}</small>{% endif %}
+<br><label class="inline"><input type="checkbox" name="rename_{{ n }}" {{ 'checked' if r.rename }}>
+          <small>Rename in OneDrive to {% if r.new_name %}<em>{{ r.new_name }}</em> (from the values below){% else %}<em>yymmdd - category - vendor</em>{% endif %}</small></label>
         {% if errors.get(n) %}<br><span class="error">{{ errors[n] }}</span>{% elif r.note %}<br><small>{{ r.note }}</small>{% endif %}
         <input type="hidden" name="url_{{ n }}" value="{{ r.url }}">
         <input type="hidden" name="name_{{ n }}" value="{{ r.name }}">
@@ -36,7 +38,7 @@
         </select></td>
       <td data-label="Vendor"><input name="vendor_{{ n }}" maxlength="500" value="{{ r.vendor }}"></td>
       <td class="num" data-label="Amount"><input name="amount_{{ n }}" inputmode="decimal" value="{{ r.amount }}"></td>
-      <td class="num" data-label="Odometer"><input name="odometer_km_{{ n }}" inputmode="decimal" value="{{ r.odometer_km }}"></td>
+      <td class="num" data-label="Odometer"><input name="odometer_km_{{ n }}" inputmode="decimal" value="{{ r.odometer_km }}">{% if r.odo_note %}<small>{{ r.odo_note }}</small>{% endif %}</td>
     </tr>
     {% endfor %}
     </tbody>

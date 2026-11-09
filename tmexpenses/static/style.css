@@ -81,3 +81,4 @@ form.import { display: grid; gap: 1rem; }
 ul.category-list li { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: .5rem; }
 ul.category-list form.row { align-items: end; }
 ul.learned-list li { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: .4rem; }
+label.inline { display: flex; gap: .4rem; align-items: baseline; }

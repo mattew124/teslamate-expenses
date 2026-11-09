@@ -20,9 +20,17 @@ TEXT = {b"%PDF-tyres": TYRES_TEXT, b"%PDF-scan": "", b"%PDF-insurer": "Total pre
 
 
 class ImportDrive(FakeMicrosoft):
+    rename_status = 200
+
     def __call__(self, method, url, data=None, headers=None, raw=False):
         from urllib.parse import unquote, urlparse
         path = unquote(urlparse(url).path)
+        if method == "PATCH" and path.rsplit("/", 1)[-1] in FILES:
+            self.calls.append((method, url, data, headers))
+            if self.rename_status != 200:
+                return self.rename_status, {"error": {"code": "nameAlreadyExists", "message": "exists"}}
+            i = path.rsplit("/", 1)[1]
+            return 200, {"id": i, "webUrl": f"https://od.example/{i}-renamed"}
         if url.startswith("https://cdn.example/"):
             assert "Authorization" not in (headers or {}), "the CDN link must be fetched without the token"
             self.calls.append((method, url, data, headers or {}))
@@ -61,7 +69,7 @@ def cat(admin, name):
 
 
 def post_rows(admin, **over):
-    data = {"count": "3",
+    data = {"count": "3", "id_0": "P3", "id_1": "P1", "id_2": "P2",
             "include_0": "on", "url_0": "https://od.example/P3", "name_0": "250105 - Insurer cert.pdf",
             "date_0": "2025-01-05", "category_id_0": cat(admin, "Insurance"), "amount_0": "980.40",
             "vendor_0": "Insurer", "odometer_km_0": "",
@@ -140,3 +148,102 @@ def test_needs_a_chosen_folder(client, admin):
 
 def test_post_needs_same_origin(client, admin):
     assert client.post("/onedrive/import/1", data=post_rows(admin)).status_code == 403
+
+
+# ---- odometer from TeslaMate, renaming, prefill --------------------------------------
+
+def test_missing_odometer_is_filled_from_teslamate(client, admin):
+    # P3 is dated 2025-01-05 (file name) and its text has no odometer; TeslaMate does.
+    admin.execute("INSERT INTO positions (latitude, longitude, date, odometer, car_id) VALUES "
+                  "(0, 0, '2025-01-04 00:00', 40000.5, 1), (0, 0, '2025-02-01 00:00', 41000, 1)")
+    page = client.get("/onedrive/import/1").data.decode()
+    assert 'value="40000.5"' in page and "from TeslaMate" in page
+
+
+def test_a_pdf_odometer_beats_teslamate(client, admin):
+    admin.execute("INSERT INTO positions (latitude, longitude, date, odometer, car_id) VALUES (0, 0, '2026-10-01', 1, 1)")
+    page = client.get("/onedrive/import/1").data.decode()
+    assert 'value="45120"' in page          # the tyre invoice's own odometer
+
+
+def test_odometer_stays_blank_when_teslamate_has_nothing(client, admin):
+    admin.execute("TRUNCATE positions")
+    assert 'name="odometer_km_2"' in client.get("/onedrive/import/1").data.decode()
+
+
+def renames(ms):
+    import json
+    return [(c[1], json.loads(c[2])) for c in ms.calls if c[0] == "PATCH"]
+
+
+def test_preview_offers_the_new_name_without_renaming(client, ms, admin):
+    page = client.get("/onedrive/import/1").data.decode()
+    assert 'name="rename_0"' in page and "261024 - Tyres - Example Tyres Pty Ltd.pdf" in page
+    assert renames(ms) == []
+
+
+def test_ticked_rename_renames_and_stores_the_new_link(client, ms, admin):
+    resp = client.post("/onedrive/import/1", data=post_rows(admin, rename_1="on"), headers=ORIGIN)
+    assert resp.status_code == 303 and "renamed=1" in resp.headers["Location"]
+    ((url, body),) = renames(ms)
+    assert url.endswith("/me/drive/items/P1") and body["name"] == "261024 - Tyres - Example Tyres.pdf"
+    assert body["@microsoft.graph.conflictBehavior"] == "fail"       # never clobber another file
+    got = {r["vendor"]: r["invoice_url"] for r in rows(admin)}
+    assert got["Example Tyres"] == "https://od.example/P1-renamed"
+    assert got["Insurer"] == "https://od.example/P3"                 # not ticked: untouched
+
+
+def test_unticked_rename_does_nothing(client, ms, admin):
+    client.post("/onedrive/import/1", data=post_rows(admin), headers=ORIGIN)
+    assert renames(ms) == []
+
+
+def test_a_failed_rename_still_imports_with_the_old_link(client, ms, admin):
+    ms.rename_status = 409
+    resp = client.post("/onedrive/import/1", data=post_rows(admin, rename_1="on"), headers=ORIGIN)
+    assert resp.status_code == 303 and "rename_failed=1" in resp.headers["Location"]
+    assert {r["invoice_url"] for r in rows(admin)} == {"https://od.example/P1", "https://od.example/P3"}
+    assert "couldn" in client.get(resp.headers["Location"]).data.decode().lower()
+
+
+def test_a_file_already_named_right_isnt_renamed(client, ms, admin):
+    data = post_rows(admin, rename_1="on", vendor_1="")      # -> "261024 - Tyres.pdf", the file's own name
+    client.post("/onedrive/import/1", data=data, headers=ORIGIN)
+    assert renames(ms) == []
+
+
+def test_prefill_reads_an_uploaded_pdf(client, admin, monkeypatch):
+    import io
+    r = client.post("/api/prefill", headers=ORIGIN, data={
+        "invoice_file": (io.BytesIO(b"%PDF-tyres"), "261024 - Tyres.pdf", "application/pdf")})
+    got = r.get_json()
+    assert r.status_code == 200
+    assert got["date"] == "2026-10-24" and got["amount"] == "1234.50" and got["odometer_km"] == "45120"
+    assert got["vendor"] == "Example Tyres Pty Ltd" and got["category_id"] == int(cat(admin, "Tyres"))
+
+
+def test_prefill_refuses_non_pdfs_and_empty_requests(client, admin):
+    import io
+    assert client.post("/api/prefill", headers=ORIGIN, data={
+        "invoice_file": (io.BytesIO(b"hello"), "x.pdf", "application/pdf")}).status_code == 400
+    assert client.post("/api/prefill", headers=ORIGIN, data={}).status_code == 400
+    assert client.post("/api/prefill", data={}).status_code == 403
+
+
+def test_add_form_wires_up_prefill(client):
+    assert b"data-prefill-url" in client.get("/new").data
+
+
+def test_rename_is_offered_even_when_nothing_could_be_guessed(client):
+    page = client.get("/onedrive/import/1").data.decode()
+    assert page.count('name="rename_') == 3          # every row, including the unreadable scan
+    assert "yymmdd - category - vendor" in page
+
+
+def test_rename_uses_the_values_the_owner_typed(client, ms, admin):
+    data = {"count": "1", "include_0": "on", "rename_0": "on", "id_0": "P2", "url_0": "https://od.example/P2",
+            "name_0": "scan.pdf", "date_0": "2026-11-09", "category_id_0": cat(admin, "Tyres"),
+            "amount_0": "1.00", "vendor_0": "Typed Vendor"}
+    client.post("/onedrive/import/1", data=data, headers=ORIGIN)
+    ((_, body),) = renames(ms)
+    assert body["name"] == "261109 - Tyres - Typed Vendor.pdf"

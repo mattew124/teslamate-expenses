@@ -207,6 +207,18 @@ class OneDrive:
         return {"id": item["id"], "name": item["name"], "path": display_path(item),
                 "parent_id": (item.get("parentReference") or {}).get("id")}
 
+    def rename(self, access_token, item_id, new_name):
+        """Rename a file in place; fails rather than replacing a file with that name.
+        -> its web URL (which can change with the name)."""
+        body = json.dumps({"name": new_name, "@microsoft.graph.conflictBehavior": "fail"}).encode()
+        status, item = self.transport("PATCH", f"{GRAPH}/me/drive/items/{quote(item_id, safe='')}", body, {
+            "Authorization": f"Bearer {access_token}", "Content-Type": "application/json"})
+        if status == 409:
+            raise OneDriveError(f"A file called “{new_name}” already exists there.")
+        if status != 200 or not str(item.get("webUrl", "")).startswith("https://"):
+            raise OneDriveError("OneDrive didn't rename the file: " + graph_error(status, item))
+        return item["webUrl"]
+
     def ensure_subfolder(self, access_token, parent_id, name):
         """The folder called `name` (any case) directly inside parent_id, made if it
         isn't there. -> its id. Two uploads racing to make it both end up with one."""

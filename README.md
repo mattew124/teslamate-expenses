@@ -202,6 +202,13 @@ by OCR, which is slower and rougher. An amount is never guessed without a clear 
 rows missing a date, category or amount start unticked. The image includes `poppler-utils` and
 `tesseract-ocr` for this; without them the app still runs and simply proposes less.
 
+A blank odometer is filled from TeslaMate's last position before the invoice date. Each row can also
+be **renamed in OneDrive** to `yymmdd - category - vendor` (for example `261024 - Tyres - Tyre Shop.pdf`,
+the date part following the Settings date format) from the values you confirm; a name already taken
+leaves the file as it is, and the expense is still imported. On **+ Add**, choosing the invoice PDF
+fills in the date, amount, vendor, category (when the file name or a learned vendor says) and
+odometer it can read, without touching anything you've already typed.
+
 The importer **learns from your corrections**. When you change or fill in a date, amount or
 odometer, it re-reads that PDF and finds your value in the text: the label printed beside it
 (for example `Annual premium` or `Date of issue`) is remembered, never the value itself. It also
