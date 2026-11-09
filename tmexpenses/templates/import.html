@@ -3,12 +3,12 @@
 {% block content %}
 <h1>Import invoices for {{ car.name or ('Car ' ~ car.id) }}</h1>
 {% if notice %}<p class="notice bad">{{ notice }}</p>{% endif %}
-{% if rows or shell %}
+{% if rows or scanning %}
 <p>These PDFs are in the car's OneDrive folder but not yet in your expenses. Date, category,
   vendor, amount and odometer are <strong>guesses</strong> from the file name, its folder and the text
   inside the PDF (scans are read by OCR). Check every row, correct what's wrong, and untick anything
   you don't want. Nothing is saved until you press Import.</p>
-{% if shell %}
+{% if scanning %}
 <div id="import-status" class="import-status" role="status" aria-live="polite">
   <progress id="import-progress" max="1"></progress>
   <p id="import-status-text">Looking in the folder…</p>
@@ -17,7 +17,7 @@
   <a href="{{ url_for('onedrive_import', car_id=car.id, sync=1) }}">Load it the slow way instead</a>: the page stays blank until every file has been read.</p></noscript>
 {% endif %}
 <form method="post" action="{{ url_for('onedrive_import_confirm', car_id=car.id) }}" class="import" id="import-form"
-      {% if shell %}data-scan-url="{{ url_for('onedrive_import_scan', car_id=car.id) }}" data-row-url="{{ url_for('onedrive_import_read', car_id=car.id) }}" hidden{% endif %}>
+      {% if scanning %}data-scan-url="{{ url_for('onedrive_import_scan', car_id=car.id) }}" data-row-url="{{ url_for('onedrive_import_read', car_id=car.id) }}" hidden{% endif %}>
   <input type="hidden" name="count" value="{{ rows|length }}">
   <div class="table-wrap">
   <table class="import-table">
@@ -30,7 +30,7 @@
   </div>
   <p id="import-remaining"><small>{% if remaining %}{{ remaining }} more waiting: import these, then open this page again for the next batch.{% endif %}</small></p>
   <div class="row">
-    <button type="submit" class="button" {{ 'disabled' if shell }}>Import ticked</button>
+    <button type="submit" class="button" {{ 'disabled' if scanning }}>Import ticked</button>
     <a href="{{ url_for('onedrive_page') }}">Cancel</a>
   </div>
   <p><small>When you correct a date, amount or odometer, the app remembers the label printed beside it in the

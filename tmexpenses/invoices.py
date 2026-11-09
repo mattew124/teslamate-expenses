@@ -10,7 +10,7 @@ import logging
 import os
 import re
 import shutil
-import subprocess  # nosec B404 - runs poppler and tesseract, list arguments only
+import subprocess
 import tempfile
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
@@ -56,7 +56,7 @@ def extract_text(pdf):
     the caller then just has less to propose, never an error (the log says why)."""
     timer = Timer()
     # The container's root is read-only; /dev/shm is its one writable (in-memory) place.
-    scratch = "/dev/shm" if os.access("/dev/shm", os.W_OK) else None  # nosec B108 - private TemporaryDirectory in the only writable place
+    scratch = "/dev/shm" if os.access("/dev/shm", os.W_OK) else None
     method, ocr_pages = "text", 0
     with tempfile.TemporaryDirectory(prefix="tmexp-", dir=scratch) as tmp:
         path = Path(tmp) / "in.pdf"
@@ -80,7 +80,7 @@ def extract_text(pdf):
 
 def _run(cmd, timeout):
     try:
-        done = subprocess.run(cmd, capture_output=True, timeout=timeout, check=False)  # nosec B603 - fixed tool names, our own temp path, no shell
+        done = subprocess.run(cmd, capture_output=True, timeout=timeout, check=False)
     except FileNotFoundError:
         log.warning("extract: %s isn't installed", cmd[0])
         return ""
