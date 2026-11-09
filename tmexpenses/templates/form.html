@@ -33,11 +33,12 @@
   {% if onedrive_enabled %}
   <label>Invoice PDF
     <input type="file" name="invoice_file" accept="application/pdf,.pdf">{{ err('invoice_file') }}
+    <span class="or-pick"><span>or</span>
+      <button type="button" id="onedrive-pick" class="secondary">📁 Choose from OneDrive</button></span>
+    <small id="onedrive-pick-hint">Already in OneDrive? Pick it there instead of uploading it again.</small>
     {% if not expense_id %}<small id="prefill-hint">Choose the PDF next: the fields below are filled in from what can be read in it. Check them before saving.</small>{% endif %}
     {% if onedrive_connected %}
     <small>It's uploaded to the car's OneDrive folder when you save, and the invoice link is filled in for you.{% if values.invoice_url %} Replaces the current link; the old file stays in OneDrive.{% endif %}</small>
-    <small>Already in OneDrive? <button type="button" id="onedrive-pick" class="linklike">Choose it from OneDrive</button>
-      <span id="onedrive-pick-hint"></span></small>
     {% else %}
     <small><a href="{{ url_for('onedrive_page') }}">Connect OneDrive</a> to upload invoices from here.</small>
     {% endif %}

@@ -178,6 +178,8 @@ def picker_checks(page):
     page.goto(UI + "new")
     if not page.locator("select[name=car_id]").input_value():
         page.select_option("select[name=car_id]", index=1)
+    expect(page.locator("#onedrive-pick")).to_be_visible()
+    shot(page, "form-onedrive-button")
     page.click("#onedrive-pick")
     dialog = page.locator("#onedrive-picker")
     expect(dialog).to_be_visible()

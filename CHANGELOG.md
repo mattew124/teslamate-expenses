@@ -9,7 +9,7 @@ Each entry says what an installer must do to upgrade. Where nothing is said, pul
 
 ### Added
 
-- Add and Edit expense: **Choose it from OneDrive** opens a window over the form to pick a PDF that is
+- Add and Edit expense: **Choose from OneDrive**, a button under the PDF field, opens a window over the form to pick a PDF that is
   already in OneDrive. It starts in the car's folder and can go up, to the top of the drive. The file's
   link becomes the invoice link and the form fills in from it, as for a chosen file. Nothing is
   copied.
