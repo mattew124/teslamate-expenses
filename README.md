@@ -15,7 +15,7 @@
 
 > **Vibe coded.** This project was written with an AI coding assistant (Claude Code), directed
 > and tested by a person, not hand-written or audited line by line. It has tests, runs in a
-> read-only, non-root container and keeps its database role least-privilege, but treat it as you
+> read-only, non-root container and only writes inside its own `expenses` schema, but treat it as you
 > would any young, unreviewed software: back up your TeslaMate database before first use, and
 > read the code before you trust it with anything you care about.
 >
@@ -50,6 +50,8 @@ or Authelia with Traefik. `docker-compose.traefik.yml` refuses to start without 
 
 Back up TeslaMate's database first: the first start adds the `expenses` schema to it and changes
 nothing else.
+
+Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) first.
 
 ```bash
 cp .env.example .env    # set DATABASE_USER and DATABASE_PASS to TeslaMate's
