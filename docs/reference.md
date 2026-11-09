@@ -24,6 +24,10 @@ again later. Set `UPDATE_CHECK=0` in `.env` and restart to switch the check off.
 An installation on a release candidate (`0.3.0-rc1`) is told about newer candidates and the stable
 release that replaces them. One on a stable release is only told about stable releases.
 
+## Database connection
+
+The app connects as `DATABASE_USER` with `DATABASE_PASS` to `DATABASE_NAME` on `DATABASE_HOST` (default `database`, the TeslaMate service name) and `DATABASE_PORT` (default `5432`). Set the last two in `.env` only if TeslaMate's database runs under another name or port.
+
 ## Logs
 
 `docker logs` shows gunicorn's request lines plus the app's own events. `LOG_LEVEL` (`debug`, `info` the default, `warning`, `error`; set in `.env`, restart to change) sets both. `info` records startup, the update check's result, schema changes, expenses saved, updated or deleted, and OneDrive sign-in and upload results. `debug` adds detail such as retries. Tokens, secrets, vendors, notes and amounts are never logged, except that file names, which can contain a vendor, appear at `debug`.
