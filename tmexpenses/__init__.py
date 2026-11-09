@@ -18,7 +18,7 @@ from flask import Flask, abort, jsonify, make_response, redirect, render_templat
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from . import dashboard, db, docinfo, invoices, logs, onedrive, validation
+from . import dashboard, db, docinfo, invoices, logs, onedrive, updates, validation
 
 log = logging.getLogger("tmexpenses.app")
 
@@ -67,9 +67,9 @@ class PrefixMiddleware:
         return [b"Not found\n"]
 
 
-def create_app(connect=None, onedrive_transport=None):
+def create_app(connect=None, onedrive_transport=None, release_fetch=None):
     """`connect` is injectable so tests can hand in a connection to a scratch DB,
-    and `onedrive_transport` so they can stand in for Microsoft."""
+    `onedrive_transport` so they can stand in for Microsoft, and `release_fetch` for GitHub."""
     app = Flask(__name__)
     logs.configure(app.logger, os.environ.get("LOG_LEVEL"))
     log = app.logger
@@ -95,13 +95,20 @@ def create_app(connect=None, onedrive_transport=None):
         drive = onedrive.OneDrive(os.environ["EXPENSES_ENCRYPTION_KEY"], onedrive_transport)
     elif os.environ.get("ONEDRIVE_TOKEN_KEY"):
         log.warning("ONEDRIVE_TOKEN_KEY was renamed EXPENSES_ENCRYPTION_KEY; OneDrive stays off until it is set.")
+    # The image is built with its release version in APP_VERSION; anything else is a development build.
+    version = os.environ.get("APP_VERSION", "")
+    update_check = updates.UpdateCheck(version, fetch=release_fetch,
+                                       enabled=os.environ.get("UPDATE_CHECK", "1").strip() != "0")
+    app.extensions["update_check"] = update_check
     base_path = os.environ.get("BASE_PATH", "")
     if base_path:
         app.wsgi_app = PrefixMiddleware(app.wsgi_app, base_path)
     # The proxy's scheme and host, so the OneDrive callback address is the
     # public one. The app is only reachable through the proxy (or on loopback).
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=0, x_proto=1, x_host=1)
-    log.info("started: tz=%s base_path=%s onedrive=%s", tz, base_path or "/", "on" if drive else "off")
+    log.info("started: version=%s tz=%s base_path=%s onedrive=%s update_check=%s", version or "dev", tz,
+             base_path or "/", "on" if drive else "off", "on" if update_check.active else "off")
+    update_check.status()    # starts the first check now, so the footer knows by the first page
 
     # ---- helpers --------------------------------------------------------------
 
@@ -131,6 +138,11 @@ def create_app(connect=None, onedrive_transport=None):
     @app.context_processor
     def onedrive_flag():
         return {"onedrive_enabled": drive is not None}
+
+    @app.context_processor
+    def footer():
+        """The docs link, the running version and whether a newer release exists (never waits for GitHub)."""
+        return {"docs_url": updates.DOCS_URL, "about": update_check.status()}
 
     @app.errorhandler(RequestEntityTooLarge)
     def too_large(_exc):

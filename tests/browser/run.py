@@ -271,6 +271,17 @@ def test_header_on_a_desktop(page):
     shot(page, "header-desktop")
 
 
+def test_footer_links_to_the_docs_and_names_the_build(page):
+    """Every page ends with the docs link and the version; the dev stack is a build with no version."""
+    page.goto(UI)
+    footer = page.locator("footer")
+    docs = footer.get_by_role("link", name="Documentation")
+    assert docs.get_attribute("href") == "https://mattew124.github.io/teslamate-expenses/"
+    assert docs.get_attribute("rel") == "noopener noreferrer"
+    assert "Development build" in footer.inner_text()
+    shot(page, "footer")
+
+
 def test_list_shows_key_fields_on_a_phone(page):
     add_expense(page)
     row = page.locator(f"tr:has-text('{MARKER}')")
@@ -417,6 +428,7 @@ def main():
         dash_page = desktop.new_page()
         step("dashboard renders with data and invoice links", test_dashboard, dash_page)
         step("header is one row on a desktop", test_header_on_a_desktop, desktop.new_page())
+        step("footer links to the docs and names the build", test_footer_links_to_the_docs_and_names_the_build, desktop.new_page())
         remove_marked(page)
         browser.close()
     print(f"\n{passed} passed, {len(failed)} failed, {len(skipped)} skipped")
