@@ -8,7 +8,7 @@ cost of ownership.
 import hmac
 import logging
 import os
-from concurrent.futures import ThreadPoolExecutor
+import time
 from decimal import Decimal
 from datetime import date, datetime, time as dtime, timedelta, timezone
 from urllib.parse import urlparse
@@ -40,6 +40,7 @@ MESSAGES = {
 
 # PDFs read per page: each is downloaded and text-extracted (OCR for scans) while
 # the request waits, so a big folder is worked through in rounds.
+TOKEN_MARGIN_SECONDS = 120   # a kept access token is dropped this long before it expires
 IMPORT_BATCH = 10
 # ...and stop reading more files once a round has taken this long (OCR can take 10+ seconds a file,
 # and a request that outlasts gunicorn's 120 s timeout is killed), leaving the rest for the next round.
@@ -225,16 +226,31 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None):
             errors["invoice_file"] = str(exc)
         return values, errors
 
+    kept = {}   # this worker's access token: {"key": the stored refresh token it came with, "token", "until"}
+
     def access_token():
-        """Spend the stored refresh token and store the one Microsoft hands back."""
+        """An access token for Graph. Microsoft's last about an hour, so one is kept and reused until
+        shortly before it expires (a refresh costs most of a second). It is only reused while the stored
+        refresh token is the one it came with: disconnecting, signing in again or new credentials all
+        change that, so none of them leaves a kept token in use. Otherwise: spend the stored refresh token
+        and store the one Microsoft hands back."""
         with connect() as conn:
             account = db.onedrive_account(conn, lock=True)
             if not account or not account["refresh_token"]:
+                kept.clear()
                 raise onedrive.NotConnected()
+            if kept.get("key") == account["refresh_token"] and kept["until"] > time.monotonic():
+                return kept["token"]
             tokens = drive.refresh(account["client_id"], drive.decrypt(account["client_secret"]),
                                    drive.decrypt(account["refresh_token"]))
+            key = account["refresh_token"]
             if tokens.get("refresh_token"):
-                db.save_onedrive_account(conn, refresh_token=drive.encrypt(tokens["refresh_token"]))
+                key = drive.encrypt(tokens["refresh_token"])
+                db.save_onedrive_account(conn, refresh_token=key)
+        lifetime = tokens.get("expires_in", 0) - TOKEN_MARGIN_SECONDS
+        kept.clear()
+        if lifetime > 0:
+            kept.update(key=key, token=tokens["access_token"], until=time.monotonic() + lifetime)
         return tokens["access_token"]
 
     def upload_invoice(values, pdf):
@@ -928,11 +944,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None):
         folder_id = None if wanted == "root" else (wanted or car_folder["folder_id"])
         try:
             token = access_token()
-            # Two independent Graph calls, each a second or more: ask both at once.
-            with ThreadPoolExecutor(max_workers=2) as pool:
-                asked_here = pool.submit(drive.folder, token, folder_id)
-                folders, files = drive.contents(token, folder_id)
-                here = asked_here.result()
+            here, folders, files = drive.contents(token, folder_id)
         except onedrive.SignInExpired as exc:
             return jsonify(error=str(exc), url=url_for("onedrive_page")), 409
         except onedrive.OneDriveError as exc:

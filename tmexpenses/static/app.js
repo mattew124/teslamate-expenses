@@ -270,6 +270,24 @@ document.addEventListener("DOMContentLoaded", () => {
     };
     const kb = (n) => (n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " kB");
 
+    // Folders already fetched (as promises, so a click on one still loading just waits for it). Cleared each
+    // time the window opens, so what it shows is never older than that.
+    let seen = new Map();
+    const fetchFolder = (car, folder) => {
+      const key = car + "/" + (folder || "");
+      if (!seen.has(key)) {
+        const url = form.dataset.onedriveBrowseUrl.replace(/0$/, car) + (folder ? "?folder=" + encodeURIComponent(folder) : "");
+        const asked = fetch(url).then(async (res) => {
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Couldn't open OneDrive.");
+          return data;
+        });
+        seen.set(key, asked);
+        asked.catch(() => seen.delete(key));      // a failure is tried again next time
+      }
+      return seen.get(key);
+    };
+
     async function show(folder) {
       const ticket = ++loading;
       status.textContent = "Loading…";
@@ -278,10 +296,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!car) { status.textContent = "Pick the car first."; pathBox.textContent = ""; return; }
       let data;
       try {
-        const url = form.dataset.onedriveBrowseUrl.replace(/0$/, car) + (folder ? "?folder=" + encodeURIComponent(folder) : "");
-        const res = await fetch(url);
-        data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Couldn't open OneDrive.");
+        data = await fetchFolder(car, folder);
       } catch (e) {
         if (ticket === loading) status.textContent = e.message;
         return;
@@ -292,6 +307,8 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!data.is_root) entry("⬑ Up", () => show(data.parent_id || "root"));
       data.folders.forEach((f) => entry("📁 " + f.name, () => show(f.id)));
       data.files.forEach((f) => entry("📄 " + f.name + " (" + kb(f.size) + ")", () => choose(f)));
+      // Going up is the likeliest next move: have the folder above ready while this one is read.
+      if (!data.is_root) fetchFolder(car, data.parent_id || "root").catch(() => {});
     }
 
     function choose(file) {
@@ -308,12 +325,13 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     pickButton.addEventListener("click", () => {
+      seen = new Map();
       picker.showModal();
       show(null);
     });
     document.getElementById("onedrive-picker-close").addEventListener("click", () => picker.close());
     // The car decides where the window starts: a different car means a different folder.
-    form.elements.car_id.addEventListener("change", () => { if (picker.open) show(null); });
+    form.elements.car_id.addEventListener("change", () => { seen = new Map(); if (picker.open) show(null); });
   }
   // New expense with nothing typed yet: fill automatically.
   if (!odo.value) fill(false);

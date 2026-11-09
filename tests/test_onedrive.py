@@ -12,6 +12,7 @@ import html
 import re
 import io
 import json
+import time
 from datetime import date, timedelta
 from urllib.parse import parse_qs, unquote, urlparse
 
@@ -49,6 +50,13 @@ def item(key):
     return out
 
 
+def with_children(key):
+    """A folder and what is in it, as Graph answers ?expand=children."""
+    files = [{"id": "F1", "name": "receipt.pdf", "file": {}, "size": 10, "webUrl": "https://onedrive.live.com/?id=F1"},
+             {"id": "F2", "name": "notes.txt", "file": {}, "size": 1, "webUrl": "https://onedrive.live.com/?id=F2"}]
+    return {**item(key), "children": [item(k) for k in CHILDREN[key]] + files}
+
+
 class FakeMicrosoft:
     """Just enough of the Microsoft identity platform and Graph for the app."""
 
@@ -57,6 +65,7 @@ class FakeMicrosoft:
         self.refresh_ok = True
         self.upload_status = 201
         self.refresh_count = 0
+        self.expires_in = 3600
         self.challenge = None
         self.created = []
 
@@ -81,7 +90,7 @@ class FakeMicrosoft:
                 return 400, {"error": "invalid_grant", "error_description": "expired"}
             self.refresh_count += 1
             n = self.refresh_count + 1
-            return 200, {"access_token": f"AT-{n}", "refresh_token": f"RT-{n}"}
+            return 200, {"access_token": f"AT-{n}", "refresh_token": f"RT-{n}", "expires_in": self.expires_in}
         if url == FILE_DOWNLOAD:                      # the CDN address: no bearer token goes with it
             return 200, PDF
         assert headers["Authorization"].startswith("Bearer AT-")
@@ -92,13 +101,16 @@ class FakeMicrosoft:
             files = [{"id": "F1", "name": "receipt.pdf", "file": {}, "size": 10, "webUrl": "https://onedrive.live.com/?id=F1"},
                      {"id": "F2", "name": "notes.txt", "file": {}, "size": 1, "webUrl": "https://onedrive.live.com/?id=F2"}]
             return 200, {"value": [item(k) for k in CHILDREN[parent]] + files}
+        expand = "$expand" in parse_qs(urlparse(url).query)
         if method == "GET" and path.endswith("/me/drive/root"):
-            return 200, item("ROOT")
+            return 200, with_children("ROOT") if expand else item("ROOT")
         if method == "GET" and path.endswith("/me/drive/items/F1"):
             return 200, {"id": "F1", "size": len(PDF), "@microsoft.graph.downloadUrl": FILE_DOWNLOAD}
         if method == "GET" and "/me/drive/items/" in path:
             key = path.rsplit("/", 1)[1]
-            return (200, item(key)) if key in FOLDERS else (404, {"error": {"code": "itemNotFound"}})
+            if key not in FOLDERS:
+                return 404, {"error": {"code": "itemNotFound"}}
+            return 200, with_children(key) if expand else item(key)
         if method == "POST" and path.endswith("/children"):
             parent = "ROOT" if path.endswith("/me/drive/root/children") else path.split("/items/")[1].split("/")[0]
             assert headers["Content-Type"] == "application/json"
@@ -184,6 +196,12 @@ def sign_in(client, ms):
 
 def choose_folder(client, folder_id="INV", car_id=1):
     return client.post(f"/onedrive/folders/{car_id}", data={"folder_id": folder_id}, headers=ORIGIN)
+
+
+def an_hour_passes(monkeypatch):
+    """The access token kept from earlier has expired by the next call."""
+    now = time.monotonic()
+    monkeypatch.setattr(time, "monotonic", lambda: now + 7200)
 
 
 def with_pdf(data, content=PDF, name="invoice.pdf"):
@@ -390,6 +408,7 @@ def test_upload_on_create(client, ms, admin):
 
 
 def test_refresh_token_rotation_is_saved(client, ms, admin):
+    ms.expires_in = 0           # every call needs a fresh access token, so every call rotates the refresh token
     sign_in(client, ms)
     choose_folder(client)
     before = len([c for c in ms.calls if c[1].endswith("/token")])
@@ -481,9 +500,10 @@ def test_old_variable_name_is_explained(monkeypatch, caplog):
     assert any("ONEDRIVE_TOKEN_KEY" in m and "EXPENSES_ENCRYPTION_KEY" in m for m in caplog.messages)
 
 
-def test_expired_sign_in_is_explained(client, ms, admin):
+def test_expired_sign_in_is_explained(client, ms, admin, monkeypatch):
     sign_in(client, ms)
     choose_folder(client)
+    an_hour_passes(monkeypatch)
     ms.refresh_ok = False
     resp = client.post("/new", data=with_pdf(form(admin)), headers=ORIGIN)
     assert resp.status_code == 400 and b"sign in again" in resp.data
@@ -730,3 +750,74 @@ def test_the_add_form_offers_the_picker_only_when_connected(client, ms):
     sign_in(client, ms)
     page = client.get("/new").data.decode()
     assert "data-onedrive-browse-url" in page and 'id="onedrive-picker"' in page
+
+
+# ---- the picker is quick: one Graph call a folder, and the access token is reused ------------
+
+def graph_gets(ms):
+    return [c for c in ms.calls if c[0] == "GET" and not c[1].endswith("/token") and "login.microsoftonline" not in c[1]]
+
+
+def refreshes(ms):
+    return [c for c in ms.calls if c[1].endswith("/token") and b"grant_type=refresh_token" in c[2]]
+
+
+def test_a_folder_is_one_graph_call(client, ms):
+    sign_in(client, ms)
+    choose_folder(client, "TESTCAR")
+    pick(client)                                  # warm up: the token refresh isn't a Graph call
+    before = len(graph_gets(ms))
+    assert pick(client, "?folder=CARS").status_code == 200
+    assert len(graph_gets(ms)) - before == 1
+
+
+def test_the_access_token_is_reused_until_it_nears_expiry(client, ms):
+    sign_in(client, ms)
+    choose_folder(client, "TESTCAR")
+    before = len(refreshes(ms))             # choosing the folder just refreshed once
+    for folder in ("", "?folder=CARS", "?folder=root"):
+        assert pick(client, folder).status_code == 200
+    assert len(refreshes(ms)) == before
+
+
+def test_an_access_token_about_to_expire_is_not_reused(client, ms):
+    ms.expires_in = 30            # inside the safety margin: not worth keeping
+    sign_in(client, ms)
+    choose_folder(client, "TESTCAR")
+    before = len(refreshes(ms))
+    pick(client); pick(client)
+    assert len(refreshes(ms)) - before == 2
+
+
+def test_disconnecting_stops_a_kept_access_token_being_used(client, ms):
+    sign_in(client, ms)
+    choose_folder(client, "TESTCAR")
+    assert pick(client).status_code == 200
+    client.post("/onedrive/disconnect", headers=ORIGIN)
+    calls = len(ms.calls)
+    assert pick(client).status_code == 409 and len(ms.calls) == calls
+
+
+def test_signing_in_again_does_not_reuse_the_old_access_token(client, ms):
+    sign_in(client, ms)
+    choose_folder(client, "TESTCAR")
+    pick(client)
+    client.post("/onedrive/disconnect", headers=ORIGIN)
+    q = start_sign_in(client, ms)
+    client.get(f"/onedrive/callback?code=AUTH-CODE&state={q['state']}")
+    before = len(refreshes(ms))
+    assert pick(client).status_code == 200
+    assert len(refreshes(ms)) - before == 1     # the new sign-in's refresh token has no kept access token
+
+
+def test_a_folder_with_more_than_a_page_of_children_is_followed():
+    pdf = {"file": {}, "webUrl": "https://onedrive.live.com/f", "size": 1}
+    drive, asked = graph_of(
+        (200, {"id": "X", "name": "X", "folder": {}, "parentReference": {"id": "P", "path": "/drive/root:"},
+               "children": [{"id": "A", "name": "Alpha", "folder": {}}, {"id": "1", "name": "a.pdf", **pdf}],
+               "children@odata.nextLink": NEXT}),
+        (200, {"value": [{"id": "B", "name": "Beta", "folder": {}}, {"id": "2", "name": "b.pdf", **pdf}]}))
+    here, folders, files = drive.contents("AT-1", "X")
+    assert here["path"] == "/X" and here["parent_id"] == "P"
+    assert [f["name"] for f in folders] == ["Alpha", "Beta"] and [f["name"] for f in files] == ["a.pdf", "b.pdf"]
+    assert asked[1] == NEXT
