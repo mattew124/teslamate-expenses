@@ -377,7 +377,7 @@ def test_dashboard(page):
     # Stat titles appear, and a value comes back from the datasource.
     expect(page.get_by_text("Total cost", exact=True)).to_be_visible(timeout=30000)
     expect(page.get_by_text("Cost per km — running")).to_be_visible()
-    expect(page.get_by_text("Monthly running costs")).to_be_visible()
+    expect(page.get_by_text("Running costs per month")).to_be_visible()
     page.wait_for_load_state("networkidle")
     page.wait_for_timeout(2000)
     shot(page, "dashboard")
@@ -386,7 +386,7 @@ def test_dashboard(page):
     body = page.inner_text("body")
     assert "No data" not in body.split("Expenses")[0], "a headline panel has no data"
     assert MARKER in body, "expenses table did not list the test row"
-    assert "$62000.00" in body, "amounts must show in full, not rescaled"
+    assert "$62,000.00" in body, "amounts must show in full, grouped, not rescaled"
     assert " Mm" not in body and not re.search(r"\$\d+(\.\d+)?K", body), "units were auto-scaled"
     table_link = page.locator(f"a[href='{INVOICE}']").first
     expect(table_link).to_be_visible()
