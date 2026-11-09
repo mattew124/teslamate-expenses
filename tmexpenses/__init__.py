@@ -644,7 +644,7 @@ def create_app(connect=None, onedrive_transport=None):
         if not ctx["folder"] or not ctx["connected"]:
             return redirect(url_for("onedrive_page"), 303)
         if not request.args.get("sync"):
-            return render_template("import.html", car=car, rows=[], remaining=0, errors={}, shell=True,
+            return render_template("import.html", car=car, rows=[], remaining=0, errors={}, shell=True,  # nosec B604 - a template flag, not a subprocess
                                    categories=ctx["categories"], notice=None, learn_after=invoices.LEARN_AFTER)
         try:
             token = access_token()
@@ -758,7 +758,9 @@ def create_app(connect=None, onedrive_transport=None):
         count = min(request.form.get("count", type=int) or 0, 200)
         rows, chosen, errors = [], [], {}
         for n in range(count):
-            f = lambda key: request.form.get(f"{key}_{n}", "")
+            def f(key, n=n):
+                return request.form.get(f"{key}_{n}", "")
+
             row = import_row(n, include=bool(f("include")), rename=bool(f("rename")), date=f("date"), category_id=f("category_id"),
                              vendor=f("vendor"), amount=f("amount"), odometer_km=f("odometer_km"),
                              url=f("url"), name=f("name"), folder=f("folder"), id=f("id"),
