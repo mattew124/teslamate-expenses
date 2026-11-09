@@ -3,7 +3,8 @@
 .venv
 __pycache__
 tests
-grafana
+grafana/*
+!grafana/cost-of-ownership.json
 db
 scripts
 *.md
