@@ -103,4 +103,6 @@ dialog.picker li button { text-align: left; overflow-wrap: anywhere; }
 .or-pick { display: flex; align-items: center; gap: .75rem; margin-top: .25rem; }
 .or-pick button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
   padding: .5rem 1rem; font-weight: 600; }
-img.provider-icon { width: 1.5rem; height: 1.5rem; }
+img.provider-icon { width: 1.5rem; height: 1.5rem; vertical-align: middle; }
+nav img.provider-icon, label img.provider-icon { width: 1.1rem; height: 1.1rem; margin-right: .15rem; }
+h1 img.provider-icon, h2 img.provider-icon { width: 1.75rem; height: 1.75rem; margin-right: .35rem; vertical-align: -.2em; }

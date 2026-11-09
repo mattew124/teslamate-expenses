@@ -872,3 +872,41 @@ def test_an_unknown_provider_icon_is_404(app_for, ms, monkeypatch):
 
 def test_no_icon_route_without_a_storage_provider(app_for, ms):
     assert app_for(ms, key=None).get("/provider-icon/onedrive").status_code == 404
+
+
+# ---- the logo goes wherever OneDrive heads or labels something ---------------------------------
+
+ICON = re.compile(r'<img src="[^"]*/provider-icon/onedrive" alt="" class="provider-icon"')
+
+
+@pytest.mark.parametrize("path, where", [
+    ("/", r"<nav>.*?</nav>"),
+    ("/onedrive", r"<h1>\s*<img[^>]*>\s*OneDrive</h1>"),
+    ("/categories", r"<small>\s*<img[^>]*>\s*OneDrive folder</small>"),
+    ("/onedrive/browse/1", r"<h1>\s*<img[^>]*>\s*Folder for"),
+    ("/new", r'<h2 id="onedrive-picker-title">\s*<img[^>]*>'),
+])
+def test_the_logo_marks_each_place_onedrive_heads_or_labels_something(client, ms, path, where):
+    sign_in(client, ms)
+    page = client.get(path).data.decode()
+    area = re.search(where, page, re.S)
+    assert area and ICON.search(area.group(0)), f"no logo at {where} on {path}"
+
+
+def test_the_connect_button_and_the_connecting_page_carry_it(client, ms):
+    save_credentials(client)
+    assert re.search(r'<button[^>]*>\s*<img[^>]*provider-icon[^>]*>\s*Connect OneDrive', client.get("/onedrive").data.decode())
+    page = client.post("/onedrive/connect", headers=ORIGIN).data.decode()
+    assert re.search(r"<h1>\s*<img[^>]*provider-icon[^>]*>\s*Connecting OneDrive", page)
+
+
+def test_the_import_page_heading_carries_it(client, ms):
+    sign_in(client, ms)
+    choose_folder(client)
+    assert re.search(r"<h1>\s*<img[^>]*provider-icon[^>]*>\s*Import invoices for", client.get("/onedrive/import/1").data.decode())
+
+
+def test_no_logo_when_there_is_no_storage_provider(app_for, ms):
+    c = app_for(ms, key=None)
+    for path in ("/", "/onedrive", "/categories"):
+        assert "provider-icon" not in c.get(path).data.decode()

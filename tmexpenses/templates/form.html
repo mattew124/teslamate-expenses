@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_provider.html" import mark with context %}
 {% block title %}{{ 'Edit expense' if expense_id else 'Add expense' }}{% endblock %}
 {% macro err(field) %}{% if errors.get(field) %}<span class="error">{{ errors[field] }}</span>{% endif %}{% endmacro %}
 {% block content %}
@@ -34,7 +35,7 @@
   <label>Invoice PDF
     <input type="file" name="invoice_file" accept="application/pdf,.pdf">{{ err('invoice_file') }}
     <span class="or-pick"><span>or</span>
-      <button type="button" id="onedrive-pick" class="secondary"><img src="{{ storage.icon }}" alt="" class="provider-icon" width="24" height="24"> Choose from {{ storage.name }}</button></span>
+      <button type="button" id="onedrive-pick" class="secondary">{{ mark() }} Choose from {{ storage.name }}</button></span>
     <small id="onedrive-pick-hint">Already in {{ storage.name }}? Pick it there instead of uploading it again.</small>
     {% if not expense_id %}<small id="prefill-hint">Choose the PDF next: the fields below are filled in from what can be read in it. Check them before saving.</small>{% endif %}
     {% if onedrive_connected %}
@@ -90,7 +91,7 @@
 {% endif %}
 {% if onedrive_connected %}
 <dialog id="onedrive-picker" aria-labelledby="onedrive-picker-title" class="picker">
-  <h2 id="onedrive-picker-title">Choose an invoice from {{ storage.name }}</h2>
+  <h2 id="onedrive-picker-title">{{ mark() }} Choose an invoice from {{ storage.name }}</h2>
   <p class="here"><code id="onedrive-picker-path"></code></p>
   <p id="onedrive-picker-status" role="status"></p>
   <ul class="plain folder-list" id="onedrive-picker-list"></ul>
