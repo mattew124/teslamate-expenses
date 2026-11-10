@@ -7,6 +7,11 @@ Each entry says what an installer must do to upgrade. Where nothing is said, pul
 
 ## Unreleased
 
+## 0.2.0-rc4 - 2026-11-11
+
+The fourth candidate for 0.2.0. Everything under 0.2.0-rc1 to 0.2.0-rc3 below applies to
+anyone upgrading to it, including their action-needed items.
+
 ### Added
 
 - Negative amounts, for rebates and refunds (a state EV rebate, an insurance refund when a policy
