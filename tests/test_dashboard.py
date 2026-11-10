@@ -87,3 +87,40 @@ def test_period_variable_drives_the_bucketed_charts():
     for p in SOURCE["panels"]:
         if p["title"].startswith(("Running costs per", "Cumulative")):
             assert "date_trunc('$period'" in p["targets"][0]["rawSql"]
+
+
+def _lab(colour):
+    """#rrggbb -> CIELAB (D65), where distance tracks how different two colours look."""
+    def linear(v):
+        v /= 255
+        return v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4
+    r, g, b = (linear(int(colour[i:i + 2], 16)) for i in (1, 3, 5))
+    xyz = ((0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047, 0.2126 * r + 0.7152 * g + 0.0722 * b,
+           (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883)
+    f = [t ** (1 / 3) if t > 0.008856 else 7.787 * t + 16 / 116 for t in xyz]
+    return 116 * f[1] - 16, 500 * (f[0] - f[1]), 200 * (f[1] - f[2])
+
+
+def test_category_colours_are_fixed_and_clearly_different():
+    """Grafana's default palette hands out neighbouring shades; the starter categories and charging get
+    fixed, well-separated colours (the colour-blind-safe Okabe-Ito set), the same in every chart."""
+    seed = (ROOT / "tmexpenses" / "schema.sql").read_text()
+    running = [n for n in ("Insurance", "Registration", "Tyres", "Cabin air filter", "Air filter",
+                           "Wheel alignment", "Tyre rotation") if f"('{n}'" in seed]
+    assert len(running) == 7
+    panels = {p["id"]: p for p in SOURCE["panels"]}
+    palettes = []
+    for pid in (11, 12):
+        found = {}
+        for o in panels[pid]["fieldConfig"]["overrides"]:
+            colour = next(p["value"] for p in o["properties"] if p["id"] == "color")
+            assert colour["mode"] == "fixed"
+            found[o["matcher"]["options"]] = colour["fixedColor"]
+        assert set(found) == {"Charging", *running}
+        palettes.append(found)
+    assert palettes[0] == palettes[1]
+    colours = list(palettes[0].values())
+    for i, a in enumerate(colours):
+        for b in colours[i + 1:]:
+            gap = sum((x - y) ** 2 for x, y in zip(_lab(a), _lab(b))) ** 0.5
+            assert gap > 30, f"{a} and {b} are too alike"

@@ -16,7 +16,13 @@ OneDrive is a trademark of Microsoft Corporation. This project is not affiliated
 
 - **Web UI** (Flask) to add/edit expenses: category, date, time, amount, odometer, vendor,
   notes and a link to the PDF invoice in your cloud storage. The odometer can be filled in from
-  TeslaMate's own position data for the chosen date and time.
+  TeslaMate's own position data for the chosen date and time. The amount field works out sums
+  (`120.50+89.95`, `400/3`) when you leave it, press Enter or save, and has keys for the operators.
+  The list sorts by any column, either way (click a heading, or use **Sort by** and **Order**), and
+  switches between rows and tiles with the toggle beside the filter. Editing an expense, then saving
+  or cancelling, returns you to the category and order you were looking at.
+  <!-- screenshot: expense-list-tiles - The expense list as tiles, with the sort and layout controls -->
+  <!-- screenshot: amount-calculator - The amount field with a sum typed in and its result -->
 - **Optional OneDrive upload**: choose the invoice PDF in the form and it goes into that car's
   OneDrive folder, with the link filled in for you.
 - **Postgres schema** `expenses` inside the TeslaMate database, so Grafana joins it to

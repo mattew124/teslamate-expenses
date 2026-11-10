@@ -145,14 +145,22 @@ _SELECT = """
 """
 
 
-def list_expenses(conn, category_id=None, limit=1000):
+# What the list can be sorted by: the name in the address -> the SQL it means. Never built from user text.
+SORTS = {"date": "e.occurred_at", "category": "cat.name", "vendor": "NULLIF(lower(e.vendor), '')",
+         "amount": "e.amount", "odometer": "e.odometer_km"}
+
+
+def list_expenses(conn, category_id=None, limit=1000, sort="date", direction="desc"):
+    """Sorted either way. Blank vendors and odometers always come last, whichever way round."""
+    order = SORTS.get(sort, SORTS["date"])
+    way = "ASC" if direction == "asc" else "DESC"
     where, params = "", []
     if category_id:
         where = "WHERE e.category_id = %s"
         params.append(category_id)
     params.append(limit)
     return conn.execute(
-        f"{_SELECT} {where} ORDER BY e.occurred_at DESC, e.id DESC LIMIT %s", params
+        f"{_SELECT} {where} ORDER BY {order} {way} NULLS LAST, e.occurred_at {way}, e.id {way} LIMIT %s", params
     ).fetchall()
 
 

@@ -9,16 +9,36 @@
       {% endfor %}
     </select>
   </label>
-  <noscript><button>Filter</button></noscript>
+  <label>Sort by
+    <select name="sort" data-autosubmit>
+      {% for key, label in sorts.items() %}<option value="{{ key }}" {{ 'selected' if key == view.get('sort', 'date') }}>{{ label }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Order
+    <select name="dir" data-autosubmit>
+      <option value="desc" {{ 'selected' if view.get('dir', 'desc') == 'desc' }}>Descending</option>
+      <option value="asc" {{ 'selected' if view.get('dir') == 'asc' }}>Ascending</option>
+    </select>
+  </label>
+  <noscript><button>Apply</button></noscript>
+  <div class="view-toggle" role="group" aria-label="Layout" hidden>
+    <button type="button" data-view-choice="rows" aria-pressed="false" title="Rows">☰ Rows</button>
+    <button type="button" data-view-choice="tiles" aria-pressed="false" title="Tiles">▦ Tiles</button>
+  </div>
   <p class="total">{{ totals.n }} item{{ '' if totals.n == 1 else 's' }} · <strong>{{ totals.total|money }}</strong></p>
 </form>
 
 {% if expenses %}
-<div class="table-wrap">
+<div class="table-wrap" data-view-target>
 <table>
   <thead><tr>
-    <th>Date</th><th>Category</th><th>Vendor</th>
-    <th class="num">Amount</th><th class="num">Odometer</th><th>Invoice</th><th></th>
+    {% for key, label, cls in (('date', 'Date', ''), ('category', 'Category', ''), ('vendor', 'Vendor', ''),
+                               ('amount', 'Amount', 'num'), ('odometer', 'Odometer', 'num')) %}
+    {% set on = view.get('sort', 'date') == key %}
+    <th class="{{ cls }}" {% if on %}aria-sort="{{ 'ascending' if view.get('dir', 'desc') == 'asc' else 'descending' }}"{% endif %}>
+      <a class="sort" href="{{ sort_link(key) }}">{{ label }}{% if on %} <span aria-hidden="true">{{ '▲' if view.get('dir', 'desc') == 'asc' else '▼' }}</span>{% endif %}</a></th>
+    {% endfor %}
+    <th>Invoice</th><th></th>
   </tr></thead>
   <tbody>
   {% for e in expenses %}
@@ -29,7 +49,7 @@
     <td class="num" data-label="Amount">{{ e.amount|money }}</td>
     <td class="num" data-label="Odometer">{{ e.odometer_km|km }}</td>
     <td data-label="Invoice">{% if e.invoice_url %}<a href="{{ e.invoice_url }}" target="_blank" rel="noopener noreferrer">PDF ↗</a>{% else %}–{% endif %}</td>
-    <td class="actions"><a href="{{ url_for('edit', expense_id=e.id) }}">Edit</a></td>
+    <td class="actions"><a href="{{ url_for('edit', expense_id=e.id, **view) }}">Edit</a></td>
   </tr>
   {% endfor %}
   </tbody>

@@ -111,6 +111,78 @@ def test_category_filter_and_totals(client, admin):
     assert "$1,700.50" in client.get("/").data.decode()
 
 
+def three_expenses(client, admin):
+    ins, tyres = category_id(admin, "Insurance"), category_id(admin, "Tyres")
+    for kw in (dict(amount="300", date="2026-01-10", vendor="Bravo", odometer_km="20000"),
+               dict(amount="100", date="2026-03-10", vendor="Alpha", odometer_km=""),
+               dict(amount="200", date="2026-02-10", vendor="Charlie", odometer_km="10000",
+                    category_id=str(ins))):
+        client.post("/new", data=form(admin, **{"category_id": str(tyres), **kw}), headers=ORIGIN)
+
+
+def amounts(html):
+    return [m for m in __import__("re").findall(r"data-label=\"Amount\">\$([\d,.]+)", html)]
+
+
+def test_sort_either_way(client, admin):
+    three_expenses(client, admin)
+    assert amounts(client.get("/").data.decode()) == ["100.00", "200.00", "300.00"]       # newest first
+    assert amounts(client.get("/?sort=date&dir=asc").data.decode()) == ["300.00", "200.00", "100.00"]
+    assert amounts(client.get("/?sort=amount&dir=asc").data.decode()) == ["100.00", "200.00", "300.00"]
+    assert amounts(client.get("/?sort=amount&dir=desc").data.decode()) == ["300.00", "200.00", "100.00"]
+    assert amounts(client.get("/?sort=vendor&dir=asc").data.decode()) == ["100.00", "300.00", "200.00"]
+    assert amounts(client.get("/?sort=category&dir=asc").data.decode())[0] == "200.00"     # Insurance < Tyres
+    # no odometer reading always sits last, whichever way round
+    assert amounts(client.get("/?sort=odometer&dir=asc").data.decode()) == ["200.00", "300.00", "100.00"]
+    assert amounts(client.get("/?sort=odometer&dir=desc").data.decode()) == ["300.00", "200.00", "100.00"]
+
+
+def test_unknown_sort_falls_back_and_cant_inject(client, admin):
+    three_expenses(client, admin)
+    resp = client.get("/?sort=amount;DROP TABLE x&dir=sideways")
+    assert resp.status_code == 200 and amounts(resp.data.decode()) == ["100.00", "200.00", "300.00"]
+
+
+def test_sort_controls_show_the_current_order(client, admin):
+    three_expenses(client, admin)
+    html = client.get("/?sort=amount&dir=asc").data.decode()
+    assert 'aria-sort="ascending"' in html and 'aria-sort="descending"' not in html
+    assert "sort=amount&amp;dir=desc" in html            # clicking the sorted column flips it
+
+
+def test_editing_returns_to_the_same_view(client, admin):
+    three_expenses(client, admin)
+    ins = category_id(admin, "Insurance")
+    html = client.get(f"/?category={ins}&sort=amount&dir=asc").data.decode()
+    assert f"/3/edit?category={ins}&amp;sort=amount&amp;dir=asc" in html
+    page = client.get(f"/3/edit?category={ins}&sort=amount&dir=asc").data.decode()
+    for name, value in (("category", str(ins)), ("sort", "amount"), ("dir", "asc")):
+        assert f'<input type="hidden" name="{name}" value="{value}">' in page
+    assert f'href="/?category={ins}&amp;sort=amount&amp;dir=asc"' in page                       # Cancel
+    resp = client.post("/3/edit", data=form(admin, category="%d" % ins, sort="amount", dir="asc"), headers=ORIGIN)
+    assert resp.status_code == 303
+    assert resp.headers["Location"] == f"/?category={ins}&sort=amount&dir=asc&msg=updated"
+    resp = client.post("/3/delete", data={"category": str(ins)}, headers=ORIGIN)
+    assert resp.headers["Location"] == f"/?category={ins}&msg=deleted"
+
+
+def test_a_failed_save_keeps_the_view_for_the_retry(client, admin):
+    three_expenses(client, admin)
+    resp = client.post("/1/edit", data=form(admin, amount="x", category="5", sort="vendor"), headers=ORIGIN)
+    assert resp.status_code == 400
+    assert '<input type="hidden" name="category" value="5">' in resp.data.decode()
+    assert '<input type="hidden" name="sort" value="vendor">' in resp.data.decode()
+
+
+def test_default_view_adds_nothing_to_links(client, admin):
+    three_expenses(client, admin)
+    html = client.get("/").data.decode()
+    assert 'href="/1/edit"' in html
+    resp = client.post("/1/edit", data=form(admin), headers=ORIGIN)
+    assert resp.headers["Location"] == "/?msg=updated"
+    assert client.post("/new", data=form(admin, amount="55"), headers=ORIGIN).headers["Location"] == "/?msg=saved"
+
+
 def test_add_category(client, admin):
     assert client.post("/categories", data={"name": "Car wash"}, headers=ORIGIN).status_code == 303
     assert b"Car wash" in client.get("/new").data

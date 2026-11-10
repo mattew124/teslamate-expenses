@@ -16,6 +16,10 @@ Headline panels are all-time; the charts, pie and table follow the dashboard tim
 earliest data (Grafana has no "all time", so the app works the start out each time it starts, and a
 back-dated expense older than that needs the range widened by hand).
 
+Charging and each starter category keep the same fixed, clearly different colour in the pie and the bars
+(a colour-blind-safe set). Categories you add yourself take Grafana's default colours; to pin one, add a
+colour override for that series name in the panel.
+
 The **Period** box groups the running-cost bars and the cumulative chart by week, month or year.
 
 The **Category** box limits the headline cost figures (totals, per km, per day, per month) to the categories you

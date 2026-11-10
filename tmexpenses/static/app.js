@@ -143,8 +143,108 @@ document.addEventListener("DOMContentLoaded", () => {
     say(`Read ${total} PDF${total === 1 ? "" : "s"}. Check each row, then press Import.`);
   }
 
+  // Expense list: rows (a table) or tiles (a card each). The choice is remembered in this browser;
+  // until one is made, phones get tiles and wider screens rows.
+  const listBox = document.querySelector("[data-view-target]");
+  const toggleBox = document.querySelector(".view-toggle");
+  if (listBox && toggleBox) {
+    const choose = (view, remember) => {
+      listBox.dataset.view = view;
+      toggleBox.querySelectorAll("[data-view-choice]").forEach((b) =>
+        b.setAttribute("aria-pressed", String(b.dataset.viewChoice === view)));
+      if (remember) {
+        try { localStorage.setItem("expenses-view", view); } catch (e) { /* private mode: not remembered */ }
+      }
+    };
+    let saved = null;
+    try { saved = localStorage.getItem("expenses-view"); } catch (e) { /* as above */ }
+    choose(saved === "rows" || saved === "tiles" ? saved : (matchMedia("(max-width: 40rem)").matches ? "tiles" : "rows"), false);
+    toggleBox.hidden = false;
+    toggleBox.querySelectorAll("[data-view-choice]").forEach((b) =>
+      b.addEventListener("click", () => choose(b.dataset.viewChoice, true)));
+  }
+
   const form = document.getElementById("expense-form");
   if (!form) return;
+
+  // Amount: type a sum such as 120.50+89.95 or 400/3 (or use the keys under it) and it is worked out when
+  // you leave the field, press Enter, or save. Numbers, + - * / x ÷ × and brackets only: nothing is ever
+  // evaluated as code. The server still checks the final figure.
+  const amountInput = form.elements.amount;
+  const calcNote = document.getElementById("amount-calc");
+  function calculate(text) {
+    const src = text.replace(/[$,\s]/g, "").replace(/[×x]/gi, "*").replace(/÷/g, "/").replace(/[−–]/g, "-");
+    let pos = 0;
+    const fail = () => { throw new Error("bad sum"); };
+    const number = () => {
+      const m = /^\d*\.?\d+|^\d+\.?/.exec(src.slice(pos));
+      if (!m) fail();
+      pos += m[0].length;
+      return parseFloat(m[0]);
+    };
+    const factor = () => {
+      if (src[pos] === "-") { pos++; return -factor(); }
+      if (src[pos] === "(") {
+        pos++;
+        const v = expr();
+        if (src[pos++] !== ")") fail();
+        return v;
+      }
+      return number();
+    };
+    const term = () => {
+      let v = factor();
+      while (src[pos] === "*" || src[pos] === "/") v = src[pos++] === "*" ? v * factor() : v / factor();
+      return v;
+    };
+    const expr = () => {
+      let v = term();
+      while (src[pos] === "+" || src[pos] === "-") v = src[pos++] === "+" ? v + term() : v - term();
+      return v;
+    };
+    try {
+      const v = expr();
+      if (pos !== src.length || !Number.isFinite(v)) return null;
+      return Math.round((v + Math.sign(v) * 1e-9) * 100) / 100;
+    } catch (e) {
+      return null;
+    }
+  }
+  const isSum = (text) => /[-+*/×÷()]|\dx\d/i.test(text.replace(/^\s*[$-]?\s*/, ""));
+  function settleAmount() {
+    if (!isSum(amountInput.value)) return;
+    const v = calculate(amountInput.value);
+    if (v === null || v < 0) return;           // left as typed: the server explains what's wrong
+    amountInput.value = v.toFixed(2);
+    calcNote.textContent = "";
+  }
+  function previewAmount() {
+    const v = isSum(amountInput.value) ? calculate(amountInput.value) : null;
+    calcNote.textContent = v === null ? "" : `= $${v.toLocaleString("en-AU", { minimumFractionDigits: 2 })}`;
+  }
+  if (amountInput && calcNote) {
+    amountInput.addEventListener("input", previewAmount);
+    amountInput.addEventListener("blur", settleAmount);
+    amountInput.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" && isSum(amountInput.value) && calculate(amountInput.value) !== null) {
+        ev.preventDefault();                   // show the answer first; Enter again saves
+        settleAmount();
+      }
+    });
+    form.addEventListener("submit", settleAmount);   // registered before the duplicate check, so it sees the figure
+    const keys = document.getElementById("amount-keys");
+    keys.hidden = false;
+    keys.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+      if (b.dataset.key === "=") {
+        settleAmount();
+      } else {
+        const [from, to] = [amountInput.selectionStart ?? amountInput.value.length, amountInput.selectionEnd ?? amountInput.value.length];
+        amountInput.setRangeText(b.dataset.key, from, to, "end");
+        previewAmount();
+      }
+      amountInput.focus();
+    }));
+  }
 
   // An upload can take a few seconds: say so, and stop a second click sending it twice.
   function markSending() {
