@@ -159,7 +159,7 @@ def test_editing_returns_to_the_same_view(client, admin):
     for name, value in (("category", str(ins)), ("sort", "amount"), ("dir", "asc")):
         assert f'<input type="hidden" name="{name}" value="{value}">' in page
     assert f'href="/?category={ins}&amp;sort=amount&amp;dir=asc"' in page                       # Cancel
-    resp = client.post("/3/edit", data=form(admin, category="%d" % ins, sort="amount", dir="asc"), headers=ORIGIN)
+    resp = client.post("/3/edit", data=form(admin, category=str(ins), sort="amount", dir="asc"), headers=ORIGIN)
     assert resp.status_code == 303
     assert resp.headers["Location"] == f"/?category={ins}&sort=amount&dir=asc&msg=updated"
     resp = client.post("/3/delete", data={"category": str(ins)}, headers=ORIGIN)

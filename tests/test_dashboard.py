@@ -122,5 +122,5 @@ def test_category_colours_are_fixed_and_clearly_different():
     colours = list(palettes[0].values())
     for i, a in enumerate(colours):
         for b in colours[i + 1:]:
-            gap = sum((x - y) ** 2 for x, y in zip(_lab(a), _lab(b))) ** 0.5
+            gap = sum((x - y) ** 2 for x, y in zip(_lab(a), _lab(b), strict=True)) ** 0.5
             assert gap > 30, f"{a} and {b} are too alike"
