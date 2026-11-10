@@ -199,6 +199,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
                 "categories": db.categories(conn),
                 "values": values or {},
                 "errors": errors or {},
+                "view": list_view(),
                 "expense_id": expense_id,
                 "onedrive_connected": bool(account and account["refresh_token"]),
             }
@@ -321,12 +322,43 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
     def healthz():
         return "ok\n"
 
+    def list_view():
+        """How the list was being looked at: its category filter and sort order, read from the address or
+        the form. Only what differs from the default is kept, so plain links stay plain. It rides along
+        to the edit page and back, so saving or cancelling returns to the same view."""
+        view = {}
+        category = request.values.get("category", type=int)
+        if category:
+            view["category"] = category
+        sort = request.values.get("sort")
+        way = request.values.get("dir")
+        sort = sort if sort in db.SORTS else "date"
+        way = way if way in ("asc", "desc") else "desc"
+        if (sort, way) != ("date", "desc"):
+            view["sort"], view["dir"] = sort, way
+        return view
+
+    def sort_link(column):
+        """Address of the list ordered by this column: the other way round if it already is."""
+        view = list_view()
+        current = (view.get("sort", "date"), view.get("dir", "desc"))
+        if current[0] == column:
+            way = "asc" if current[1] == "desc" else "desc"
+        else:
+            way = "desc" if column in ("date", "amount", "odometer") else "asc"
+        return url_for("index", **{**view, "sort": column, "dir": way})
+
     @app.get("/")
     def index():
-        category_id = request.args.get("category", type=int)
+        view = list_view()
+        category_id = view.get("category")
         with connect() as conn:
             ctx = {
-                "expenses": db.list_expenses(conn, category_id),
+                "view": view, "sort_link": sort_link,
+                "sorts": {"date": "Date", "category": "Category", "vendor": "Vendor",
+                          "amount": "Amount", "odometer": "Odometer"},
+                "expenses": db.list_expenses(conn, category_id, sort=view.get("sort", "date"),
+                                             direction=view.get("dir", "desc")),
                 "totals": db.totals(conn, category_id),
                 "categories": db.categories(conn),
                 "category_id": category_id,
@@ -368,7 +400,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
             expense_id = db.insert_expense(conn, values)
         refresh_dashboard()
         log.info("expense %s saved (car %s, category %s)", expense_id, values["car_id"], values["category_id"])
-        return redirect(url_for("index", msg="saved"), 303)
+        return redirect(url_for("index", **list_view(), msg="saved"), 303)
 
     def load_or_404(conn, expense_id):
         row = db.get_expense(conn, expense_id)
@@ -402,7 +434,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
                 abort(404)
         refresh_dashboard()
         log.info("expense %s updated", expense_id)
-        return redirect(url_for("index", msg="updated"), 303)
+        return redirect(url_for("index", **list_view(), msg="updated"), 303)
 
     @app.post("/<int:expense_id>/delete")
     def delete(expense_id):
@@ -411,7 +443,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
                 abort(404)
         refresh_dashboard()
         log.info("expense %s deleted", expense_id)
-        return redirect(url_for("index", msg="deleted"), 303)
+        return redirect(url_for("index", **list_view(), msg="deleted"), 303)
 
     @app.route("/categories", methods=["GET", "POST"])
     def categories():

@@ -369,6 +369,97 @@ def test_list_shows_key_fields_on_a_phone(page):
     remove_marked(page)
 
 
+def test_amount_calculator(page):
+    page.goto(UI + "new")
+    amount = page.locator("input[name=amount]")
+    amount.fill("100+20.50*2")
+    expect(page.locator("#amount-calc")).to_have_text("= $141.00")
+    page.press("input[name=amount]", "Enter")             # works it out; doesn't save yet
+    expect(amount).to_have_value("141.00")
+    assert "/new" in page.url
+    amount.fill("")                                       # the keys work from the phone keypad too
+    amount.type("90")
+    page.click("#amount-keys [data-key='/']")
+    amount.type("4")
+    page.click("#amount-keys [data-key='=']")
+    expect(amount).to_have_value("22.50")
+    amount.fill("12+")                                    # half a sum is left alone, never guessed at
+    page.locator("input[name=vendor]").click()
+    expect(amount).to_have_value("12+")
+    amount.fill("1000/8+2")                               # and a sum is settled on save
+    page.select_option("select[name=category_id]", label="Tyres")
+    page.fill("input[name=vendor]", MARKER)
+    page.click("button[type=submit].button")
+    page.wait_for_url(re.compile(r"msg=saved"))
+    expect(page.locator(f"tr:has-text('{MARKER}')")).to_contain_text("$127.00")
+    shot(page, "calculator")
+    remove_marked(page)
+
+
+def test_list_toggle_sort_and_return(page):
+    add_expense(page, "10.00", "Tyres")
+    add_expense(page, "30.00", "Insurance")
+    add_expense(page, "20.00", "Tyres")
+    page.goto(UI)
+    box = page.locator("html")
+    expect(box).to_have_attribute("data-view", "tiles")           # a phone starts on tiles
+    page.click("[data-view-choice=rows]")
+    expect(box).to_have_attribute("data-view", "rows")
+    assert page.locator("thead").is_visible()
+    page.reload()
+    expect(box).to_have_attribute("data-view", "rows")            # remembered
+    page.click("[data-view-choice=tiles]")
+    expect(page.locator("thead")).to_be_hidden()
+    shot(page, "list-tiles")
+    page.click("[data-view-choice=rows]")
+    amounts = lambda: [t.strip() for t in page.locator(f"tr:has-text('{MARKER}') td.num:nth-child(4)").all_inner_texts()]
+    # Changing a filter swaps the list in place: no reload, and nothing beside the box moves.
+    page.evaluate("window.__same = 1")
+    spots = lambda: page.evaluate("""[...document.querySelectorAll('.filter select, .view-toggle, .filter .total')]
+        .map(e => { const r = e.getBoundingClientRect(); return [Math.round(r.x), Math.round(r.y), Math.round(r.width)]; })""")
+    before = spots()
+    page.select_option("select[name=sort]", "amount")
+    page.wait_for_url(re.compile(r"sort=amount"))
+    assert page.evaluate("window.__same") == 1, "the page reloaded"
+    assert spots()[:-1] == before[:-1], (before, spots())
+    columns = lambda: page.evaluate("[...document.querySelectorAll('thead th')].map(t => Math.round(t.getBoundingClientRect().width))")
+    wide = columns()
+    page.select_option("select[name=dir]", "asc")
+    page.wait_for_url(re.compile(r"dir=asc"))
+    assert amounts() == ["$10.00", "$20.00", "$30.00"], amounts()
+    # on a phone the table scrolls sideways: sorting from a far column must not snap it back to the left
+    page.evaluate("document.querySelector('.table-wrap').scrollLeft = 10000")
+    far = page.evaluate("document.querySelector('.table-wrap').scrollLeft")
+    assert far > 0, "rows view should scroll sideways on a phone"
+    page.click("th a.sort:has-text('Odometer')")
+    page.wait_for_url(re.compile(r"sort=odometer"))
+    assert page.evaluate("document.querySelector('.table-wrap').scrollLeft") == far, "scroll snapped back"
+    page.click("th a.sort:has-text('Amount')")                    # a new column starts largest first
+    page.wait_for_url(re.compile(r"sort=amount&dir=desc"))
+    assert amounts() == ["$30.00", "$20.00", "$10.00"], amounts()
+    shot(page, "list-sorted")
+    # editing and saving, or cancelling, comes back to this category and order
+    page.select_option("select[name=category]", label="Tyres")
+    page.wait_for_url(re.compile(r"category=\d+"))
+    assert columns() == wide, "columns changed width with the rows shown"
+    assert page.evaluate("window.__same") == 1
+    page.go_back()                                                # the browser's Back steps through the views
+    page.wait_for_function("!location.search.includes('category')")
+    page.go_forward()
+    page.wait_for_url(re.compile(r"category=\d+"))
+    back = page.url
+    page.locator(f"tr:has-text('{MARKER}') a:has-text('Edit')").first.click()
+    page.click("text=Cancel")
+    page.wait_for_url(back)
+    page.locator(f"tr:has-text('{MARKER}') a:has-text('Edit')").first.click()
+    page.fill("input[name=amount]", "25")
+    page.click("button[type=submit].button")
+    page.wait_for_url(re.compile(r"category=\d+.*sort=amount.*dir=desc.*msg=updated"))
+    expect(page.locator("select[name=category] option:checked")).to_have_text("Tyres")
+    page.evaluate("localStorage.clear()")                          # the choice is remembered: don't leave it for other tests
+    remove_marked(page)
+
+
 def test_onedrive_page(page):
     """The setup steps render on a phone, with the address to register. Only
     invalid details are submitted, so a real registration in the dev database
@@ -483,6 +574,8 @@ def main():
         step("a bad invoice link is explained, input kept", test_bad_link_is_explained, page)
         step("add, list, invoice link, edit, delete", test_add_list_edit_delete, page)
         step("delete can be cancelled", test_delete_can_be_cancelled, page)
+        step("amount field works out sums", test_amount_calculator, page)
+        step("list: tiles or rows, sorting, and back to the same view", test_list_toggle_sort_and_return, page)
         step("no sideways scroll on a phone", test_phone_layout_has_no_sideways_scroll, page)
         step("header stays tidy on a phone", test_header_stays_tidy_on_a_phone, page)
         step("phone list shows amount, invoice and edit", test_list_shows_key_fields_on_a_phone, page)
