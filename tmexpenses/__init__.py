@@ -131,7 +131,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
 
     @app.template_filter("money")
     def money(value):
-        return f"${value:,.2f}"
+        return f"-${-value:,.2f}" if value < 0 else f"${value:,.2f}"
 
     @app.template_filter("km")
     def km(value):
@@ -207,7 +207,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
         """Possible duplicates as the page and the JSON endpoint show them."""
         return [{"id": m["id"], "date": m["occurred_at"].astimezone(ZoneInfo(tz)).strftime("%d %b %Y"),
                  "category": m["category"], "vendor": m["vendor"] or "", "amount": f"{m['amount']:.2f}",
-                 "amount_text": f"${m['amount']:,.2f}", "edit_url": url_for("edit", expense_id=m["id"])}
+                 "amount_text": money(m["amount"]), "edit_url": url_for("edit", expense_id=m["id"])}
                 for m in matches]
 
     def parse(form, check_duplicates=False):

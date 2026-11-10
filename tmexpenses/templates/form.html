@@ -59,7 +59,7 @@
     <label>Time <input type="time" name="time" value="{{ values.time }}" required></label>
   </div>
 
-  <label>Amount paid ($)
+  <label>Amount paid ($) <small>(negative for a rebate or refund)</small>
     <input name="amount" inputmode="decimal" autocomplete="off" placeholder="0.00" value="{{ values.amount }}" required>{{ err('amount') }}
   </label>
 

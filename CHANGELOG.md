@@ -7,7 +7,12 @@ Each entry says what an installer must do to upgrade. Where nothing is said, pul
 
 ## Unreleased
 
-Nothing yet.
+### Added
+
+- Negative amounts, for rebates and refunds (a state EV rebate, an insurance refund when a policy
+  ends early). Enter the amount with a minus sign, such as `-3000`; it lowers the totals. The app drops
+  the old `amount >= 0` check from `expenses.expense` itself on start; with the least-privilege role,
+  re-run `scripts/provision-db.sh` first.
 
 ## 0.2.0-rc3 - 2026-11-10
 
