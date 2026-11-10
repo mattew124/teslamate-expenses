@@ -20,6 +20,8 @@
 > read the code before you trust it with anything you care about.
 >
 > Not affiliated with TeslaMate or Tesla. It's an unofficial add-on that reads TeslaMate's data.
+>
+> OneDrive is a trademark of Microsoft Corporation. This project is not affiliated with or endorsed by Microsoft. The OneDrive logo is fetched at runtime from [selfh.st/icons](https://selfh.st/icons) ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)); it is not part of this repository.
 
 - **Web UI** (Flask) to add/edit expenses: category, date, time, amount, odometer, vendor,
   notes and a link to the PDF invoice in your cloud storage. The odometer can be filled in from

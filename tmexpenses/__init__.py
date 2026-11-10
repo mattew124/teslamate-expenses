@@ -8,6 +8,8 @@ cost of ownership.
 import hmac
 import logging
 import os
+from pathlib import Path
+import time
 from decimal import Decimal
 from datetime import date, datetime, time as dtime, timedelta, timezone
 from urllib.parse import urlparse
@@ -18,7 +20,7 @@ from flask import Flask, abort, jsonify, make_response, redirect, render_templat
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from . import dashboard, db, docinfo, invoices, logs, onedrive, updates, validation
+from . import dashboard, db, docinfo, icons, invoices, logs, onedrive, updates, validation
 
 log = logging.getLogger("tmexpenses.app")
 
@@ -39,6 +41,7 @@ MESSAGES = {
 
 # PDFs read per page: each is downloaded and text-extracted (OCR for scans) while
 # the request waits, so a big folder is worked through in rounds.
+TOKEN_MARGIN_SECONDS = 120   # a kept access token is dropped this long before it expires
 IMPORT_BATCH = 10
 # ...and stop reading more files once a round has taken this long (OCR can take 10+ seconds a file,
 # and a request that outlasts gunicorn's 120 s timeout is killed), leaving the rest for the next round.
@@ -67,9 +70,9 @@ class PrefixMiddleware:
         return [b"Not found\n"]
 
 
-def create_app(connect=None, onedrive_transport=None, release_fetch=None):
+def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_fetch=None):
     """`connect` is injectable so tests can hand in a connection to a scratch DB,
-    `onedrive_transport` so they can stand in for Microsoft, and `release_fetch` for GitHub."""
+    `onedrive_transport` so they can stand in for Microsoft, `release_fetch` for GitHub and `icon_fetch` for the provider icon's source."""
     app = Flask(__name__)
     logs.configure(app.logger, os.environ.get("LOG_LEVEL"))
     log = app.logger
@@ -100,6 +103,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None):
     update_check = updates.UpdateCheck(version, fetch=release_fetch,
                                        enabled=os.environ.get("UPDATE_CHECK", "1").strip() != "0")
     app.extensions["update_check"] = update_check
+    icon_cache = icons.IconCache(fetch=icon_fetch, enabled=os.environ.get("PROVIDER_ICONS", "1").strip() != "0")
     base_path = os.environ.get("BASE_PATH", "")
     if base_path:
         app.wsgi_app = PrefixMiddleware(app.wsgi_app, base_path)
@@ -132,12 +136,16 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None):
         )
         resp.headers["X-Content-Type-Options"] = "nosniff"
         resp.headers["Referrer-Policy"] = "same-origin"
-        resp.headers["Cache-Control"] = "no-store"
+        resp.headers.setdefault("Cache-Control", "no-store")
         return resp
 
     @app.context_processor
     def onedrive_flag():
-        return {"onedrive_enabled": drive is not None}
+        # `storage` is the provider the app is set up with: its name and icon for the pages. Another
+        # provider (Google Drive, say) is another entry here, not another edit to every template.
+        storage = {"name": "OneDrive", "icon": url_for("provider_icon", name="onedrive"),
+                   "credit": icons.CREDIT} if drive else None
+        return {"onedrive_enabled": drive is not None, "storage": storage}
 
     @app.context_processor
     def footer():
@@ -224,16 +232,31 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None):
             errors["invoice_file"] = str(exc)
         return values, errors
 
+    kept = {}   # this worker's access token: {"key": the stored refresh token it came with, "token", "until"}
+
     def access_token():
-        """Spend the stored refresh token and store the one Microsoft hands back."""
+        """An access token for Graph. Microsoft's last about an hour, so one is kept and reused until
+        shortly before it expires (a refresh costs most of a second). It is only reused while the stored
+        refresh token is the one it came with: disconnecting, signing in again or new credentials all
+        change that, so none of them leaves a kept token in use. Otherwise: spend the stored refresh token
+        and store the one Microsoft hands back."""
         with connect() as conn:
             account = db.onedrive_account(conn, lock=True)
             if not account or not account["refresh_token"]:
+                kept.clear()
                 raise onedrive.NotConnected()
+            if kept.get("key") == account["refresh_token"] and kept["until"] > time.monotonic():
+                return kept["token"]
             tokens = drive.refresh(account["client_id"], drive.decrypt(account["client_secret"]),
                                    drive.decrypt(account["refresh_token"]))
+            key = account["refresh_token"]
             if tokens.get("refresh_token"):
-                db.save_onedrive_account(conn, refresh_token=drive.encrypt(tokens["refresh_token"]))
+                key = drive.encrypt(tokens["refresh_token"])
+                db.save_onedrive_account(conn, refresh_token=key)
+        lifetime = tokens.get("expires_in", 0) - TOKEN_MARGIN_SECONDS
+        kept.clear()
+        if lifetime > 0:
+            kept.update(key=key, token=tokens["access_token"], until=time.monotonic() + lifetime)
         return tokens["access_token"]
 
     def upload_invoice(values, pdf):
@@ -266,6 +289,20 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None):
             "vendor", "notes", "invoice_url")}
 
     # ---- routes ---------------------------------------------------------------
+
+    @app.get("/provider-icon/<name>")
+    def provider_icon(name):
+        """The storage provider's logo: fetched once from its public source and kept (see icons.py),
+        or the bundled drawing when that isn't possible. Browsers may keep it, unlike the pages."""
+        if drive is None or name not in icons.SOURCES:
+            abort(404)
+        fetched = icon_cache.get(name)
+        body = fetched or (Path(app.static_folder) / f"provider-{name}.svg").read_bytes()
+        resp = make_response(body)
+        resp.mimetype = "image/svg+xml"
+        # The bundled drawing is a stand-in: look again soon, so the real one shows once it can be fetched.
+        resp.headers["Cache-Control"] = "public, max-age=86400" if fetched else "public, max-age=300"
+        return resp
 
     @app.get("/healthz")
     def healthz():
@@ -909,14 +946,50 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None):
                                multi_choices=validation.MULTI_AMOUNT_CHOICES, example=name_example(values),
                                message=MESSAGES.get(request.args.get("msg", ""))), (400 if errors else 200)
 
+    @app.get("/api/onedrive/browse/<int:car_id>")
+    def api_onedrive_browse(car_id):
+        """One folder for the Add form's file picker. Starts in the car's folder; ?folder=<id> goes
+        elsewhere (up included) and ?folder=root is the top of the drive."""
+        need_drive()
+        car_or_404(car_id)
+        wanted = request.args.get("folder")
+        with connect() as conn:
+            car_folder = db.car_folders(conn).get(car_id)
+            connected = (db.onedrive_account(conn) or {}).get("refresh_token")
+        if not connected:
+            return jsonify(error=str(onedrive.NotConnected()), url=url_for("onedrive_page")), 409
+        if not wanted and not car_folder:
+            return jsonify(error="Choose a OneDrive folder for this car on the OneDrive page first.",
+                           url=url_for("onedrive_page")), 409
+        folder_id = None if wanted == "root" else (wanted or car_folder["folder_id"])
+        try:
+            token = access_token()
+            here, folders, files = drive.contents(token, folder_id)
+        except onedrive.SignInExpired as exc:
+            return jsonify(error=str(exc), url=url_for("onedrive_page")), 409
+        except onedrive.OneDriveError as exc:
+            log.warning("OneDrive file picker failed: %s", exc)
+            return jsonify(error=str(exc)), 502
+        return jsonify(id=here["id"], path=here["path"], parent_id=here["parent_id"], is_root=here["is_root"],
+                       folders=folders, files=files)
+
     @app.post("/api/prefill")
     def api_prefill():
-        """Read a chosen invoice PDF and propose the form's fields, for the Add page."""
+        """Read an invoice PDF and propose the form's fields, for the Add page: the one just chosen
+        on the computer, or (onedrive_id and name) one already in OneDrive."""
         timer = docinfo.Timer()
         upload = request.files.get("invoice_file")
         filename = upload and upload.filename
+        data = upload.read() if upload else b""
+        if not upload and request.form.get("onedrive_id") and drive is not None:
+            filename = request.form.get("name", "")
+            try:
+                data = drive.download(access_token(), request.form["onedrive_id"])
+            except onedrive.OneDriveError as exc:
+                log.warning("prefill from OneDrive failed: %s", exc)
+                return jsonify(error=str(exc)), 502
         try:
-            pdf = validation.parse_invoice_pdf(filename, upload.read() if upload else b"")
+            pdf = validation.parse_invoice_pdf(filename, data)
         except ValueError as exc:
             log.debug("prefill file=%s refused: %s", docinfo.quote(filename), exc)
             return jsonify(error=str(exc)), 400
@@ -927,7 +1000,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None):
             categories = db.categories(conn)
             learned = db.learned(conn, invoices.LEARN_AFTER)
             multi_amount = db.get_settings(conn)["multi_amount"]
-        guess = invoices.propose("", upload.filename, invoices.extract_text(pdf), [c["name"] for c in categories], learned,
+        guess = invoices.propose("", filename, invoices.extract_text(pdf), [c["name"] for c in categories], learned,
                                  multi_amount)
         have, missing = docinfo.found(guess)
         log.debug("prefill file=%s bytes=%d sha256=%s found=%s missing=%s ms=%d", docinfo.quote(filename), len(pdf),

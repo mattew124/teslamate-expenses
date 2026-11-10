@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_provider.html" import mark with context %}
 {% block title %}Categories{% endblock %}
 {% block content %}
 <h1>Categories</h1>
@@ -8,7 +9,7 @@
     <span>{{ c.name }} <small>{{ 'capital cost' if c.kind == 'purchase' else 'running cost' }}</small></span>
     {% if onedrive_enabled %}
     <form method="post" action="{{ url_for('category_folder', category_id=c.id) }}" class="row">
-      <label><small>OneDrive folder</small>
+      <label><small>{{ mark() }} OneDrive folder</small>
         <input name="upload_folder" maxlength="255" value="{{ c.upload_folder or '' }}" placeholder="{{ c.name }}" autocomplete="off"></label>
       <button type="submit" class="secondary">Save</button>
       {% if folder_error and folder_error[0] == c.id %}<span class="error">{{ folder_error[1] }}</span>{% endif %}

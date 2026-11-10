@@ -7,7 +7,13 @@ Each entry says what an installer must do to upgrade. Where nothing is said, pul
 
 ## Unreleased
 
-Nothing yet.
+### Added
+
+- Add and Edit expense: **Choose from OneDrive**, a button under the PDF field, opens a window over the form to pick a PDF that is
+  already in OneDrive. It starts in the car's folder and can go up, to the top of the drive. The file's
+  link becomes the invoice link and the form fills in from it, as for a chosen file. Nothing is
+  copied. The button shows OneDrive's logo, fetched once from `cdn.jsdelivr.net` and kept in memory rather
+  than shipped with the app (from selfh.st/icons, CC BY 4.0); `PROVIDER_ICONS=0` stops that (a plain cloud is shown). Needs nothing to upgrade.
 
 ## 0.2.0-rc2 - 2026-11-10
 

@@ -207,39 +207,131 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!el) return;
     ["input", "change"].forEach((ev) => el.addEventListener(ev, () => touched.add(name)));
   });
-  if (pdfInput && prefillHint && form.dataset.prefillUrl) {
-    pdfInput.addEventListener("change", async () => {
-      if (!pdfInput.files.length) return;
-      prefillHint.textContent = "Reading the invoice…";
-      try {
-        const body = new FormData();
-        body.append("invoice_file", pdfInput.files[0]);
-        const res = await fetch(form.dataset.prefillUrl, { method: "POST", body });
-        const data = await res.json();
-        if (!res.ok) {
-          prefillHint.textContent = data.error || "Couldn't read that file.";
-          return;
-        }
-        const filled = [];
-        const set = (name, label, value) => {
-          if (value == null || value === "" || touched.has(name)) return;
-          form.elements[name].value = value;
-          filled.push(label);
-        };
-        set("category_id", "category", data.category_id);
-        set("date", "date", data.date);
-        set("amount", "amount", data.amount);
-        set("vendor", "vendor", data.vendor);
-        set("odometer_km", "odometer", data.odometer_km);
-        if (data.odometer_km && filled.includes("odometer")) hint.textContent = "Read from the invoice.";
-        else if (!data.odometer_km && !touched.has("odometer_km")) await fill(false);
-        prefillHint.textContent = filled.length
-          ? "Filled from the invoice: " + filled.join(", ") + ". Check them before saving."
-          : "Couldn't read anything from that PDF; fill the fields in.";
-      } catch (e) {
-        prefillHint.textContent = "Couldn't read the invoice.";
+  // Fill the form from what /api/prefill read in a PDF; `body` is the form data to send it.
+  async function prefillFrom(body) {
+    prefillHint.textContent = "Reading the invoice…";
+    try {
+      const res = await fetch(form.dataset.prefillUrl, { method: "POST", body });
+      const data = await res.json();
+      if (!res.ok) {
+        prefillHint.textContent = data.error || "Couldn't read that file.";
+        return;
       }
+      const filled = [];
+      const set = (name, label, value) => {
+        if (value == null || value === "" || touched.has(name)) return;
+        form.elements[name].value = value;
+        filled.push(label);
+      };
+      set("category_id", "category", data.category_id);
+      set("date", "date", data.date);
+      set("amount", "amount", data.amount);
+      set("vendor", "vendor", data.vendor);
+      set("odometer_km", "odometer", data.odometer_km);
+      if (data.odometer_km && filled.includes("odometer")) hint.textContent = "Read from the invoice.";
+      else if (!data.odometer_km && !touched.has("odometer_km")) await fill(false);
+      prefillHint.textContent = filled.length
+        ? "Filled from the invoice: " + filled.join(", ") + ". Check them before saving."
+        : "Couldn't read anything from that PDF; fill the fields in.";
+    } catch (e) {
+      prefillHint.textContent = "Couldn't read the invoice.";
+    }
+  }
+  if (pdfInput && prefillHint && form.dataset.prefillUrl) {
+    pdfInput.addEventListener("change", () => {
+      if (!pdfInput.files.length) return;
+      const body = new FormData();
+      body.append("invoice_file", pdfInput.files[0]);
+      prefillFrom(body);
     });
+  }
+
+  // Choose a PDF that is already in OneDrive: a window over the form, so there's no page to come back
+  // from. It opens in the car's folder and can go up from there. The file isn't copied: its link becomes
+  // the invoice link, and what can be read in it fills the form as a chosen file would.
+  const picker = document.getElementById("onedrive-picker");
+  const pickButton = document.getElementById("onedrive-pick");
+  if (picker && pickButton && form.dataset.onedriveBrowseUrl) {
+    const pickHint = document.getElementById("onedrive-pick-hint");
+    const status = document.getElementById("onedrive-picker-status");
+    const pathBox = document.getElementById("onedrive-picker-path");
+    const list = document.getElementById("onedrive-picker-list");
+    let loading = 0;
+
+    const entry = (label, onClick) => {
+      const li = document.createElement("li");
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "linklike";
+      b.textContent = label;
+      b.addEventListener("click", onClick);
+      li.append(b);
+      list.append(li);
+    };
+    const kb = (n) => (n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " kB");
+
+    // Folders already fetched (as promises, so a click on one still loading just waits for it). Cleared each
+    // time the window opens, so what it shows is never older than that.
+    let seen = new Map();
+    const fetchFolder = (car, folder) => {
+      const key = car + "/" + (folder || "");
+      if (!seen.has(key)) {
+        const url = form.dataset.onedriveBrowseUrl.replace(/0$/, car) + (folder ? "?folder=" + encodeURIComponent(folder) : "");
+        const asked = fetch(url).then(async (res) => {
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Couldn't open OneDrive.");
+          return data;
+        });
+        seen.set(key, asked);
+        asked.catch(() => seen.delete(key));      // a failure is tried again next time
+      }
+      return seen.get(key);
+    };
+
+    async function show(folder) {
+      const ticket = ++loading;
+      status.textContent = "Loading…";
+      list.textContent = "";
+      const car = form.elements.car_id.value;
+      if (!car) { status.textContent = "Pick the car first."; pathBox.textContent = ""; return; }
+      let data;
+      try {
+        data = await fetchFolder(car, folder);
+      } catch (e) {
+        if (ticket === loading) status.textContent = e.message;
+        return;
+      }
+      if (ticket !== loading) return;      // a newer click has replaced this listing
+      pathBox.textContent = data.path;
+      status.textContent = data.folders.length || data.files.length ? "" : "No folders or PDFs in here.";
+      if (!data.is_root) entry("⬑ Up", () => show(data.parent_id || "root"));
+      data.folders.forEach((f) => entry("📁 " + f.name, () => show(f.id)));
+      data.files.forEach((f) => entry("📄 " + f.name + " (" + kb(f.size) + ")", () => choose(f)));
+      // Going up is the likeliest next move: have the folder above ready while this one is read.
+      if (!data.is_root) fetchFolder(car, data.parent_id || "root").catch(() => {});
+    }
+
+    function choose(file) {
+      picker.close();
+      if (pdfInput) pdfInput.value = "";      // the OneDrive file replaces any chosen on this computer
+      form.elements.invoice_url.value = file.web_url;
+      pickHint.textContent = "Linked: " + file.name;
+      if (prefillHint && form.dataset.prefillUrl) {
+        const body = new FormData();
+        body.append("onedrive_id", file.id);
+        body.append("name", file.name);
+        prefillFrom(body);
+      }
+    }
+
+    pickButton.addEventListener("click", () => {
+      seen = new Map();
+      picker.showModal();
+      show(null);
+    });
+    document.getElementById("onedrive-picker-close").addEventListener("click", () => picker.close());
+    // The car decides where the window starts: a different car means a different folder.
+    form.elements.car_id.addEventListener("change", () => { seen = new Map(); if (picker.open) show(null); });
   }
   // New expense with nothing typed yet: fill automatically.
   if (!odo.value) fill(false);
