@@ -7,10 +7,24 @@ Each entry says what an installer must do to upgrade. Where nothing is said, pul
 
 ## Unreleased
 
+### Changed
+
+- Importing from OneDrive reads every waiting PDF in one go, instead of ten at a time.
 - Dashboard: thousands separators and decimal marks that follow the browser's language, with fixed
   decimals, and cost and distance per day. A Period box (week, month or year) for the cost charts, a time range that starts at your earliest
   data instead of a fixed five years, a Category filter for the headline figures, and "Months" is now "Time owned", in years and months.
   The timezone box is gone: the timezone comes from `APP_TZ`.
+
+### Added
+
+- A **Skip** tick on each import row, for files that never need importing, and a prompt on Import to
+  skip whatever was left unticked. The app creates its new
+  `expenses.import_skip` table itself; with the least-privilege role, re-run `scripts/provision-db.sh`.
+- Add and Edit expense: **Choose from OneDrive**, a button under the PDF field, opens a window over the form to pick a PDF that is
+  already in OneDrive. It starts in the car's folder and can go up, to the top of the drive. The file's
+  link becomes the invoice link and the form fills in from it, as for a chosen file. Nothing is
+  copied. The button shows OneDrive's logo, fetched once from `cdn.jsdelivr.net` and kept in memory rather
+  than shipped with the app (from selfh.st/icons, CC BY 4.0); `PROVIDER_ICONS=0` stops that (a plain cloud is shown). Needs nothing to upgrade.
 
 ## 0.2.0-rc2 - 2026-11-10
 

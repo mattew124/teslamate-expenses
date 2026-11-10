@@ -1,13 +1,14 @@
 {% extends "base.html" %}
+{% from "_provider.html" import mark with context %}
 {% block title %}Import invoices{% endblock %}
 {% block content %}
-<h1>Import invoices for {{ car.name or ('Car ' ~ car.id) }}</h1>
+<h1>{{ mark() }} Import invoices for {{ car.name or ('Car ' ~ car.id) }}</h1>
 {% if notice %}<p class="notice bad">{{ notice }}</p>{% endif %}
 {% if rows or scanning %}
 <p>These PDFs are in the car's OneDrive folder but not yet in your expenses. Date, category,
   vendor, amount and odometer are <strong>guesses</strong> from the file name, its folder and the text
   inside the PDF (scans are read by OCR). Check every row, correct what's wrong, and untick anything
-  you don't want. Nothing is saved until you press Import.</p>
+  you don't want, or tick <strong>Skip</strong> on files that never need importing (they stop being offered). Nothing is saved until you press Import.</p>
 {% if scanning %}
 <div id="import-status" class="import-status" role="status" aria-live="polite">
   <progress id="import-progress" max="1"></progress>
@@ -21,7 +22,7 @@
   <input type="hidden" name="count" value="{{ rows|length }}">
   <div class="table-wrap">
   <table class="import-table">
-    <thead><tr><th>Import</th><th>File</th><th>Date</th><th>Category</th><th>Vendor</th>
+    <thead><tr><th>Import</th><th>Skip</th><th>File</th><th>Date</th><th>Category</th><th>Vendor</th>
       <th class="num">Amount</th><th class="num">Odometer (km)</th></tr></thead>
     <tbody>
     {% for r in rows %}{% set n = r.n %}{% include "_import_row.html" %}{% endfor %}
@@ -37,6 +38,10 @@
     PDF (never the value), and which category a vendor's invoices get. After {{ learn_after }} confirmations it uses them for
     later guesses. <a href="{{ url_for('learned_page') }}">See and remove what it has learned</a>.</small></p>
 </form>
+{% if skipped %}
+<form method="post" action="{{ url_for('onedrive_import_unskip', car_id=car.id) }}"><p><small>{{ skipped }} skipped file{{ '' if skipped == 1 else 's' }} not shown.
+  <button type="submit" class="linklike">Offer {{ 'it' if skipped == 1 else 'them' }} again</button></small></p></form>
+{% endif %}
 {% elif not notice %}
 <p class="empty">Every PDF in the folder already has an expense. <a href="{{ url_for('onedrive_page') }}">Back</a></p>
 {% else %}

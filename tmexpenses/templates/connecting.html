@@ -1,7 +1,8 @@
 {% extends "base.html" %}
+{% from "_provider.html" import mark with context %}
 {% block title %}Connecting OneDrive{% endblock %}
 {% block content %}
-<h1>Connecting OneDrive</h1>
+<h1>{{ mark() }} Connecting OneDrive</h1>
 <p>Opening Microsoft's sign-in page…</p>
 <p><a id="continue-sign-in" href="{{ sign_in_url }}" class="button" rel="noreferrer" data-auto-follow>Continue to Microsoft sign-in</a></p>
 <p><small>Sign in with the Microsoft account whose OneDrive should get the invoices. You'll come straight back here.</small></p>

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_provider.html" import mark with context %}
 {% block title %}{{ 'Edit expense' if expense_id else 'Add expense' }}{% endblock %}
 {% macro err(field) %}{% if errors.get(field) %}<span class="error">{{ errors[field] }}</span>{% endif %}{% endmacro %}
 {% block content %}
@@ -20,6 +21,7 @@
 </div>
 {% endif %}
 <form method="post" class="stack" id="expense-form" enctype="multipart/form-data"
+      {% if onedrive_connected %}data-onedrive-browse-url="{{ url_for('api_onedrive_browse', car_id=0) }}"{% endif %}
       data-odometer-url="{{ url_for('api_odometer') }}" {% if not expense_id %}data-prefill-url="{{ url_for('api_prefill') }}" data-duplicates-url="{{ url_for('api_duplicates') }}"{% endif %}>
   <input type="hidden" name="confirm_duplicate" value="{{ '1' if duplicates }}">
   <label>Car
@@ -32,6 +34,9 @@
   {% if onedrive_enabled %}
   <label>Invoice PDF
     <input type="file" name="invoice_file" accept="application/pdf,.pdf">{{ err('invoice_file') }}
+    <span class="or-pick"><span>or</span>
+      <button type="button" id="onedrive-pick" class="secondary">{{ mark() }} Choose from {{ storage.name }}</button></span>
+    <small id="onedrive-pick-hint">Already in {{ storage.name }}? Pick it there instead of uploading it again.</small>
     {% if not expense_id %}<small id="prefill-hint">Choose the PDF next: the fields below are filled in from what can be read in it. Check them before saving.</small>{% endif %}
     {% if onedrive_connected %}
     <small>It's uploaded to the car's OneDrive folder when you save, and the invoice link is filled in for you.{% if values.invoice_url %} Replaces the current link; the old file stays in OneDrive.{% endif %}</small>
@@ -83,5 +88,14 @@
 <form method="post" action="{{ url_for('delete', expense_id=expense_id) }}" data-confirm="Delete this expense?">
   <button type="submit" class="danger">Delete expense</button>
 </form>
+{% endif %}
+{% if onedrive_connected %}
+<dialog id="onedrive-picker" aria-labelledby="onedrive-picker-title" class="picker">
+  <h2 id="onedrive-picker-title">{{ mark() }} Choose an invoice from {{ storage.name }}</h2>
+  <p class="here"><code id="onedrive-picker-path"></code></p>
+  <p id="onedrive-picker-status" role="status"></p>
+  <ul class="plain folder-list" id="onedrive-picker-list"></ul>
+  <div class="row"><button type="button" id="onedrive-picker-close" class="secondary">Cancel</button></div>
+</dialog>
 {% endif %}
 {% endblock %}

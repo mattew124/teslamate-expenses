@@ -261,6 +261,20 @@ def known_invoice_urls(conn, urls):
     return {r["invoice_url"] for r in rows}
 
 
+def skipped_import_urls(conn, car_id):
+    return {r["url"] for r in conn.execute("SELECT url FROM expenses.import_skip WHERE car_id = %s", (car_id,))}
+
+
+def skip_imports(conn, car_id, urls):
+    for url in urls:
+        conn.execute("INSERT INTO expenses.import_skip (car_id, url) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                     (car_id, url))
+
+
+def clear_skipped_imports(conn, car_id):
+    conn.execute("DELETE FROM expenses.import_skip WHERE car_id = %s", (car_id,))
+
+
 def update_expense(conn, expense_id, v):
     sets = ", ".join(f"{f} = %({f})s" for f in _FIELDS)
     cur = conn.execute(

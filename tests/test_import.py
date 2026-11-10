@@ -8,7 +8,7 @@ import pytest
 
 from tmexpenses import invoices
 from tests.test_app import ORIGIN, rows
-from tests.test_onedrive import FakeMicrosoft, app_for, choose_folder, sign_in  # noqa: F401  (fixtures)
+from tests.test_onedrive import FakeMicrosoft, an_hour_passes, app_for, choose_folder, sign_in  # noqa: F401  (fixtures)
 
 TYRES_TEXT = "Invoice Date: 24/10/2026\n  Odometer 45,120 km\n  Example Tyres Pty Ltd\n  Total   $1,234.50\n"
 FILES = {  # id -> (name, parent, pdf bytes)
@@ -304,7 +304,7 @@ def test_scan_lists_the_files_without_reading_them(client, ms):
     assert downloads(ms) == []
 
 
-def test_scan_leaves_out_what_is_imported_and_batches(client, admin, monkeypatch):
+def test_scan_lists_every_file_not_a_batch(client, admin, monkeypatch):
     client.post("/onedrive/import/1", data=post_rows(admin), headers=ORIGIN)      # imports P3 and P1
     monkeypatch.setattr("tmexpenses.IMPORT_BATCH", 1)
     data = client.get("/onedrive/import/1/scan").get_json()
@@ -394,8 +394,26 @@ def test_the_per_file_read_flags_it_too(client, admin):
     assert "Possible duplicate" in read(client).data.decode()
 
 
-def test_sign_in_expiring_before_a_scan_is_explained(client, ms):
+def test_sign_in_expiring_before_a_scan_is_explained(client, ms, monkeypatch):
+    an_hour_passes(monkeypatch)
     ms.refresh_ok = False
     resp = client.get("/onedrive/import/1?sync=1")
     assert resp.status_code < 500 and b"sign in again" in resp.data
 
+
+
+def test_scan_is_not_capped_by_the_batch_size(client, monkeypatch):
+    monkeypatch.setattr("tmexpenses.IMPORT_BATCH", 1)
+    assert len(client.get("/onedrive/import/1/scan").get_json()["files"]) == 3
+
+
+def test_skipped_files_stop_being_offered_until_restored(client, admin):
+    data = post_rows(admin)
+    data = {k: v for k, v in data.items() if not k.startswith("include_")}
+    data["skip_1"] = "on"
+    assert client.post("/onedrive/import/1", data=data, headers=ORIGIN).status_code == 303
+    scan = client.get("/onedrive/import/1/scan").get_json()
+    assert scan["skipped"] == 1 and len(scan["files"]) == 2 and data["url_1"] not in [f["url"] for f in scan["files"]]
+    assert rows(admin) == []
+    client.post("/onedrive/import/1/unskip", headers=ORIGIN)
+    assert len(client.get("/onedrive/import/1/scan").get_json()["files"]) == 3

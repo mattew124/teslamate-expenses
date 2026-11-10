@@ -12,6 +12,7 @@ import html
 import re
 import io
 import json
+import time
 from datetime import date, timedelta
 from urllib.parse import parse_qs, unquote, urlparse
 
@@ -29,6 +30,7 @@ CLIENT_ID = "11111111-2222-3333-4444-555555555555"
 SECRET = "s3cret~value"
 WEB_URL = "https://onedrive.live.com/?id=FILE1"
 CALLBACK = "http://localhost/onedrive/callback"
+FILE_DOWNLOAD = "https://cdn.example.com/F1"
 
 # A small drive: root -> Cars -> Test car -> Invoices
 FOLDERS = {
@@ -48,6 +50,13 @@ def item(key):
     return out
 
 
+def with_children(key):
+    """A folder and what is in it, as Graph answers ?expand=children."""
+    files = [{"id": "F1", "name": "receipt.pdf", "file": {}, "size": 10, "webUrl": "https://onedrive.live.com/?id=F1"},
+             {"id": "F2", "name": "notes.txt", "file": {}, "size": 1, "webUrl": "https://onedrive.live.com/?id=F2"}]
+    return {**item(key), "children": [item(k) for k in CHILDREN[key]] + files}
+
+
 class FakeMicrosoft:
     """Just enough of the Microsoft identity platform and Graph for the app."""
 
@@ -56,6 +65,7 @@ class FakeMicrosoft:
         self.refresh_ok = True
         self.upload_status = 201
         self.refresh_count = 0
+        self.expires_in = 3600
         self.challenge = None
         self.created = []
 
@@ -80,19 +90,27 @@ class FakeMicrosoft:
                 return 400, {"error": "invalid_grant", "error_description": "expired"}
             self.refresh_count += 1
             n = self.refresh_count + 1
-            return 200, {"access_token": f"AT-{n}", "refresh_token": f"RT-{n}"}
+            return 200, {"access_token": f"AT-{n}", "refresh_token": f"RT-{n}", "expires_in": self.expires_in}
+        if url == FILE_DOWNLOAD:                      # the CDN address: no bearer token goes with it
+            return 200, PDF
         assert headers["Authorization"].startswith("Bearer AT-")
         if method == "GET" and path.endswith("/me/drive"):
             return 200, {"owner": {"user": {"displayName": "Test Owner"}}}
         if method == "GET" and path.endswith("/children"):
             parent = "ROOT" if path.endswith("/me/drive/root/children") else path.split("/items/")[1].split("/")[0]
-            files = [{"id": "F1", "name": "receipt.pdf", "file": {}}]
+            files = [{"id": "F1", "name": "receipt.pdf", "file": {}, "size": 10, "webUrl": "https://onedrive.live.com/?id=F1"},
+                     {"id": "F2", "name": "notes.txt", "file": {}, "size": 1, "webUrl": "https://onedrive.live.com/?id=F2"}]
             return 200, {"value": [item(k) for k in CHILDREN[parent]] + files}
+        expand = "$expand" in parse_qs(urlparse(url).query)
         if method == "GET" and path.endswith("/me/drive/root"):
-            return 200, item("ROOT")
+            return 200, with_children("ROOT") if expand else item("ROOT")
+        if method == "GET" and path.endswith("/me/drive/items/F1"):
+            return 200, {"id": "F1", "size": len(PDF), "@microsoft.graph.downloadUrl": FILE_DOWNLOAD}
         if method == "GET" and "/me/drive/items/" in path:
             key = path.rsplit("/", 1)[1]
-            return (200, item(key)) if key in FOLDERS else (404, {"error": {"code": "itemNotFound"}})
+            if key not in FOLDERS:
+                return 404, {"error": {"code": "itemNotFound"}}
+            return 200, with_children(key) if expand else item(key)
         if method == "POST" and path.endswith("/children"):
             parent = "ROOT" if path.endswith("/me/drive/root/children") else path.split("/items/")[1].split("/")[0]
             assert headers["Content-Type"] == "application/json"
@@ -132,13 +150,13 @@ def app_for(pg, admin, monkeypatch):
     monkeypatch.delenv("BASE_PATH", raising=False)
     monkeypatch.setenv("APP_TZ", "Australia/Brisbane")
 
-    def make(transport, key=KEY):
+    def make(transport, key=KEY, icon_fetch=None):
         if key is None:
             monkeypatch.delenv("EXPENSES_ENCRYPTION_KEY", raising=False)
         else:
             monkeypatch.setenv("EXPENSES_ENCRYPTION_KEY", key)
         app = create_app(connect=lambda: psycopg.connect(pg.app_url, row_factory=dict_row),
-                         onedrive_transport=transport)
+                         onedrive_transport=transport, icon_fetch=icon_fetch)
         app.testing = True
         return app.test_client()
     return make
@@ -178,6 +196,12 @@ def sign_in(client, ms):
 
 def choose_folder(client, folder_id="INV", car_id=1):
     return client.post(f"/onedrive/folders/{car_id}", data={"folder_id": folder_id}, headers=ORIGIN)
+
+
+def an_hour_passes(monkeypatch):
+    """The access token kept from earlier has expired by the next call."""
+    now = time.monotonic()
+    monkeypatch.setattr(time, "monotonic", lambda: now + 7200)
 
 
 def with_pdf(data, content=PDF, name="invoice.pdf"):
@@ -384,6 +408,7 @@ def test_upload_on_create(client, ms, admin):
 
 
 def test_refresh_token_rotation_is_saved(client, ms, admin):
+    ms.expires_in = 0           # every call needs a fresh access token, so every call rotates the refresh token
     sign_in(client, ms)
     choose_folder(client)
     before = len([c for c in ms.calls if c[1].endswith("/token")])
@@ -475,9 +500,10 @@ def test_old_variable_name_is_explained(monkeypatch, caplog):
     assert any("ONEDRIVE_TOKEN_KEY" in m and "EXPENSES_ENCRYPTION_KEY" in m for m in caplog.messages)
 
 
-def test_expired_sign_in_is_explained(client, ms, admin):
+def test_expired_sign_in_is_explained(client, ms, admin, monkeypatch):
     sign_in(client, ms)
     choose_folder(client)
+    an_hour_passes(monkeypatch)
     ms.refresh_ok = False
     resp = client.post("/new", data=with_pdf(form(admin)), headers=ORIGIN)
     assert resp.status_code == 400 and b"sign in again" in resp.data
@@ -666,3 +692,238 @@ def test_a_refusal_is_not_retried(monkeypatch):
         drive.subfolders("AT-1", "X")
     assert len(asked) == 1
 
+
+
+# ---- choosing a file already in OneDrive, from the Add form --------------------------------
+
+def pick(client, query=""):
+    return client.get("/api/onedrive/browse/1" + query)
+
+
+def test_the_picker_starts_in_the_cars_folder_and_lists_pdfs_only(client, ms):
+    sign_in(client, ms)
+    choose_folder(client, "TESTCAR")
+    data = pick(client).get_json()
+    assert data["path"] == "/Cars/Test car" and data["is_root"] is False
+    assert data["parent_id"] == "CARS"
+    assert [f["name"] for f in data["folders"]] == ["Invoices"]
+    assert data["files"] == [{"id": "F1", "name": "receipt.pdf", "size": 10, "web_url": "https://onedrive.live.com/?id=F1"}]
+
+
+def test_the_picker_can_go_up_to_the_top_of_the_drive(client, ms):
+    sign_in(client, ms)
+    choose_folder(client, "TESTCAR")
+    up = pick(client, "?folder=CARS").get_json()
+    assert up["path"] == "/Cars" and up["parent_id"] == "ROOT"
+    top = pick(client, "?folder=root").get_json()
+    assert top["is_root"] is True and top["parent_id"] is None and top["path"] == "/"
+    assert [f["name"] for f in top["folders"]] == ["Cars"]
+
+
+def test_the_picker_needs_a_folder_for_the_car_a_sign_in_and_a_real_car(client, ms):
+    save_credentials(client)
+    assert pick(client).status_code == 409                       # not signed in
+    sign_in(client, ms)
+    resp = pick(client)
+    assert resp.status_code == 409 and "folder" in resp.get_json()["error"]
+    assert client.get("/api/onedrive/browse/99").status_code == 404
+
+
+def test_the_picker_is_absent_without_onedrive(app_for, ms):
+    assert app_for(ms, key=None).get("/api/onedrive/browse/1").status_code == 404
+
+
+def test_reading_a_chosen_onedrive_file_fills_the_form_like_an_upload(client, ms):
+    sign_in(client, ms)
+    resp = client.post("/api/prefill", headers=ORIGIN, data={"onedrive_id": "F1", "name": "receipt.pdf"})
+    assert resp.status_code == 200 and set(resp.get_json()) >= {"date", "amount", "vendor", "category_id"}
+
+
+def test_a_onedrive_file_that_cant_be_fetched_is_explained(client, ms):
+    sign_in(client, ms)
+    resp = client.post("/api/prefill", headers=ORIGIN, data={"onedrive_id": "GONE", "name": "a.pdf"})
+    assert resp.status_code == 502 and "OneDrive said no" in resp.get_json()["error"]
+
+
+def test_the_add_form_offers_the_picker_only_when_connected(client, ms):
+    assert b"data-onedrive-browse-url" not in client.get("/new").data
+    sign_in(client, ms)
+    page = client.get("/new").data.decode()
+    assert "data-onedrive-browse-url" in page and 'id="onedrive-picker"' in page
+
+
+# ---- the picker is quick: one Graph call a folder, and the access token is reused ------------
+
+def graph_gets(ms):
+    return [c for c in ms.calls if c[0] == "GET" and not c[1].endswith("/token") and "login.microsoftonline" not in c[1]]
+
+
+def refreshes(ms):
+    return [c for c in ms.calls if c[1].endswith("/token") and b"grant_type=refresh_token" in c[2]]
+
+
+def test_a_folder_is_one_graph_call(client, ms):
+    sign_in(client, ms)
+    choose_folder(client, "TESTCAR")
+    pick(client)                                  # warm up: the token refresh isn't a Graph call
+    before = len(graph_gets(ms))
+    assert pick(client, "?folder=CARS").status_code == 200
+    assert len(graph_gets(ms)) - before == 1
+
+
+def test_the_access_token_is_reused_until_it_nears_expiry(client, ms):
+    sign_in(client, ms)
+    choose_folder(client, "TESTCAR")
+    before = len(refreshes(ms))             # choosing the folder just refreshed once
+    for folder in ("", "?folder=CARS", "?folder=root"):
+        assert pick(client, folder).status_code == 200
+    assert len(refreshes(ms)) == before
+
+
+def test_an_access_token_about_to_expire_is_not_reused(client, ms):
+    ms.expires_in = 30            # inside the safety margin: not worth keeping
+    sign_in(client, ms)
+    choose_folder(client, "TESTCAR")
+    before = len(refreshes(ms))
+    pick(client); pick(client)
+    assert len(refreshes(ms)) - before == 2
+
+
+def test_disconnecting_stops_a_kept_access_token_being_used(client, ms):
+    sign_in(client, ms)
+    choose_folder(client, "TESTCAR")
+    assert pick(client).status_code == 200
+    client.post("/onedrive/disconnect", headers=ORIGIN)
+    calls = len(ms.calls)
+    assert pick(client).status_code == 409 and len(ms.calls) == calls
+
+
+def test_signing_in_again_does_not_reuse_the_old_access_token(client, ms):
+    sign_in(client, ms)
+    choose_folder(client, "TESTCAR")
+    pick(client)
+    client.post("/onedrive/disconnect", headers=ORIGIN)
+    q = start_sign_in(client, ms)
+    client.get(f"/onedrive/callback?code=AUTH-CODE&state={q['state']}")
+    before = len(refreshes(ms))
+    assert pick(client).status_code == 200
+    assert len(refreshes(ms)) - before == 1     # the new sign-in's refresh token has no kept access token
+
+
+def test_a_folder_with_more_than_a_page_of_children_is_followed():
+    pdf = {"file": {}, "webUrl": "https://onedrive.live.com/f", "size": 1}
+    drive, asked = graph_of(
+        (200, {"id": "X", "name": "X", "folder": {}, "parentReference": {"id": "P", "path": "/drive/root:"},
+               "children": [{"id": "A", "name": "Alpha", "folder": {}}, {"id": "1", "name": "a.pdf", **pdf}],
+               "children@odata.nextLink": NEXT}),
+        (200, {"value": [{"id": "B", "name": "Beta", "folder": {}}, {"id": "2", "name": "b.pdf", **pdf}]}))
+    here, folders, files = drive.contents("AT-1", "X")
+    assert here["path"] == "/X" and here["parent_id"] == "P"
+    assert [f["name"] for f in folders] == ["Alpha", "Beta"] and [f["name"] for f in files] == ["a.pdf", "b.pdf"]
+    assert asked[1] == NEXT
+
+
+# ---- the storage provider's name and icon come from one place, ready for others ----------------
+
+def test_the_add_form_names_and_pictures_the_provider(client, ms):
+    sign_in(client, ms)
+    page = client.get("/new").data.decode()
+    assert re.search(r'<img src="[^"]*/provider-icon/onedrive" alt="" class="provider-icon"', page)
+    assert "Choose from OneDrive" in page and "Choose an invoice from OneDrive" in page
+
+
+def icon_app(app_for, ms, fetch, monkeypatch, enabled="1"):
+    monkeypatch.setenv("PROVIDER_ICONS", enabled)
+    return app_for(ms, icon_fetch=fetch)
+
+
+def test_the_icon_comes_from_the_source_and_is_cached_by_browsers(app_for, ms, monkeypatch):
+    from tests.test_icons import Fetch
+    fetch = Fetch()
+    c = icon_app(app_for, ms, fetch, monkeypatch)
+    resp = c.get("/provider-icon/onedrive")
+    assert resp.status_code == 200 and resp.mimetype == "image/svg+xml" and resp.data.startswith(b"<svg")
+    assert "max-age" in resp.headers["Cache-Control"] and "no-store" not in resp.headers["Cache-Control"]
+    c.get("/provider-icon/onedrive")
+    assert len(fetch.urls) == 1
+
+
+def test_without_the_source_the_bundled_drawing_is_used(app_for, ms, monkeypatch):
+    from tests.test_icons import Fetch
+    from tmexpenses import icons
+    c = icon_app(app_for, ms, Fetch(error=icons.IconUnavailable("offline")), monkeypatch)
+    resp = c.get("/provider-icon/onedrive")
+    assert resp.status_code == 200 and resp.mimetype == "image/svg+xml" and b"<svg" in resp.data
+    assert "no-store" not in resp.headers["Cache-Control"] and "max-age=" in resp.headers["Cache-Control"]
+    assert int(re.search(r"max-age=(\d+)", resp.headers["Cache-Control"]).group(1)) < 3600   # the real one may arrive soon
+
+
+def test_switching_the_icons_off_never_fetches(app_for, ms, monkeypatch):
+    from tests.test_icons import Fetch
+    fetch = Fetch()
+    c = icon_app(app_for, ms, fetch, monkeypatch, enabled="0")
+    assert c.get("/provider-icon/onedrive").status_code == 200 and fetch.urls == []
+
+
+def test_an_unknown_provider_icon_is_404(app_for, ms, monkeypatch):
+    from tests.test_icons import Fetch
+    assert icon_app(app_for, ms, Fetch(), monkeypatch).get("/provider-icon/dropbox").status_code == 404
+
+
+def test_no_icon_route_without_a_storage_provider(app_for, ms):
+    assert app_for(ms, key=None).get("/provider-icon/onedrive").status_code == 404
+
+
+# ---- the logo goes wherever OneDrive heads or labels something ---------------------------------
+
+ICON = re.compile(r'<img src="[^"]*/provider-icon/onedrive" alt="" class="provider-icon"')
+
+
+@pytest.mark.parametrize("path, where", [
+    ("/", r"<nav>.*?</nav>"),
+    ("/onedrive", r"<h1>\s*<img[^>]*>\s*OneDrive</h1>"),
+    ("/categories", r"<small>\s*<img[^>]*>\s*OneDrive folder</small>"),
+    ("/onedrive/browse/1", r"<h1>\s*<img[^>]*>\s*Folder for"),
+    ("/new", r'<h2 id="onedrive-picker-title">\s*<img[^>]*>'),
+])
+def test_the_logo_marks_each_place_onedrive_heads_or_labels_something(client, ms, path, where):
+    sign_in(client, ms)
+    page = client.get(path).data.decode()
+    area = re.search(where, page, re.S)
+    assert area and ICON.search(area.group(0)), f"no logo at {where} on {path}"
+
+
+def test_the_connect_button_and_the_connecting_page_carry_it(client, ms):
+    save_credentials(client)
+    assert re.search(r'<button[^>]*>\s*<img[^>]*provider-icon[^>]*>\s*Connect OneDrive', client.get("/onedrive").data.decode())
+    page = client.post("/onedrive/connect", headers=ORIGIN).data.decode()
+    assert re.search(r"<h1>\s*<img[^>]*provider-icon[^>]*>\s*Connecting OneDrive", page)
+
+
+def test_the_import_page_heading_carries_it(client, ms):
+    sign_in(client, ms)
+    choose_folder(client)
+    assert re.search(r"<h1>\s*<img[^>]*provider-icon[^>]*>\s*Import invoices for", client.get("/onedrive/import/1").data.decode())
+
+
+def test_no_logo_when_there_is_no_storage_provider(app_for, ms):
+    c = app_for(ms, key=None)
+    for path in ("/", "/onedrive", "/categories"):
+        assert "provider-icon" not in c.get(path).data.decode()
+
+
+def test_the_logos_source_is_credited_on_the_onedrive_page(client, ms):
+    sign_in(client, ms)
+    page = client.get("/onedrive").data.decode()
+    assert re.search(r'<a href="https://selfh\.st/icons"[^>]*>selfh\.st/icons</a>', page)
+    assert re.search(r'<a href="https://creativecommons\.org/licenses/by/4\.0/"[^>]*>CC BY 4\.0</a>', page)
+
+
+def test_no_credit_without_the_logo(app_for, ms):
+    assert "selfh.st" not in app_for(ms, key=None).get("/onedrive").data.decode()
+
+
+def test_the_nav_link_has_no_underlined_space_between_the_logo_and_its_name(client, ms):
+    sign_in(client, ms)
+    nav = re.search(r"<nav>.*?</nav>", client.get("/").data.decode(), re.S).group(0)
+    assert re.search(r"<a [^>]*>\s*<img[^>]*provider-icon[^>]*>OneDrive</a>", nav)   # no text node of spaces to underline
