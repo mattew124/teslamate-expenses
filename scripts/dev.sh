@@ -10,7 +10,7 @@
 #   scripts/dev.sh refresh           re-copy TeslaMate data, keeping test expenses
 #   scripts/dev.sh reset             wipe the test DB, test expenses included
 #   scripts/dev.sh down              stop, keeping the test DB
-#   scripts/dev.sh destroy           remove this checkout's stack, test DB and image
+#   scripts/dev.sh destroy           remove this checkout's stack, test DB, image and .dev folder
 #   scripts/dev.sh list              every dev stack on this machine
 #   scripts/dev.sh test-browser [--onedrive]
 #                                    run the browser tests against the dev stack;
@@ -410,6 +410,9 @@ case "${1:-}" in
         ensure_env
         compose down -v --remove-orphans
         docker image rm "teslamate-expenses:$DEV_TAG" >/dev/null 2>&1 || true
+        # Last: `compose down` above needs the passwords in .dev/env. This also drops the screenshots.
+        # The checkout itself (a worktree's own folder) stays; remove that with `git worktree remove`.
+        rm -rf -- "$ROOT/.dev"
         echo "dev: removed $PROJECT" ;;
     list) docker compose ls -a --filter name=teslamate-expenses-dev ;;
     setup) setup ;;

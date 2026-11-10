@@ -44,7 +44,7 @@ def step(name, fn, *args):
             print(f"SKIP {name}\n     {why}")
     except Exception as exc:  # keep going: report every failure in one run
         failed.append(name)
-        print(f"FAIL {name}\n     {str(exc).splitlines()[0][:300]}")
+        print(f"FAIL {name}\n     " + "\n     ".join(str(exc).splitlines()[:12]))
 
 
 def shot(page, name):
@@ -178,6 +178,62 @@ def test_real_upload(page):
     link = page.locator("tbody tr", has_text=MARKER).locator("a[href^='https://']").first.get_attribute("href")
     assert "example.com" not in link, "the invoice link should be the uploaded file's OneDrive address"
     remove_marked(page)
+
+
+def test_onedrive_picker(page):
+    expect.set_options(timeout=20000)       # real Microsoft takes seconds per folder
+    try:
+        picker_checks(page)
+    finally:
+        expect.set_options(timeout=5000)
+
+
+def picker_checks(page):
+    """The Add form's file picker (read-only): opens in the car's folder, goes up and back down,
+    and choosing a PDF links it. Needs a connected drive whose car folder holds a PDF."""
+    page.goto(UI + "onedrive")
+    if not page.locator("button:has-text('Disconnect')").count():
+        raise Skip("dev stack isn't connected to OneDrive (scripts/dev.sh onedrive-link)")
+    page.goto(UI + "new")
+    if not page.locator("select[name=car_id]").input_value():
+        page.select_option("select[name=car_id]", index=1)
+    expect(page.locator("#onedrive-pick")).to_be_visible()
+    shot(page, "form-onedrive-button")
+    page.click("#onedrive-pick")
+    dialog = page.locator("#onedrive-picker")
+    expect(dialog).to_be_visible()
+    start = dialog.locator("#onedrive-picker-path")
+    expect(start).not_to_have_text("")
+    if "Choose a OneDrive folder" in dialog.locator("#onedrive-picker-status").inner_text():
+        raise Skip("this car has no OneDrive folder")
+    here = start.inner_text()
+    expect(dialog.get_by_text("⬑ Up")).to_be_visible()    # in the car's folder, so there is a way up
+    shot(page, "form-onedrive-picker")                     # before going up: the top of the drive has no Up
+    dialog.get_by_text("⬑ Up").click()
+    expect(start).not_to_have_text(here)
+    expect(dialog.get_by_text("⬑ Up")).to_have_count(0)   # nothing above the top of the drive
+    expect(dialog.locator("#onedrive-picker-list li button", has_text="📁").first).to_be_visible()
+    dialog.get_by_text("Cancel").click()
+    expect(dialog).not_to_be_visible()
+    page.click("#onedrive-pick")
+    expect(start).to_have_text(here)         # reopening starts at the car's folder again
+    items = dialog.locator("#onedrive-picker-list li button")
+    pdf = dialog.locator("#onedrive-picker-list li button", has_text="📄")
+    if not pdf.count():
+        # Uploads go into category subfolders, so look in each folder in turn, as a person would.
+        names = [t[2:] for t in items.all_inner_texts() if t.startswith("📁")]
+        for name in names:
+            dialog.get_by_role("button", name="📁 " + name, exact=True).click()
+            expect(dialog.locator("#onedrive-picker-path")).not_to_have_text(here)
+            expect(dialog.locator("#onedrive-picker-status")).not_to_have_text("Loading…")
+            if pdf.count():
+                break
+            dialog.get_by_text("⬑ Up").click()
+            expect(dialog.locator("#onedrive-picker-path")).to_have_text(here)
+    if not pdf.count():
+        raise Skip("no PDF in the car's folder or the folders directly in it")
+    pdf.first.click()
+    expect(page.locator("input[name=invoice_url]")).to_have_value(re.compile(r"^https://"))
 
 
 def remove_marked(page):
@@ -438,6 +494,7 @@ def main():
         step("Connect OneDrive goes to Microsoft", test_connect_reaches_microsoft, page)
         step("folder browser (read-only)", test_folder_browser, page)
         step("real upload to the OneDrive test folder", test_real_upload, page)
+        step("OneDrive file picker on the Add form", test_onedrive_picker, page)
         step("import page shows progress", test_import_page_shows_progress, page)
         # Expected 400s from the deliberate bad submissions above aren't script errors.
         real = [t for t in problems if "400" not in t]

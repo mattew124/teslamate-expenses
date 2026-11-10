@@ -1,8 +1,9 @@
 {% extends "base.html" %}
+{% from "_provider.html" import mark with context %}
 {% block title %}OneDrive{% endblock %}
 {% macro err(field) %}{% if errors.get(field) %}<span class="error">{{ errors[field] }}</span>{% endif %}{% endmacro %}
 {% block content %}
-<h1>OneDrive</h1>
+<h1>{{ mark() }} OneDrive</h1>
 {% if not onedrive_enabled %}
 <p>Invoice PDFs can be uploaded straight to your OneDrive, into a folder you choose for each car.
   To turn it on, set <code>EXPENSES_ENCRYPTION_KEY</code> for the app (see <a href="https://mattew124.github.io/teslamate-expenses/onedrive/">OneDrive uploads</a>
@@ -73,7 +74,7 @@
   </form>
   {% else %}
   <form method="post" action="{{ url_for('onedrive_connect') }}">
-    <button type="submit" class="button">Connect OneDrive</button>
+    <button type="submit" class="button">{{ mark() }} Connect OneDrive</button>
   </form>
   <small>Opens Microsoft's sign-in page, then comes back here. The app can then read and write
     files in your OneDrive; it only ever writes invoice PDFs into the folders you choose below, and reads PDFs from those
@@ -104,5 +105,10 @@
     The folder can be renamed or moved in OneDrive later without breaking uploads.</small>
 </section>
 {% endif %}
+{% endif %}
+{% if storage %}
+<p><small>OneDrive logo: <a href="{{ storage.credit.url }}" target="_blank" rel="noopener noreferrer">{{ storage.credit.text }}</a>,
+  <a href="{{ storage.credit.licence_url }}" target="_blank" rel="noopener noreferrer">{{ storage.credit.licence }}</a>.
+  OneDrive is a trademark of Microsoft Corporation.</small></p>
 {% endif %}
 {% endblock %}

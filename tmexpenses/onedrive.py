@@ -104,6 +104,13 @@ def display_path(item):
     return f"{under_root.rstrip('/')}/{item['name']}"
 
 
+def folder_info(item):
+    """Graph folder item -> {id, name, path, parent_id, is_root}."""
+    parent_id = (item.get("parentReference") or {}).get("id")
+    return {"id": item["id"], "name": item["name"], "path": display_path(item),
+            "parent_id": parent_id, "is_root": "root" in item or parent_id is None}
+
+
 class OneDrive:
     def __init__(self, key, transport=None):
         self.box = token_box(key)
@@ -190,8 +197,7 @@ class OneDrive:
         item = self._get(access_token, url)
         if "folder" not in item:
             raise OneDriveError("That isn't a folder.")
-        return {"id": item["id"], "name": item["name"], "path": display_path(item),
-                "parent_id": (item.get("parentReference") or {}).get("id")}
+        return folder_info(item)
 
     def subfolders(self, access_token, folder_id=None):
         """Folders directly inside a folder, by name: [{id, name}]."""
@@ -205,6 +211,32 @@ class OneDrive:
             if not url or not url.startswith(GRAPH + "/"):
                 break
         return sorted(found, key=lambda f: f["name"].lower())
+
+    def contents(self, access_token, folder_id=None):
+        """What a file picker shows for one folder, in a single Graph call: the folder itself and
+        its folders and PDFs, by name. -> (folder, [{id, name}], [{id, name, size, web_url}]),
+        the folder as `folder()` gives it. Graph answers the first 200 children with the folder;
+        any more come in pages."""
+        base = f"{GRAPH}/me/drive/items/{quote(folder_id, safe='')}" if folder_id else f"{GRAPH}/me/drive/root"
+        item = self._get(access_token, f"{base}?$expand=children($select=id,name,size,folder,file,webUrl)")
+        if "folder" not in item:
+            raise OneDriveError("That isn't a folder.")
+        children = item.get("children", [])
+        url = item.get("children@odata.nextLink")
+        for _ in range(MAX_PAGES - 1):
+            if not url or not url.startswith(GRAPH + "/"):
+                break
+            body = self._get(access_token, url)
+            children += body.get("value", [])
+            url = body.get("@odata.nextLink")
+        folders, files = [], []
+        for c in children:
+            if "folder" in c:
+                folders.append({"id": c["id"], "name": c["name"]})
+            elif "file" in c and c["name"].lower().endswith(".pdf") and str(c.get("webUrl", "")).startswith("https://"):
+                files.append({"id": c["id"], "name": c["name"], "size": c.get("size", 0), "web_url": c["webUrl"]})
+        by_name = lambda x: x["name"].lower()   # noqa: E731
+        return folder_info(item), sorted(folders, key=by_name), sorted(files, key=by_name)
 
     def create_folder(self, access_token, parent_id, name):
         """New folder inside parent_id (the drive root when None). Fails rather

@@ -8,7 +8,7 @@ import pytest
 
 from tmexpenses import invoices
 from tests.test_app import ORIGIN, rows
-from tests.test_onedrive import FakeMicrosoft, app_for, choose_folder, sign_in  # noqa: F401  (fixtures)
+from tests.test_onedrive import FakeMicrosoft, an_hour_passes, app_for, choose_folder, sign_in  # noqa: F401  (fixtures)
 
 TYRES_TEXT = "Invoice Date: 24/10/2026\n  Odometer 45,120 km\n  Example Tyres Pty Ltd\n  Total   $1,234.50\n"
 FILES = {  # id -> (name, parent, pdf bytes)
@@ -394,7 +394,8 @@ def test_the_per_file_read_flags_it_too(client, admin):
     assert "Possible duplicate" in read(client).data.decode()
 
 
-def test_sign_in_expiring_before_a_scan_is_explained(client, ms):
+def test_sign_in_expiring_before_a_scan_is_explained(client, ms, monkeypatch):
+    an_hour_passes(monkeypatch)
     ms.refresh_ok = False
     resp = client.get("/onedrive/import/1?sync=1")
     assert resp.status_code < 500 and b"sign in again" in resp.data
