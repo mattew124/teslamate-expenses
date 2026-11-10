@@ -409,6 +409,27 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // Dropping a PDF onto the invoice box is the same as choosing it with the button.
+  const dropBox = document.getElementById("invoice-drop");
+  if (dropBox && pdfInput) {
+    document.getElementById("invoice-drop-hint").hidden = false;
+    ["dragenter", "dragover"].forEach((name) => dropBox.addEventListener(name, (ev) => {
+      ev.preventDefault();
+      dropBox.classList.add("over");
+    }));
+    ["dragleave", "drop"].forEach((name) => dropBox.addEventListener(name, () => dropBox.classList.remove("over")));
+    dropBox.addEventListener("drop", (ev) => {
+      ev.preventDefault();
+      const pdf = [...((ev.dataTransfer && ev.dataTransfer.files) || [])]
+        .find((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name));
+      if (!pdf) return;
+      const chosen = new DataTransfer();
+      chosen.items.add(pdf);
+      pdfInput.files = chosen.files;
+      pdfInput.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  }
+
   // Choose a PDF that is already in OneDrive: a window over the form, so there's no page to come back
   // from. It opens in the car's folder and can go up from there. The file isn't copied: its link becomes
   // the invoice link, and what can be read in it fills the form as a chosen file would.

@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 
 import psycopg
@@ -526,3 +527,76 @@ def test_saving_a_purchase_before_the_first_data_moves_the_dashboard_start(pg, a
     assert resp.status_code == 303
     after = json.loads(target.read_text())["time"]["from"]
     assert after == "2019-03-01T00:00:00.000Z" and after < before
+
+
+# ---- look and feel: what the stylesheet hooks onto ----
+
+def test_header_marks_the_page_you_are_on(client):
+    home = client.get("/").data.decode()
+    assert home.count('aria-current="page"') == 1
+    assert re.search(r'<a href="/" aria-current="page">All</a>', home)
+    cats = client.get("/categories").data.decode()
+    assert re.search(r'<a href="/categories" aria-current="page">Categories</a>', cats)
+    assert 'aria-current="page">All<' not in cats
+    assert 'aria-current="page">Settings<' in client.get("/settings").data.decode()
+    assert 'aria-current' not in client.get("/new").data.decode()
+
+
+def test_list_has_a_heading_and_a_total(client, admin):
+    client.post("/new", data=form(admin), headers=ORIGIN)
+    client.post("/new", data=form(admin, amount="99.50", date="2026-11-08",
+                                  category_id=str(category_id(admin, "Insurance"))), headers=ORIGIN)
+    html = client.get("/").data.decode()
+    assert "<h1>All expenses</h1>" in html
+    assert re.search(r'class="total"[^>]*>\s*<small>2 items</small>\s*<strong>\$1,300\.00</strong>', html)
+    tyres = client.get(f"/?category={category_id(admin, 'Tyres')}").data.decode()
+    assert "<h1>Tyres</h1>" in tyres and "<small>1 item</small>" in tyres
+
+
+def test_category_is_a_chip_with_a_steady_colour(client, admin):
+    """The colour is a class picked from the category, never an inline style: the CSP forbids those."""
+    client.post("/new", data=form(admin), headers=ORIGIN)
+    client.post("/new", data=form(admin, date="2026-11-09", amount="5"), headers=ORIGIN)
+    client.post("/new", data=form(admin, date="2026-11-10", amount="6",
+                                  category_id=str(category_id(admin, "Insurance"))), headers=ORIGIN)
+    html = client.get("/").data.decode()
+    tyres = re.findall(r'<span class="chip hue-(\d)">Tyres</span>', html)
+    insurance = re.findall(r'<span class="chip hue-(\d)">Insurance</span>', html)
+    assert len(tyres) == 2 and len(set(tyres)) == 1 and len(insurance) == 1
+    assert tyres[0] != insurance[0], "the starter categories next to each other get different colours"
+    css = client.get("/static/style.css").data.decode()
+    for n in range(10):
+        assert f".hue-{n}" in css
+
+
+def test_a_refund_is_marked_as_a_credit(client, admin):
+    client.post("/new", data=form(admin), headers=ORIGIN)
+    client.post("/new", data=form(admin, amount="-3000", date="2026-11-08", vendor="State rebate"), headers=ORIGIN)
+    html = client.get("/").data.decode()
+    assert re.search(r'<td class="num amount credit"[^>]*>-\$3,000\.00</td>', html)
+    assert re.search(r'<td class="num amount"[^>]*>\$1,200\.50</td>', html)
+
+
+def test_no_page_uses_inline_styles(client, admin):
+    """style-src 'self' in the CSP: an inline style or <style> block is silently dropped by the browser."""
+    client.post("/new", data=form(admin), headers=ORIGIN)
+    for path in ("/", "/new", "/1/edit", "/categories", "/settings", "/onedrive", "/learned"):
+        resp = client.get(path)
+        assert resp.status_code == 200, path
+        html = resp.data.decode()
+        assert " style=" not in html and "<style" not in html, path
+
+
+def test_stylesheet_has_light_and_dark_colours_without_newer_css(client):
+    """Colours switch on prefers-color-scheme. light-dark() and color-mix() are left out: a browser
+    that doesn't know them drops the whole declaration, and the page loses its colours."""
+    css = client.get("/static/style.css").data.decode()
+    assert "prefers-color-scheme: dark" in css
+    assert "light-dark(" not in css and "color-mix(" not in css
+
+
+def test_form_is_grouped_and_amount_has_its_unit_beside_it(client):
+    html = client.get("/new").data.decode()
+    assert html.count('class="card stack"') >= 2
+    assert re.search(r'<span class="affix"><span>\$</span>\s*<input name="amount"', html)
+    assert re.search(r'<span class="affix">\s*<input name="odometer_km"[^>]*>\s*<span>km</span>', html)

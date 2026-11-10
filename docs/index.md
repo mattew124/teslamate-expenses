@@ -20,11 +20,14 @@ OneDrive is a trademark of Microsoft Corporation. This project is not affiliated
   (`120.50+89.95`, `400/3`) when you leave it, press Enter or save, and has keys for the operators.
   The list sorts by any column, either way (click a heading, or use **Sort by** and **Order**), and
   switches between rows and tiles with the toggle beside the filter. Editing an expense, then saving
-  or cancelling, returns you to the category and order you were looking at.
+  or cancelling, returns you to the category and order you were looking at. Each category has its
+  own colour in the list, refunds and rebates show in green, and the app follows your device's light
+  or dark setting.
+  <!-- screenshot: expense-list-rows - The expense list as rows on a desktop, with category colours and the total -->
   <!-- screenshot: expense-list-tiles - The expense list as tiles, with the sort and layout controls -->
   <!-- screenshot: amount-calculator - The amount field with a sum typed in and its result -->
-- **Optional OneDrive upload**: choose the invoice PDF in the form and it goes into that car's
-  OneDrive folder, with the link filled in for you.
+- **Optional OneDrive upload**: choose the invoice PDF in the form, or drop it onto the invoice box,
+  and it goes into that car's OneDrive folder, with the link filled in for you.
 - **Postgres schema** `expenses` inside the TeslaMate database, so Grafana joins it to
   TeslaMate's charging costs and odometer with no second datasource.
 - **Grafana dashboard** "Cost of Ownership": total cost of ownership, purchase vs running

@@ -1,8 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Settings{% endblock %}
+{% block main_attrs %} class="narrow"{% endblock %}
 {% block content %}
 <h1>Settings</h1>
-<form method="post" class="stack">
+<form method="post" class="card stack">
   <label>Grafana dashboard URL
     <input type="url" name="grafana_url" maxlength="2048" value="{{ values.grafana_url or '' }}"
            placeholder="https://teslamate.example.com/grafana/d/tm-expenses-tco">

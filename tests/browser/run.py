@@ -338,7 +338,7 @@ def test_header_stays_tidy_on_a_phone(page):
 
 
 def test_header_on_a_desktop(page):
-    """One row: title on the left, links then Add on the right."""
+    """One row: title then links on the left, Add on the right."""
     page.goto(UI)
     tops = page.evaluate("""() => [...document.querySelectorAll('header .brand, header nav a, header .add')]
         .map(a => Math.round(a.getBoundingClientRect().top + a.getBoundingClientRect().height / 2))""")
@@ -418,7 +418,7 @@ def test_list_toggle_sort_and_return(page):
     amounts = lambda: [t.strip() for t in page.locator(f"tr:has-text('{MARKER}') td.num:nth-child(4)").all_inner_texts()]
     # Changing a filter swaps the list in place: no reload, and nothing beside the box moves.
     page.evaluate("window.__same = 1")
-    spots = lambda: page.evaluate("""[...document.querySelectorAll('.filter select, .view-toggle, .filter .total')]
+    spots = lambda: page.evaluate("""[...document.querySelectorAll('.filter select, .view-toggle, .page-head .total')]
         .map(e => { const r = e.getBoundingClientRect(); return [Math.round(r.x), Math.round(r.y), Math.round(r.width)]; })""")
     before = spots()
     page.select_option("select[name=sort]", "amount")
@@ -460,6 +460,48 @@ def test_list_toggle_sort_and_return(page):
     page.wait_for_url(re.compile(r"category=\d+.*sort=amount.*dir=desc.*msg=updated"))
     expect(page.locator("select[name=category] option:checked")).to_have_text("Tyres")
     page.evaluate("localStorage.clear()")                          # the choice is remembered: don't leave it for other tests
+    remove_marked(page)
+
+
+def test_pdf_can_be_dropped_on_the_form(page):
+    """Dropping a PDF onto the invoice box chooses it, as the file button would, and reads it."""
+    page.goto(UI + "new")
+    if not page.locator("#invoice-drop").count():
+        raise Skip("uploads are off in this stack (no EXPENSES_ENCRYPTION_KEY)")
+    expect(page.locator("#invoice-drop-hint")).to_be_visible()
+    page.evaluate("""() => {
+        const drop = new DataTransfer();
+        drop.items.add(new File(["%PDF-1.4\\n%%EOF\\n"], "dropped.pdf", {type: "application/pdf"}));
+        document.getElementById("invoice-drop").dispatchEvent(
+            new DragEvent("drop", {dataTransfer: drop, bubbles: true, cancelable: true}));
+    }""")
+    assert page.evaluate("[...document.querySelector('input[name=invoice_file]').files].map(f => f.name)") == ["dropped.pdf"]
+    expect(page.locator("#prefill-hint")).not_to_have_text(re.compile("^Choose the PDF next"))
+
+
+def test_desktop_look(page):
+    """The list and the form at desktop width, light and dark, for looking at."""
+    add_expense(page, "1180.00", "Tyres")
+    add_expense(page, "-300.00", "Insurance")
+    for scheme in ("light", "dark"):
+        page.emulate_media(color_scheme=scheme)
+        page.goto(UI)
+        expect(page.locator("html")).to_have_attribute("data-view", "rows")     # a desktop starts on rows
+        card = page.locator(".card.list").bounding_box()
+        assert card["width"] <= 1280 and page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+        shot(page, f"list-desktop-{scheme}")
+        page.click("[data-view-choice=tiles]")
+        shot(page, f"list-desktop-tiles-{scheme}")
+        page.evaluate("localStorage.clear()")
+        page.goto(UI + "new")
+        shot(page, f"form-desktop-{scheme}")
+        page.goto(UI + "categories")
+        shot(page, f"categories-desktop-{scheme}")
+        page.goto(UI + "settings")
+        shot(page, f"settings-desktop-{scheme}")
+        page.goto(UI + "onedrive")
+        shot(page, f"onedrive-desktop-{scheme}")
+    page.emulate_media(color_scheme="light")
     remove_marked(page)
 
 
@@ -586,6 +628,7 @@ def main():
         step("the duplicate warning can be dismissed", test_duplicate_warning_can_be_dismissed, page)
         step("a PDF over 500 KB uploads (read-only container)", test_large_pdf_is_accepted, page)
         step("OneDrive page and upload field", test_onedrive_page, page)
+        step("a PDF dropped on the form is chosen and read", test_pdf_can_be_dropped_on_the_form, page)
         step("file name settings start from the real defaults", test_settings_file_name_defaults_can_be_edited, page)
         step("Connect OneDrive goes to Microsoft", test_connect_reaches_microsoft, page)
         step("folder browser (read-only)", test_folder_browser, page)
@@ -600,6 +643,7 @@ def main():
         dash_page = desktop.new_page()
         step("dashboard renders with data and invoice links", test_dashboard, dash_page)
         step("header is one row on a desktop", test_header_on_a_desktop, desktop.new_page())
+        step("desktop list and form, light and dark", test_desktop_look, desktop.new_page())
         step("footer links to the docs and names the build", test_footer_links_to_the_docs_and_names_the_build, desktop.new_page())
         remove_marked(page)
         browser.close()

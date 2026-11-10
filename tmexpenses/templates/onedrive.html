@@ -2,6 +2,7 @@
 {% from "_provider.html" import mark with context %}
 {% block title %}OneDrive{% endblock %}
 {% macro err(field) %}{% if errors.get(field) %}<span class="error">{{ errors[field] }}</span>{% endif %}{% endmacro %}
+{% block main_attrs %} class="narrow"{% endblock %}
 {% block content %}
 <h1>{{ mark() }} OneDrive</h1>
 {% if not onedrive_enabled %}
@@ -11,7 +12,7 @@
 {% else %}
 {% if notice %}<p class="notice bad">{{ notice }}</p>{% endif %}
 
-<section class="stack">
+<section class="card stack">
   <h2>1. App registration</h2>
   {% if account and account.client_id %}
   <p>Client ID <code>{{ account.client_id }}</code>{% if account.secret_expires %}, secret valid until {{ account.secret_expires.strftime('%d %b %Y') }}{% endif %}.</p>
@@ -65,7 +66,7 @@
 </section>
 
 {% if account and account.client_id %}
-<section class="stack">
+<section class="card stack">
   <h2>2. Account</h2>
   {% if connected %}
   <p>Connected as <strong>{{ account.account }}</strong>.</p>
@@ -84,7 +85,7 @@
 {% endif %}
 
 {% if connected %}
-<section class="stack">
+<section class="card stack">
   <h2>3. Folder per car</h2>
   <ul class="plain folders">
     {% for c in cars %}{% set f = folders.get(c.id) %}

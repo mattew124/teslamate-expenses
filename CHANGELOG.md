@@ -7,6 +7,17 @@ Each entry says what an installer must do to upgrade. Where nothing is said, pul
 
 ## Unreleased
 
+### Added
+
+- A PDF can be dropped onto the invoice box of the Add expense form, as well as chosen with the button.
+
+### Changed
+
+- A new look for every page: a tinted background with content in cards, a header that marks the page
+  you are on, categories as coloured chips, refunds in green, and a dark theme that follows the device.
+  The expense list has a heading with the total beside it, and its tiles lead with the vendor and amount.
+  The form is grouped into Invoice, Details, and Link and notes. Nothing to do when upgrading.
+
 ## 0.2.0-rc4 - 2026-11-11
 
 The fourth candidate for 0.2.0. Everything under 0.2.0-rc1 to 0.2.0-rc3 below applies to

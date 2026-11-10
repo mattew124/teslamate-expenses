@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "_provider.html" import mark with context %}
 {% block title %}Connecting OneDrive{% endblock %}
+{% block main_attrs %} class="narrow"{% endblock %}
 {% block content %}
 <h1>{{ mark() }} Connecting OneDrive</h1>
 <p>Opening Microsoft's sign-in page…</p>
