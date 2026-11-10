@@ -7,6 +7,13 @@ Each entry says what an installer must do to upgrade. Where nothing is said, pul
 
 ## Unreleased
 
+Nothing yet.
+
+## 0.2.0-rc3 - 2026-11-10
+
+The third candidate for 0.2.0. Everything under 0.2.0-rc1 and 0.2.0-rc2 below applies to
+anyone upgrading to it, including their action-needed items.
+
 ### Changed
 
 - Importing from OneDrive reads every waiting PDF in one go, instead of ten at a time.
