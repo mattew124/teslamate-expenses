@@ -1,6 +1,6 @@
 // No inline scripts: the CSP only allows this file.
 document.addEventListener("DOMContentLoaded", () => {
-  document.querySelectorAll("[data-autosubmit]").forEach((el) =>
+  document.querySelectorAll("form:not([data-live]) [data-autosubmit]").forEach((el) =>
     el.addEventListener("change", () => el.form.submit()));
 
   document.querySelectorAll("form[data-confirm]").forEach((form) =>
@@ -143,26 +143,51 @@ document.addEventListener("DOMContentLoaded", () => {
     say(`Read ${total} PDF${total === 1 ? "" : "s"}. Check each row, then press Import.`);
   }
 
-  // Expense list: rows (a table) or tiles (a card each). The choice is remembered in this browser;
-  // until one is made, phones get tiles and wider screens rows.
-  const listBox = document.querySelector("[data-view-target]");
-  const toggleBox = document.querySelector(".view-toggle");
-  if (listBox && toggleBox) {
-    const choose = (view, remember) => {
-      listBox.dataset.view = view;
-      toggleBox.querySelectorAll("[data-view-choice]").forEach((b) =>
-        b.setAttribute("aria-pressed", String(b.dataset.viewChoice === view)));
-      if (remember) {
-        try { localStorage.setItem("expenses-view", view); } catch (e) { /* private mode: not remembered */ }
-      }
-    };
-    let saved = null;
-    try { saved = localStorage.getItem("expenses-view"); } catch (e) { /* as above */ }
-    choose(saved === "rows" || saved === "tiles" ? saved : (matchMedia("(max-width: 40rem)").matches ? "tiles" : "rows"), false);
-    toggleBox.hidden = false;
-    toggleBox.querySelectorAll("[data-view-choice]").forEach((b) =>
-      b.addEventListener("click", () => choose(b.dataset.viewChoice, true)));
+  // Expense list: rows (a table) or tiles (a card each). view.js has already applied the saved choice
+  // (phones get tiles until one is made); this wires the buttons. Filtering and sorting swap the list in
+  // place instead of reloading the page, so nothing flashes and the scroll position stays put.
+  const root = document.documentElement;
+  const markView = () => document.querySelectorAll("[data-view-choice]").forEach((b) =>
+    b.setAttribute("aria-pressed", String(b.dataset.viewChoice === root.dataset.view)));
+  function bindList() {
+    markView();
+    document.querySelectorAll("[data-view-choice]").forEach((b) =>
+      b.addEventListener("click", () => {
+        root.dataset.view = b.dataset.viewChoice;
+        try { localStorage.setItem("expenses-view", root.dataset.view); } catch (e) { /* not remembered */ }
+        markView();
+      }));
+    const live = document.querySelector("form[data-live]");
+    if (!live) return;
+    live.querySelectorAll("[data-autosubmit]").forEach((el) =>
+      el.addEventListener("change", (ev) => {
+        showList(location.pathname + "?" + new URLSearchParams(new FormData(live)), el.name);
+      }));
+    document.querySelectorAll("a.sort").forEach((a) =>
+      a.addEventListener("click", (ev) => {
+        if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.button) return;
+        ev.preventDefault();
+        showList(a.href, null);
+      }));
   }
+  async function showList(url, focusName, push = true) {
+    try {
+      const res = await fetch(url, { headers: { Accept: "text/html" } });
+      if (!res.ok) throw new Error(res.status);
+      const doc = new DOMParser().parseFromString(await res.text(), "text/html");
+      const fresh = doc.querySelector("main");
+      if (!fresh) throw new Error("no list");
+      document.querySelector("main").replaceWith(fresh);
+      if (push) history.pushState(null, "", url);
+      bindList();
+      const again = focusName && document.querySelector(`.filter [name=${focusName}]`);
+      if (again) again.focus({ preventScroll: true });
+    } catch (e) {
+      window.location.assign(url);               // anything unexpected: an ordinary page load
+    }
+  }
+  window.addEventListener("popstate", () => { if (document.querySelector("form[data-live]")) showList(location.href, null, false); });
+  if (document.querySelector("form[data-live]")) bindList();
 
   const form = document.getElementById("expense-form");
   if (!form) return;

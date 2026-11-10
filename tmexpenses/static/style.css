@@ -29,8 +29,17 @@ input, select, textarea { font: inherit; padding: .5rem; border: 1px solid var(-
 .error { color: #b3261e; font-weight: 400; font-size: .9rem; }
 .notice { background: #1b7f3b22; border-left: 4px solid #1b7f3b; padding: .6rem .8rem; }
 .notice.bad { background: #b3261e22; border-color: #b3261e; }
-.filter { margin-bottom: 1rem; display: flex; gap: 1rem; align-items: end; justify-content: space-between; flex-wrap: wrap; }
-.total { margin: 0; }
+/* Fixed sizes, so choosing a different category or sort never moves the boxes beside it. */
+.filter { margin-bottom: 1rem; display: flex; gap: 1rem; align-items: end; flex-wrap: wrap; }
+.filter select { width: 11rem; }
+.filter label:first-child select { width: 14rem; }
+.total { margin: 0 0 0 auto; min-width: 9rem; text-align: right; font-variant-numeric: tabular-nums; }
+@media (max-width: 40rem) {
+  .filter { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+  .filter select, .filter label:first-child select { width: 100%; }
+  .filter .view-toggle { justify-self: end; }
+  .total { grid-column: 1 / -1; margin: 0; text-align: left; }
+}
 .table-wrap { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; }
 th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid var(--line); white-space: nowrap; }
@@ -59,11 +68,17 @@ ul.plain li { padding: .3rem 0; border-bottom: 1px solid var(--line); }
   [data-view=tiles] tr { margin-bottom: 0; }
 }
 .view-toggle { display: inline-flex; }
-.view-toggle[hidden] { display: none; }
+/* Rows: columns keep their widths whatever is listed (so sorting or filtering doesn't make them jump);
+   a long value is cut short with an ellipsis, and the full text is the tooltip. */
+[data-view=rows] table { table-layout: fixed; min-width: 52rem; }
+[data-view=rows] td { overflow: hidden; text-overflow: ellipsis; }
+col.c-date { width: 19%; } col.c-cat { width: 17%; } col.c-vendor { width: 20%; } col.c-amount { width: 12%; }
+col.c-odo { width: 12%; } col.c-inv { width: 10%; } col.c-act { width: 10%; }
+[data-view=tiles] colgroup { display: none; }
 .view-toggle button { background: transparent; color: var(--accent); border: 1px solid var(--accent); border-radius: 0; padding: .45rem .7rem; }
 .view-toggle button:first-child { border-radius: .4rem 0 0 .4rem; }
 .view-toggle button:last-child { border-radius: 0 .4rem .4rem 0; border-left: 0; }
-.view-toggle button[aria-pressed=true] { background: var(--accent); color: #fff; }
+[data-view=rows] .view-toggle [data-view-choice=rows], [data-view=tiles] .view-toggle [data-view-choice=tiles] { background: var(--accent); color: #fff; }
 th a.sort { color: inherit; text-decoration: none; }
 th a.sort:hover, th a.sort:focus-visible { text-decoration: underline; }
 .keys { display: flex; gap: .4rem; flex-wrap: wrap; }

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<form class="filter" method="get">
+<form class="filter" method="get" data-live>
   <label>Category
     <select name="category" data-autosubmit>
       <option value="">All categories</option>
@@ -21,7 +21,7 @@
     </select>
   </label>
   <noscript><button>Apply</button></noscript>
-  <div class="view-toggle" role="group" aria-label="Layout" hidden>
+  <div class="view-toggle" role="group" aria-label="Layout">
     <button type="button" data-view-choice="rows" aria-pressed="false" title="Rows">☰ Rows</button>
     <button type="button" data-view-choice="tiles" aria-pressed="false" title="Tiles">▦ Tiles</button>
   </div>
@@ -29,8 +29,9 @@
 </form>
 
 {% if expenses %}
-<div class="table-wrap" data-view-target>
+<div class="table-wrap">
 <table>
+  <colgroup><col class="c-date"><col class="c-cat"><col class="c-vendor"><col class="c-amount"><col class="c-odo"><col class="c-inv"><col class="c-act"></colgroup>
   <thead><tr>
     {% for key, label, cls in (('date', 'Date', ''), ('category', 'Category', ''), ('vendor', 'Vendor', ''),
                                ('amount', 'Amount', 'num'), ('odometer', 'Odometer', 'num')) %}
@@ -45,7 +46,7 @@
   <tr>
     <td data-label="Date">{{ e.occurred_at|when }}</td>
     <td data-label="Category">{{ e.category }}{% if e.car_name and expenses|map(attribute='car_id')|unique|list|length > 1 %} <small>({{ e.car_name }})</small>{% endif %}</td>
-    <td data-label="Vendor">{{ e.vendor or '–' }}</td>
+    <td data-label="Vendor" title="{{ e.vendor or '' }}">{{ e.vendor or '–' }}</td>
     <td class="num" data-label="Amount">{{ e.amount|money }}</td>
     <td class="num" data-label="Odometer">{{ e.odometer_km|km }}</td>
     <td data-label="Invoice">{% if e.invoice_url %}<a href="{{ e.invoice_url }}" target="_blank" rel="noopener noreferrer">PDF ↗</a>{% else %}–{% endif %}</td>

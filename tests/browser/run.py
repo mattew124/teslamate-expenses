@@ -401,7 +401,7 @@ def test_list_toggle_sort_and_return(page):
     add_expense(page, "30.00", "Insurance")
     add_expense(page, "20.00", "Tyres")
     page.goto(UI)
-    box = page.locator("[data-view-target]")
+    box = page.locator("html")
     expect(box).to_have_attribute("data-view", "tiles")           # a phone starts on tiles
     page.click("[data-view-choice=rows]")
     expect(box).to_have_attribute("data-view", "rows")
@@ -413,8 +413,17 @@ def test_list_toggle_sort_and_return(page):
     shot(page, "list-tiles")
     page.click("[data-view-choice=rows]")
     amounts = lambda: [t.strip() for t in page.locator(f"tr:has-text('{MARKER}') td.num:nth-child(4)").all_inner_texts()]
+    # Changing a filter swaps the list in place: no reload, and nothing beside the box moves.
+    page.evaluate("window.__same = 1")
+    spots = lambda: page.evaluate("""[...document.querySelectorAll('.filter select, .view-toggle, .filter .total')]
+        .map(e => { const r = e.getBoundingClientRect(); return [Math.round(r.x), Math.round(r.y), Math.round(r.width)]; })""")
+    before = spots()
     page.select_option("select[name=sort]", "amount")
     page.wait_for_url(re.compile(r"sort=amount"))
+    assert page.evaluate("window.__same") == 1, "the page reloaded"
+    assert spots()[:-1] == before[:-1], (before, spots())
+    columns = lambda: page.evaluate("[...document.querySelectorAll('thead th')].map(t => Math.round(t.getBoundingClientRect().width))")
+    wide = columns()
     page.select_option("select[name=dir]", "asc")
     page.wait_for_url(re.compile(r"dir=asc"))
     assert amounts() == ["$10.00", "$20.00", "$30.00"], amounts()
@@ -424,6 +433,12 @@ def test_list_toggle_sort_and_return(page):
     shot(page, "list-sorted")
     # editing and saving, or cancelling, comes back to this category and order
     page.select_option("select[name=category]", label="Tyres")
+    page.wait_for_url(re.compile(r"category=\d+"))
+    assert columns() == wide, "columns changed width with the rows shown"
+    assert page.evaluate("window.__same") == 1
+    page.go_back()                                                # the browser's Back steps through the views
+    page.wait_for_function("!location.search.includes('category')")
+    page.go_forward()
     page.wait_for_url(re.compile(r"category=\d+"))
     back = page.url
     page.locator(f"tr:has-text('{MARKER}') a:has-text('Edit')").first.click()

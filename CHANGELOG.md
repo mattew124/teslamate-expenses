@@ -11,7 +11,8 @@ Each entry says what an installer must do to upgrade. Where nothing is said, pul
 
 - The amount field works out sums such as `120.50+89.95` or `400/3`, with operator keys under it.
 - The expense list sorts by any column, in either direction.
-- A rows/tiles toggle on the expense list; the choice is remembered in the browser.
+- A rows/tiles toggle on the expense list; the choice is remembered in the browser and applied before the page draws.
+- Filtering and sorting the list update it in place, with no page reload; the filter boxes and table columns keep fixed sizes, so nothing shifts.
 
 ### Changed
 
