@@ -13,6 +13,17 @@ Each entry says what an installer must do to upgrade. Where nothing is said, pul
   ends early). Enter the amount with a minus sign, such as `-3000`; it lowers the totals. The app drops
   the old `amount >= 0` check from `expenses.expense` itself on start; with the least-privilege role,
   re-run `scripts/provision-db.sh` first.
+- The amount field works out sums such as `120.50+89.95` or `400/3`, with operator keys under it.
+- The expense list sorts by any column, in either direction.
+- A rows/tiles toggle on the expense list; the choice is remembered in the browser and applied before the page draws.
+- Filtering and sorting the list update it in place, with no page reload; the filter boxes and table columns keep fixed sizes, so nothing shifts.
+
+### Changed
+
+- Editing, saving, cancelling or deleting an expense returns to the category and sort order you came from,
+  instead of the unfiltered list.
+- Dashboard: the pie and bar charts give Charging and the starter categories fixed, clearly different
+  colours, and the bars no longer fade with a gradient.
 
 ## 0.2.0-rc3 - 2026-11-10
 

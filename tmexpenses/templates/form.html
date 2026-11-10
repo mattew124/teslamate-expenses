@@ -24,6 +24,7 @@
       {% if onedrive_connected %}data-onedrive-browse-url="{{ url_for('api_onedrive_browse', car_id=0) }}"{% endif %}
       data-odometer-url="{{ url_for('api_odometer') }}" {% if not expense_id %}data-prefill-url="{{ url_for('api_prefill') }}" data-duplicates-url="{{ url_for('api_duplicates') }}"{% endif %}>
   <input type="hidden" name="confirm_duplicate" value="{{ '1' if duplicates }}">
+  {% for name, value in view.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
   <label>Car
     <select name="car_id" required>
       {% if cars|length != 1 %}<option value="">Choose…</option>{% endif %}
@@ -61,6 +62,17 @@
 
   <label>Amount paid ($) <small>(negative for a rebate or refund)</small>
     <input name="amount" inputmode="decimal" autocomplete="off" placeholder="0.00" value="{{ values.amount }}" required>{{ err('amount') }}
+    <small>Or a sum, like 120.50+89.95 or 400/3: it's worked out when you leave the field.
+      <span id="amount-calc" role="status"></span></small>
+    <span id="amount-keys" class="keys" hidden>
+      <button type="button" class="secondary" data-key="+" aria-label="plus">+</button>
+      <button type="button" class="secondary" data-key="-" aria-label="minus">−</button>
+      <button type="button" class="secondary" data-key="*" aria-label="times">×</button>
+      <button type="button" class="secondary" data-key="/" aria-label="divided by">÷</button>
+      <button type="button" class="secondary" data-key="(" aria-label="open bracket">(</button>
+      <button type="button" class="secondary" data-key=")" aria-label="close bracket">)</button>
+      <button type="button" data-key="=" aria-label="work out the total">=</button>
+    </span>
   </label>
 
   <label>Odometer (km)
@@ -80,12 +92,13 @@
 
   <div class="row">
     <button type="submit" class="button">{{ 'Save anyway' if duplicates else 'Save' }}</button>
-    <a href="{{ url_for('index') }}">Cancel</a>
+    <a href="{{ url_for('index', **view) }}">Cancel</a>
   </div>
 </form>
 
 {% if expense_id %}
 <form method="post" action="{{ url_for('delete', expense_id=expense_id) }}" data-confirm="Delete this expense?">
+  {% for name, value in view.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
   <button type="submit" class="danger">Delete expense</button>
 </form>
 {% endif %}
