@@ -62,6 +62,14 @@ CREATE TABLE IF NOT EXISTS expenses.learned_vendor (
     PRIMARY KEY (vendor, category_id)
 );
 
+-- PDFs in a car's OneDrive folder the owner marked "skip" on the import page, so they stop
+-- being offered. Keyed by the file's link, the same thing an imported expense stores.
+CREATE TABLE IF NOT EXISTS expenses.import_skip (
+    car_id smallint NOT NULL REFERENCES public.cars (id) ON DELETE CASCADE,
+    url    text NOT NULL CHECK (url <> ''),
+    PRIMARY KEY (car_id, url)
+);
+
 -- Settings, saved from the app's Settings page (the same idea as TeslaMate's own).
 -- A single row. Both are optional, and http(s) only: they are rendered as links.
 --   expenses_url  where this app is published; the Grafana dashboard links back to it

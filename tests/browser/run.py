@@ -126,6 +126,25 @@ def test_import_page_shows_progress(page):
             page.goto(UI + f"onedrive/import/{car}", wait_until="domcontentloaded")
             expect(page.locator("#import-status-text")).to_have_text(re.compile(r"^Read \d+ PDF"), timeout=240000)
             assert MARKER in page.content(), "the import preview should list the PDF the upload check left there"
+            check_skip_prompt(page)
+
+
+def check_skip_prompt(page):
+    """Pressing Import with files left unticked asks whether to skip them; OK ticks their Skip boxes.
+    The POST is aborted, so nothing is saved or skipped in the dev database."""
+    boxes = page.locator("#import-form input[name^=include_]")
+    for i in range(boxes.count()):
+        boxes.nth(i).uncheck()
+    page.locator("#import-form input[name^=skip_]").first.check()
+    assert page.inner_text("#import-form button[type=submit]") == "Skip 1", "the button should say it only skips"
+    page.route("**/onedrive/import/*", lambda route: route.abort() if route.request.method == "POST" else route.continue_())
+    asked = []
+    page.once("dialog", lambda d: (asked.append(d.message), d.accept()))
+    page.click("#import-form button[type=submit]")
+    page.unroute("**/onedrive/import/*")
+    assert asked and "ticked to import" in asked[0], "Import with nothing ticked should offer to skip the files"
+    skips = page.locator("#import-form input[name^=skip_]")
+    assert all(skips.nth(i).is_checked() for i in range(skips.count())), "accepting should tick every Skip box"
 
 
 def in_test_folder(page, back_to=None):

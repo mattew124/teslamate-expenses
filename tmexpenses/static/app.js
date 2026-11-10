@@ -26,6 +26,35 @@ document.addEventListener("DOMContentLoaded", () => {
   // Import page: it opens at once, then reads the folder's PDFs one at a time while saying what it is
   // doing, instead of the browser waiting on one slow request (scanned PDFs take several seconds each).
   const importForm = document.getElementById("import-form");
+  // The button says what it will do: nothing to import but some to skip is "Skip 3", not "Import ticked".
+  const ticked = (prefix) => importForm.querySelectorAll(`input[name^=${prefix}_]:checked`).length;
+  const importLabel = () => {
+    const [n, s] = [ticked("include"), ticked("skip")];
+    return n && s ? `Import ${n} and skip ${s}` : s ? `Skip ${s}` : "Import ticked";
+  };
+  const relabel = () => {
+    const button = importForm.querySelector("button[type=submit]");
+    if (button && !button.disabled) button.textContent = importLabel();
+  };
+  if (importForm) {
+    importForm.addEventListener("change", relabel);
+    relabel();
+  }
+
+  // Pressing Import with files left neither ticked to import nor to skip: offer to skip them, so they
+  // stop turning up. Registered first, so the ticks are made before the form is sent.
+  if (importForm) importForm.addEventListener("submit", () => {
+    const left = [...importForm.querySelectorAll("input[name^=include_]")]
+      .map((box) => ({ box, skip: importForm.elements["skip_" + box.name.slice(8)] }))
+      .filter((r) => r.skip && !r.box.checked && !r.skip.checked);
+    if (left.length && confirm(
+      `${left.length} file${left.length === 1 ? " isn't" : "s aren't"} ticked to import. ` +
+      `Skip ${left.length === 1 ? "it" : "them"} so ${left.length === 1 ? "it stops" : "they stop"} being offered?\n\n` +
+      `OK skips ${left.length === 1 ? "it" : "them"}; Cancel leaves ${left.length === 1 ? "it" : "them"} for next time.`)) {
+      left.forEach((r) => { r.skip.checked = true; });
+      relabel();
+    }
+  });
   if (importForm && importForm.dataset.scanUrl) runImport(importForm);
 
   async function runImport(f) {
@@ -33,7 +62,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const bar = document.getElementById("import-progress");
     const rows = f.querySelector("tbody");
     const submit = f.querySelector("button[type=submit]");
-    const remaining = document.getElementById("import-remaining");
     // Say what is happening now, and how long this step has taken once it's noticeable.
     let current = "";
     let since = Date.now();
@@ -57,9 +85,18 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     };
 
+    // Skipping a file means not importing it: ticking one clears the other.
+    f.addEventListener("change", (e) => {
+      const m = /^(include|skip)_(\d+)$/.exec(e.target.name || "");
+      if (m && e.target.checked) {
+        const other = f.elements[(m[1] === "skip" ? "include_" : "skip_") + m[2]];
+        if (other) other.checked = false;
+      }
+    });
+
     f.addEventListener("submit", () => {
       submit.disabled = true;
-      submit.textContent = "Importing…";
+      submit.textContent = ticked("include") ? "Importing…" : "Saving…";
     });
 
     let scan;
@@ -92,21 +129,18 @@ document.addEventListener("DOMContentLoaded", () => {
       } catch (e) {
         const tr = rows.insertRow();
         const td = tr.insertCell();
-        td.colSpan = 7;
+        td.colSpan = 8;
         td.textContent = `Couldn't read ${file.name} (${e.message}). Reload the page to try again.`;
       }
       bar.value = i + 1;
     }
     f.elements.count.value = total;
     submit.disabled = false;
+    f.dispatchEvent(new Event("change"));
     ticking = false;
     clearInterval(ticker);
     bar.hidden = true;
     say(`Read ${total} PDF${total === 1 ? "" : "s"}. Check each row, then press Import.`);
-    if (scan.remaining) {
-      remaining.querySelector("small").textContent =
-        `${scan.remaining} more waiting: import these, then open this page again for the next batch.`;
-    }
   }
 
   const form = document.getElementById("expense-form");
