@@ -104,5 +104,5 @@ dialog.picker li button { text-align: left; overflow-wrap: anywhere; }
 .or-pick button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: .25rem;
   padding: .2rem 1rem; font-weight: 600; }
 img.provider-icon { height: 2.2rem; width: auto; vertical-align: middle; }  /* the drawing has space round the cloud */
-nav img.provider-icon, label img.provider-icon { height: 1.7rem; margin: -.3rem .1rem -.3rem 0; }
+nav img.provider-icon, label img.provider-icon { height: 1.7rem; margin: -.3rem .35rem -.3rem 0; }
 h1 img.provider-icon, h2 img.provider-icon { height: 3rem; margin: -.6rem .25rem -.6rem 0; vertical-align: middle; }

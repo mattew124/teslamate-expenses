@@ -921,3 +921,9 @@ def test_the_logos_source_is_credited_on_the_onedrive_page(client, ms):
 
 def test_no_credit_without_the_logo(app_for, ms):
     assert "selfh.st" not in app_for(ms, key=None).get("/onedrive").data.decode()
+
+
+def test_the_nav_link_has_no_underlined_space_between_the_logo_and_its_name(client, ms):
+    sign_in(client, ms)
+    nav = re.search(r"<nav>.*?</nav>", client.get("/").data.decode(), re.S).group(0)
+    assert re.search(r"<a [^>]*>\s*<img[^>]*provider-icon[^>]*>OneDrive</a>", nav)   # no text node of spaces to underline
