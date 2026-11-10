@@ -177,7 +177,11 @@ document.addEventListener("DOMContentLoaded", () => {
       const doc = new DOMParser().parseFromString(await res.text(), "text/html");
       const fresh = doc.querySelector("main");
       if (!fresh) throw new Error("no list");
+      // The table scrolls sideways on a phone: keep it where it was, rather than snapping back to the left.
+      const sideways = document.querySelector(".table-wrap")?.scrollLeft || 0;
       document.querySelector("main").replaceWith(fresh);
+      const wrap = document.querySelector(".table-wrap");
+      if (wrap) wrap.scrollLeft = sideways;
       if (push) history.pushState(null, "", url);
       bindList();
       const again = focusName && document.querySelector(`.filter [name=${focusName}]`);

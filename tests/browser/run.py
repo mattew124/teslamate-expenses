@@ -427,8 +427,15 @@ def test_list_toggle_sort_and_return(page):
     page.select_option("select[name=dir]", "asc")
     page.wait_for_url(re.compile(r"dir=asc"))
     assert amounts() == ["$10.00", "$20.00", "$30.00"], amounts()
-    page.click("th a.sort:has-text('Amount')")                    # the column heading flips it
-    page.wait_for_url(re.compile(r"dir=desc"))
+    # on a phone the table scrolls sideways: sorting from a far column must not snap it back to the left
+    page.evaluate("document.querySelector('.table-wrap').scrollLeft = 10000")
+    far = page.evaluate("document.querySelector('.table-wrap').scrollLeft")
+    assert far > 0, "rows view should scroll sideways on a phone"
+    page.click("th a.sort:has-text('Odometer')")
+    page.wait_for_url(re.compile(r"sort=odometer"))
+    assert page.evaluate("document.querySelector('.table-wrap').scrollLeft") == far, "scroll snapped back"
+    page.click("th a.sort:has-text('Amount')")                    # a new column starts largest first
+    page.wait_for_url(re.compile(r"sort=amount&dir=desc"))
     assert amounts() == ["$30.00", "$20.00", "$10.00"], amounts()
     shot(page, "list-sorted")
     # editing and saving, or cancelling, comes back to this category and order
