@@ -10,6 +10,10 @@ Each entry says what an installer must do to upgrade. Where nothing is said, pul
 ### Changed
 
 - Importing from OneDrive reads every waiting PDF in one go, instead of ten at a time.
+- Dashboard: thousands separators and decimal marks that follow the browser's language, with fixed
+  decimals, and cost and distance per day. A Period box (week, month or year) for the cost charts, a time range that starts at your earliest
+  data instead of a fixed five years, a Category filter for the headline figures, and "Months" is now "Time owned", in years and months.
+  The timezone box is gone: the timezone comes from `APP_TZ`.
 
 ### Added
 

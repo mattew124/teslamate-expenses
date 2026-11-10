@@ -36,7 +36,7 @@
 
 5. **OneDrive (optional).** See [OneDrive uploads](onedrive.md).
 
-6. **Grafana.** The app writes its own dashboard, with your `APP_TZ` as the default timezone, to
+6. **Grafana.** The app writes its own dashboard, with your `APP_TZ` as its timezone (there's no timezone box; it's set in the compose file, as in TeslaMate), to
     the `teslamate-expenses-dashboards` volume each time it starts, so the dashboard always matches
     the version you run. Give TeslaMate's Grafana that volume and `grafana/provider.yml`, in
     TeslaMate's compose file:
@@ -61,7 +61,7 @@
     The dashboard appears under **Expenses** (datasource `TeslaMate`, tested on Grafana 13).
     Provisioned dashboards can't be edited in Grafana; to customise, import
     `grafana/cost-of-ownership.json` by hand instead (Dashboards → New → Import), set the
-    **Timezone** box to your IANA zone and save, and set `DASHBOARD_DIR=` empty in `.env`.
+    `tz` variable to your IANA zone (Dashboard settings → Variables) and save, and set `DASHBOARD_DIR=` empty in `.env`.
 
 7. **Check the links.** On first start the app uses `FQDN_TM` to pre-fill its **Settings** page
     (the same idea as TeslaMate's): this app at `https://$FQDN_TM$BASE_PATH/` and the dashboard at

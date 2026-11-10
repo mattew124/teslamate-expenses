@@ -3,7 +3,8 @@
 Grafana mounts that directory (a shared volume) read-only and provisions from it, so the
 dashboard is always the one that matches the running schema, with nothing to import by hand.
 Two values are filled in from this installation's settings: the timezone box defaults to
-APP_TZ, and the "Add / edit expenses" link falls back to the app's own BASE_PATH.
+APP_TZ, the "Add / edit expenses" link falls back to the app's own BASE_PATH, and the time range starts
+at your earliest data (Grafana has no "all time", so the app works it out each time it starts).
 """
 import json
 import os
@@ -16,8 +17,10 @@ SOURCE = Path(__file__).resolve().parent.parent / "grafana" / FILENAME
 _FALLBACK = "'/expenses/'"     # the dashboard's own placeholder for the app's address
 
 
-def render(tz, base_path, source=SOURCE):
+def render(tz, base_path, source=SOURCE, start=None):
     dash = json.loads(Path(source).read_text())
+    if start is not None:
+        dash["time"] = {"from": start.strftime("%Y-%m-01T00:00:00.000Z"), "to": "now"}
     variables = {v["name"]: v for v in dash["templating"]["list"]}
     tzvar = variables["tz"]
     tzvar["query"] = tz
@@ -32,9 +35,9 @@ def render(tz, base_path, source=SOURCE):
     return dash
 
 
-def export(directory, tz, base_path, source=SOURCE):
+def export(directory, tz, base_path, source=SOURCE, start=None):
     """Write the dashboard if it differs from what's there. True if it wrote."""
-    text = json.dumps(render(tz, base_path, source), indent=2) + "\n"
+    text = json.dumps(render(tz, base_path, source, start), indent=2) + "\n"
     target = Path(directory) / FILENAME
     if target.exists() and target.read_text() == text:
         return False
