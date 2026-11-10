@@ -9,12 +9,13 @@ from tmexpenses import validation as v
 @pytest.mark.parametrize("raw,expected", [
     ("1234.56", "1234.56"), ("$1,234.5", "1234.50"), (" 99 ", "99.00"),
     ("0", "0.00"), ("10.005", "10.01"),
+    ("-1500", "-1500.00"), ("-$1,200.5", "-1200.50"), ("$-80", "-80.00"), ("-10.005", "-10.01"),
 ])
 def test_amount_ok(raw, expected):
     assert v.parse_amount(raw) == Decimal(expected)
 
 
-@pytest.mark.parametrize("raw", ["", "abc", "-1", "NaN", "Infinity", "1e99", "99999999999"])
+@pytest.mark.parametrize("raw", ["", "abc", "NaN", "Infinity", "1e99", "99999999999", "-99999999999", "--5"])
 def test_amount_rejected(raw):
     with pytest.raises(ValueError):
         v.parse_amount(raw)

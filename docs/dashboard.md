@@ -10,6 +10,10 @@ All of it lives in the `expenses.ownership` view (`tmexpenses/schema.sql`), one 
 | Cost per km — running | (running + charging) ÷ distance, excludes the purchase price |
 | Per day and per month | running (or total) cost, or distance, ÷ the time since purchase (at least one day, or one month) |
 
+A **rebate or refund** (a state EV rebate, an insurance refund for ending a policy early) is an expense with a
+negative amount, such as `-3000`. It lowers the category's total and everything built on it, so the
+cost figures are net of what you got back. The pie can't show a negative slice, so a category whose total ends up below zero is left out of it.
+
 <!-- screenshot: dashboard - The Cost of Ownership dashboard in Grafana -->
 
 Headline panels are all-time; the charts, pie and table follow the dashboard time range, which starts at your

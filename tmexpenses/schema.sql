@@ -97,7 +97,8 @@ CREATE TABLE IF NOT EXISTS expenses.expense (
     category_id  smallint NOT NULL REFERENCES expenses.category (id),
     -- Moment the cost was incurred (timestamptz; the UI enters it in APP_TZ).
     occurred_at  timestamptz NOT NULL,
-    amount       numeric(12, 2) NOT NULL CHECK (amount >= 0),
+    -- Negative for a rebate or refund (it reduces the totals).
+    amount       numeric(12, 2) NOT NULL,
     -- Odometer in km at occurred_at. Optional: costs from before TeslaMate
     -- started tracking the car have no position to look it up from.
     odometer_km  numeric(9, 1) CHECK (odometer_km IS NULL OR odometer_km >= 0),
@@ -186,3 +187,7 @@ LEFT JOIN LATERAL (
     FROM public.positions p
     WHERE p.car_id = car.id
 ) pos ON true;
+
+-- Rebates and refunds are negative amounts. Databases made before that allowed them still carry
+-- the old CHECK (amount >= 0); drop it (a no-op once gone).
+ALTER TABLE expenses.expense DROP CONSTRAINT IF EXISTS expense_amount_check;

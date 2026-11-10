@@ -243,7 +243,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function settleAmount() {
     if (!isSum(amountInput.value)) return;
     const v = calculate(amountInput.value);
-    if (v === null || v < 0) return;           // left as typed: the server explains what's wrong
+    if (v === null) return;                    // left as typed: the server explains what's wrong
     amountInput.value = v.toFixed(2);
     calcNote.textContent = "";
   }

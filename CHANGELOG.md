@@ -9,6 +9,10 @@ Each entry says what an installer must do to upgrade. Where nothing is said, pul
 
 ### Added
 
+- Negative amounts, for rebates and refunds (a state EV rebate, an insurance refund when a policy
+  ends early). Enter the amount with a minus sign, such as `-3000`; it lowers the totals. The app drops
+  the old `amount >= 0` check from `expenses.expense` itself on start; with the least-privilege role,
+  re-run `scripts/provision-db.sh` first.
 - The amount field works out sums such as `120.50+89.95` or `400/3`, with operator keys under it.
 - The expense list sorts by any column, in either direction.
 - A rows/tiles toggle on the expense list; the choice is remembered in the browser and applied before the page draws.

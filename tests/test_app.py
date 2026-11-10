@@ -40,6 +40,14 @@ def test_seeded_categories(admin):
                          "Cabin air filter", "Air filter", "Wheel alignment", "Tyre rotation"]
 
 
+def test_refund_or_rebate_is_stored_as_a_negative_amount(client, admin):
+    resp = client.post("/new", data=form(admin, amount="-3,000", vendor="State rebate"), headers=ORIGIN)
+    assert resp.status_code == 303
+    (row,) = rows(admin)
+    assert str(row["amount"]) == "-3000.00"
+    assert "-$3,000.00" in client.get("/").data.decode()
+
+
 def test_empty_index(client):
     resp = client.get("/")
     assert resp.status_code == 200 and b"No expenses yet" in resp.data

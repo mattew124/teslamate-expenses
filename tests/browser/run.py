@@ -386,7 +386,10 @@ def test_amount_calculator(page):
     amount.fill("12+")                                    # half a sum is left alone, never guessed at
     page.locator("input[name=vendor]").click()
     expect(amount).to_have_value("12+")
-    amount.fill("1000/8+2")                               # and a sum is settled on save
+    amount.fill("-3000+500")                              # a rebate sum comes out negative, and settles
+    page.press("input[name=amount]", "Enter")
+    expect(amount).to_have_value("-2500.00")
+    amount.fill("1000/8+2")                              # and a sum is settled on save
     page.select_option("select[name=category_id]", label="Tyres")
     page.fill("input[name=vendor]", MARKER)
     page.click("button[type=submit].button")

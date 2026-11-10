@@ -25,7 +25,7 @@ ONEDRIVE_FORBIDDEN = set('"*:<>?/\\|')
 
 
 def parse_amount(raw):
-    """'$1,234.5' -> Decimal('1234.50'). Raises ValueError with a user message."""
+    """'$1,234.5' -> Decimal('1234.50'); '-$3,000' -> Decimal('-3000.00'). Raises ValueError with a user message."""
     cleaned = (raw or "").replace("$", "").replace(",", "").replace(" ", "")
     if not cleaned:
         raise ValueError("Enter the amount paid.")
@@ -35,12 +35,11 @@ def parse_amount(raw):
         raise ValueError("Amount must be a number, e.g. 1234.56.") from None
     if not value.is_finite():
         raise ValueError("Amount must be a number, e.g. 1234.56.")
-    if value < 0:
-        raise ValueError("Amount can't be negative.")
-    if value > MAX_AMOUNT:  # before quantize(), which overflows on huge exponents
+    # Negative amounts are rebates and refunds: they reduce the total.
+    if abs(value) > MAX_AMOUNT:  # before quantize(), which overflows on huge exponents
         raise ValueError("Amount is too large.")
     value = value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    if value > MAX_AMOUNT:
+    if abs(value) > MAX_AMOUNT:
         raise ValueError("Amount is too large.")
     return value
 
