@@ -45,7 +45,9 @@ def main():
         big = browser.new_context(viewport={"width": 1600, "height": 1800}, device_scale_factor=1,
                                   color_scheme="light", locale="en-AU")
         dash = big.new_page()
-        dash.goto(GRAFANA + "d/tm-expenses-tco/cost-of-ownership")
+        # Kiosk drops Grafana's side menu and breadcrumb; the boxes and time range stay.
+        dash.goto(GRAFANA + "d/tm-expenses-tco/cost-of-ownership"
+                  "?kiosk&_dash.hideTimePicker=false&_dash.hideVariables=false&_dash.hideLinks=false")
         expect(dash.get_by_text("Total cost", exact=True)).to_be_visible(timeout=30000)
         dash.wait_for_load_state("networkidle")
         dash.wait_for_timeout(3000)
