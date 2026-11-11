@@ -5,6 +5,7 @@ dashboard in grafana/ turns it (plus TeslaMate's own charging costs) into total
 cost of ownership.
 """
 
+import hashlib
 import hmac
 import logging
 import os
@@ -144,6 +145,24 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
     @app.template_filter("day")
     def day(value):
         return value.astimezone(ZoneInfo(tz)).strftime("%d %b %Y")
+
+    static_versions = {}
+
+    @app.url_defaults
+    def version_static(endpoint, values):
+        # A browser holding the previous release's app.js/style.css must not mix them with the new page,
+        # so each static URL carries a hash of its file: a changed file is a new URL, refetched for certain.
+        if endpoint != "static" or "v" in values or not values.get("filename"):
+            return
+        path = Path(app.static_folder) / values["filename"]
+        try:
+            stat = path.stat()
+        except OSError:
+            return
+        key = (values["filename"], stat.st_mtime_ns, stat.st_size)
+        if key not in static_versions:
+            static_versions[key] = hashlib.sha256(path.read_bytes()).hexdigest()[:10]
+        values["v"] = static_versions[key]
 
     @app.after_request
     def security_headers(resp):

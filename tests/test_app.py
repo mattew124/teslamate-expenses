@@ -643,3 +643,10 @@ def test_column_widths_can_be_overridden_from_the_browser(client):
     assert "min-width: var(--cols-total," in css
     view = client.get("/static/view.js").data.decode()
     assert "expenses-columns" in view and "setProperty" in view
+
+def test_static_urls_carry_a_version_so_a_stale_browser_cache_refetches(client):
+    import re
+    page = client.get("/").data.decode()
+    urls = re.findall(r'(?:src|href)="(/static/(?:app\.js|view\.js|style\.css)\?v=[0-9a-f]+)"', page)
+    assert len(urls) == 3
+    assert all(client.get(u).status_code == 200 for u in urls)

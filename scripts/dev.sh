@@ -10,6 +10,9 @@
 #   scripts/dev.sh refresh           re-copy TeslaMate data, keeping test expenses
 #   scripts/dev.sh reset             wipe the test DB, test expenses included
 #   scripts/dev.sh down              stop, keeping the test DB
+#   scripts/dev.sh sample-expenses [clear]
+#                                    add made-up expenses to the test DB to try the app with
+#                                    (re-run to refresh them; `clear` removes only those)
 #   scripts/dev.sh destroy           remove this checkout's stack, test DB, image and .dev folder
 #   scripts/dev.sh list              every dev stack on this machine
 #   scripts/dev.sh test-browser [--onedrive]
@@ -428,7 +431,15 @@ case "${1:-}" in
         mv "$tmp" "$SCHEMA"
         chmod 644 "$SCHEMA"
         git --no-pager diff --stat -- "$SCHEMA" || true ;;
+    sample-expenses)
+        ensure_env
+        if [ "${2:-}" = clear ]; then
+            dev_psql -c "DELETE FROM expenses.expense WHERE notes LIKE 'Sample data%'"
+        else
+            dev_psql -v "tz=$APP_TZ" < scripts/dev-sample-expenses.sql
+            echo "dev: sample expenses added to the test database"
+        fi ;;
     psql) ensure_env; shift; dev_psql "$@" ;;
     logs) ensure_env; compose logs -f expenses-dev ;;
-    *) sed -n '3,23p' "$0" >&2; exit 2 ;;
+    *) sed -n '3,27p' "$0" >&2; exit 2 ;;
 esac

@@ -8,6 +8,7 @@ repo_name = "mattew124/teslamate-expenses"
 nav = [
   { "Home" = "index.md" },
   { "Setup" = "setup.md" },
+  { "Publishing (Traefik and Cloudflare)" = "publishing.md" },
   { "OneDrive uploads" = "onedrive.md" },
   { "Importing invoices" = "importing.md" },
   { "Dashboard" = "dashboard.md" },

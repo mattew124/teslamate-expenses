@@ -12,6 +12,8 @@ Each entry says what an installer must do to upgrade. Where nothing is said, pul
 - A PDF can be dropped onto the invoice box of the Add expense form, as well as chosen with the button.
 - Column widths in the rows layout can be changed by dragging the edge of a heading (double-click for the
   usual widths); they are remembered in the browser.
+- Docs: a worked example of publishing the app through Traefik and a Cloudflare Tunnel, gated by
+  Cloudflare Access (Publishing with Traefik and Cloudflare). Nothing to do to upgrade.
 
 ### Changed
 
@@ -28,6 +30,8 @@ Each entry says what an installer must do to upgrade. Where nothing is said, pul
 ### Fixed
 
 - Going Back then Forward quickly on the expense list could leave the older list showing.
+- The Rows and Tiles buttons did nothing in a browser that still held the previous version's cached
+  files. Stylesheet and script addresses now carry a version, so an upgrade always loads matching files.
 
 ## 0.2.0-rc4 - 2026-11-11
 
