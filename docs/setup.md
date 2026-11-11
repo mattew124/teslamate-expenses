@@ -3,7 +3,9 @@
 !!! danger "No login of its own"
 
     The app has **no login of its own**. Only publish it behind a forward-auth gate, such as
-    Authentik or Authelia with Traefik. `docker-compose.traefik.yml` refuses to start without one.
+    Authentik or Authelia with Traefik, or Cloudflare Access in front of a Cloudflare Tunnel (a worked
+    example is in [Publishing with Traefik and Cloudflare](publishing.md)).
+    `docker-compose.traefik.yml` refuses to start without a gate.
 
 1. **Configure.** `cp .env.example .env`. Set `DATABASE_USER` and `DATABASE_PASS` to the same values
     TeslaMate and its other add-ons use (they're in TeslaMate's compose file), and `FQDN_TM` to the

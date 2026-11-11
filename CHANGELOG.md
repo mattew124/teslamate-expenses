@@ -7,6 +7,11 @@ Each entry says what an installer must do to upgrade. Where nothing is said, pul
 
 ## Unreleased
 
+### Added
+
+- Docs: a worked example of publishing the app through Traefik and a Cloudflare Tunnel, gated by
+  Cloudflare Access (Publishing with Traefik and Cloudflare). Nothing to do to upgrade.
+
 ## 0.2.0-rc4 - 2026-11-11
 
 The fourth candidate for 0.2.0. Everything under 0.2.0-rc1 to 0.2.0-rc3 below applies to
