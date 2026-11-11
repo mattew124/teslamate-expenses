@@ -45,6 +45,40 @@ folders of the same name); a blank box means a folder named after the category.
     open the drive. Keep the key out of those backups. If you lose or change it, enter the
     secret and connect again.
 
+    **Or read it from HashiCorp Vault.** If you keep secrets in Vault, leave
+    `EXPENSES_ENCRYPTION_KEY` out and point the app at the secret (KV version 2) instead. It reads the
+    key once at start and keeps it in memory, so nothing has to write it to a file first:
+
+    ```bash
+    VAULT_ADDR=https://vault.example:8200
+    VAULT_MOUNT=secret
+    VAULT_SECRET_PATH=teslamate-expenses-onedrive
+    VAULT_SECRET_FIELD=encryption_key
+    # Log in with a token, or with AppRole:
+    VAULT_TOKEN=<a token that can read that path>
+    #VAULT_ROLE_ID=<role id>
+    #VAULT_SECRET_ID=<secret id>
+    ```
+
+    `VAULT_TOKEN_FILE` (a file holding the token), `VAULT_APPROLE_MOUNT`, `VAULT_NAMESPACE` and
+    `VAULT_CACERT` (a CA bundle for a private certificate authority) are also understood. The policy
+    needs only `read` on `<mount>/data/<path>`. `EXPENSES_ENCRYPTION_KEY`, when set, wins. If Vault
+    can't be reached or refuses the read, the app still starts with OneDrive off and logs why.
+
+    **`scripts/provision-vault.sh` sets this up.** Run it with `VAULT_ADDR` set and paste a Vault
+    token when asked (typing is hidden; the token is never saved or passed as an argument). The token
+    needs rights to manage auth methods, policies and AppRoles, and to write the secret. The script
+    turns on AppRole if needed, writes a read-only policy for the one secret, creates an AppRole with
+    it, creates the secret with a new random key (an existing key is never overwritten), and writes the
+    app's `VAULT_*` lines, including a fresh secret ID, to `expenses-vault.env` (mode 0600, not
+    shown on screen). Copy those lines into `.env` and delete the file. The KV version 2 mount must
+    already exist. `VAULT_MOUNT`, `VAULT_SECRET_PATH`, `VAULT_ROLE`, `SECRET_ID_TTL` and `OUT_FILE`
+    adjust the names, the lifetime and the output file.
+
+    ```bash
+    VAULT_ADDR=https://vault.example:8200 ./scripts/provision-vault.sh
+    ```
+
 2. **Register an app with Microsoft** (once per installation; see
     [Registering the app](#registering-the-app) below), then enter its client ID and secret on
     the app's **OneDrive** page. The page shows the exact redirect URI to register.

@@ -7,6 +7,13 @@ Each entry says what an installer must do to upgrade. Where nothing is said, pul
 
 ## Unreleased
 
+- **The OneDrive encryption key can come straight from HashiCorp Vault.** Set `VAULT_ADDR`,
+  `VAULT_SECRET_PATH` and a token or AppRole (`VAULT_TOKEN`, or `VAULT_ROLE_ID` with `VAULT_SECRET_ID`)
+  instead of `EXPENSES_ENCRYPTION_KEY`; the app reads the key (KV v2) once at start, so no agent
+  has to write it to a file. Nothing to do on upgrade: `EXPENSES_ENCRYPTION_KEY` still works and wins.
+- **`scripts/provision-vault.sh` sets Vault up for it.** It asks for a Vault token and creates the
+  AppRole, a read-only policy and (if missing) the secret, then writes the app's `VAULT_*` lines to a file.
+
 ## 0.2.0-rc4 - 2026-11-11
 
 The fourth candidate for 0.2.0. Everything under 0.2.0-rc1 to 0.2.0-rc3 below applies to

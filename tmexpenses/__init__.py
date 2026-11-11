@@ -20,7 +20,7 @@ from flask import Flask, abort, jsonify, make_response, redirect, render_templat
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from . import dashboard, db, docinfo, icons, invoices, logs, onedrive, updates, validation
+from . import dashboard, db, docinfo, icons, invoices, logs, onedrive, updates, validation, vault
 
 log = logging.getLogger("tmexpenses.app")
 
@@ -70,9 +70,9 @@ class PrefixMiddleware:
         return [b"Not found\n"]
 
 
-def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_fetch=None):
+def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_fetch=None, vault_transport=None):
     """`connect` is injectable so tests can hand in a connection to a scratch DB,
-    `onedrive_transport` so they can stand in for Microsoft, `release_fetch` for GitHub and `icon_fetch` for the provider icon's source."""
+    `onedrive_transport` so they can stand in for Microsoft, `release_fetch` for GitHub and `icon_fetch` for the provider icon's source, `vault_transport` for HashiCorp Vault."""
     app = Flask(__name__)
     logs.configure(app.logger, os.environ.get("LOG_LEVEL"))
     log = app.logger
@@ -105,10 +105,18 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
     refresh_dashboard()
     # Room for the largest PDF plus the rest of the form.
     app.config["MAX_CONTENT_LENGTH"] = validation.MAX_PDF_BYTES + 1024 * 1024
-    # EXPENSES_ENCRYPTION_KEY turns OneDrive on; everything else is set up in the UI.
+    # An encryption key turns OneDrive on; everything else is set up in the UI. The key comes from
+    # EXPENSES_ENCRYPTION_KEY, or failing that straight from HashiCorp Vault (VAULT_*, see vault.py).
     drive = None
-    if os.environ.get("EXPENSES_ENCRYPTION_KEY"):
-        drive = onedrive.OneDrive(os.environ["EXPENSES_ENCRYPTION_KEY"], onedrive_transport)
+    encryption_key = os.environ.get("EXPENSES_ENCRYPTION_KEY")
+    if not encryption_key and vault.configured(os.environ):
+        try:
+            encryption_key = vault.read_key(os.environ, vault_transport)
+            log.info("OneDrive encryption key read from Vault")
+        except vault.VaultError as exc:
+            log.error("OneDrive stays off: %s", exc)
+    if encryption_key:
+        drive = onedrive.OneDrive(encryption_key, onedrive_transport)
     elif os.environ.get("ONEDRIVE_TOKEN_KEY"):
         log.warning("ONEDRIVE_TOKEN_KEY was renamed EXPENSES_ENCRYPTION_KEY; OneDrive stays off until it is set.")
     # The image is built with its release version in APP_VERSION; anything else is a development build.
@@ -116,6 +124,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
     update_check = updates.UpdateCheck(version, fetch=release_fetch,
                                        enabled=os.environ.get("UPDATE_CHECK", "1").strip() != "0")
     app.extensions["update_check"] = update_check
+    app.extensions["onedrive"] = drive
     icon_cache = icons.IconCache(fetch=icon_fetch, enabled=os.environ.get("PROVIDER_ICONS", "1").strip() != "0")
     base_path = os.environ.get("BASE_PATH", "")
     if base_path:
