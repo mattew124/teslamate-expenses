@@ -539,7 +539,7 @@ def test_column_widths_can_be_dragged(page):
     page.mouse.up()
     wider = widths()
     assert abs(wider[2] - (usual[2] + 120)) <= 3, (usual, wider)
-    assert all(abs(a - b) <= 2 for i, (a, b) in enumerate(zip(usual, wider)) if i != 2), (usual, wider)
+    assert all(abs(a - b) <= 2 for i, (a, b) in enumerate(zip(usual, wider, strict=True)) if i != 2), (usual, wider)
     assert "sort=" not in page.url, "dragging the edge must not sort the column"
     page.reload()
     assert widths() == wider, "the widths were not remembered"
