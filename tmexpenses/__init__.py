@@ -16,7 +16,7 @@ from datetime import date, datetime, time as dtime, timedelta, timezone
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
-from flask import Flask, abort, jsonify, make_response, redirect, render_template, request, url_for
+from flask import Flask, abort, g, jsonify, make_response, redirect, render_template, request, url_for
 
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -29,6 +29,14 @@ MESSAGES = {
     "saved": "Expense saved.",
     "updated": "Expense updated.",
     "deleted": "Expense deleted.",
+    "saved_uploaded": "Expense saved. The invoice was uploaded to OneDrive and linked.",
+    "updated_uploaded": "Expense updated. The invoice was uploaded to OneDrive and linked.",
+    "updated_replaced": "Expense updated. The invoice link now points to the new upload; the previous file "
+                        "is still in OneDrive.",
+    "saved_not_uploaded": "Expense saved, but the invoice PDF was not uploaded: OneDrive isn't set up for this "
+                          "car. Set it up on the OneDrive page, then edit the expense to upload it.",
+    "updated_not_uploaded": "Expense updated, but the invoice PDF was not uploaded: OneDrive isn't set up for "
+                            "this car. Set it up on the OneDrive page, then upload it again.",
     "category": "Category added.",
     "settings": "Settings saved.",
     "folders": "Folders saved.",
@@ -261,7 +269,13 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
         if errors:
             errors["invoice_file"] = "Fix the fields above, then choose the PDF again."
             return values, errors
+        if not upload_ready(values["car_id"]):
+            # OneDrive not connected, or no folder for this car: that must not stop the expense being saved.
+            log.info("invoice upload skipped: OneDrive isn't set up for car %s", values["car_id"])
+            g.invoice_note = "not_uploaded"
+            return values, errors
         try:
+            g.invoice_note = "replaced" if request.form.get("invoice_url") else "uploaded"
             values["invoice_url"] = upload_invoice(values, pdf)
             log.info("invoice uploaded to OneDrive (%d bytes)", len(pdf))
         except onedrive.OneDriveError as exc:
@@ -295,6 +309,20 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
         if lifetime > 0:
             kept.update(key=key, token=tokens["access_token"], until=time.monotonic() + lifetime)
         return tokens["access_token"]
+
+    def upload_ready(car_id):
+        with connect() as conn:
+            connected = (db.onedrive_account(conn) or {}).get("refresh_token")
+            return bool(connected and db.car_folders(conn).get(car_id))
+
+    def saved_msg(base):
+        """The notice after saving: says what happened to an uploaded invoice, if one was chosen."""
+        note = getattr(g, "invoice_note", None)
+        if note == "not_uploaded":
+            return base + "_not_uploaded"
+        if note == "replaced" and base == "updated":
+            return "updated_replaced"
+        return base + "_uploaded" if note else base
 
     def upload_invoice(values, pdf):
         with connect() as conn:
@@ -425,7 +453,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
             expense_id = db.insert_expense(conn, values)
         refresh_dashboard()
         log.info("expense %s saved (car %s, category %s)", expense_id, values["car_id"], values["category_id"])
-        return redirect(url_for("index", **list_view(), msg="saved"), 303)
+        return redirect(url_for("index", **list_view(), msg=saved_msg("saved")), 303)
 
     def load_or_404(conn, expense_id):
         row = db.get_expense(conn, expense_id)
@@ -459,7 +487,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
                 abort(404)
         refresh_dashboard()
         log.info("expense %s updated", expense_id)
-        return redirect(url_for("index", **list_view(), msg="updated"), 303)
+        return redirect(url_for("index", **list_view(), msg=saved_msg("updated")), 303)
 
     @app.post("/<int:expense_id>/delete")
     def delete(expense_id):

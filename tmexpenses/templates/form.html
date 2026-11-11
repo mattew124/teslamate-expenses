@@ -51,9 +51,9 @@
     <small id="onedrive-pick-hint">Already in {{ storage.name }}? Pick it there instead of uploading it again.</small>
     {% if not expense_id %}<small id="prefill-hint">Choose the PDF next: the fields below are filled in from what can be read in it. Check them before saving.</small>{% endif %}
     {% if onedrive_connected %}
-    <small>It's uploaded to the car's OneDrive folder when you save, and the invoice link is filled in for you.{% if values.invoice_url %} Replaces the current link; the old file stays in OneDrive.{% endif %}</small>
+    <small>It's uploaded to the car's OneDrive folder when you save, and the invoice link is filled in for you.{% if values.invoice_url %} <strong>Choosing a new PDF replaces the invoice link above with the new file's link.</strong> The previous file is not deleted: it stays in OneDrive.{% endif %}</small>
     {% else %}
-    <small><a href="{{ url_for('onedrive_page') }}">Connect OneDrive</a> to upload invoices from here.</small>
+    <small><a href="{{ url_for('onedrive_page') }}">Connect OneDrive</a> to upload invoices from here. You can still save the expense without it.</small>
     {% endif %}
   </div>
   </section>

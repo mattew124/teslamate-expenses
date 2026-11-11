@@ -117,6 +117,8 @@ The redirect URI is built from the proxy's `X-Forwarded-Proto` and `X-Forwarded-
 headers, so the proxy must set them (Traefik does).
 
 PDFs only (checked by content, not just the name), up to 20 MB. Uploading on the edit page
-replaces the link; the old file stays in OneDrive. Disconnecting deletes the saved sign-in;
+replaces the link, and the page says so after saving; the old file stays in OneDrive. If OneDrive
+isn't connected, or the car has no folder, the expense is still saved and the notice says the PDF wasn't
+uploaded. Disconnecting deletes the saved sign-in;
 to revoke the app's access entirely, remove it at
 [account.live.com/consent/Manage](https://account.live.com/consent/Manage).
