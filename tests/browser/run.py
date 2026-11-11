@@ -451,6 +451,9 @@ def test_list_toggle_sort_and_return(page):
     page.go_forward()
     page.wait_for_url(re.compile(r"category=\d+"))
     back = page.url
+    # Back then Forward asks for two lists: the one shown must be the last one asked for, whichever arrived first.
+    expect(page.locator("select[name=category] option:checked")).to_have_text("Tyres")
+    expect(page.locator(f"tr:has-text('{MARKER}') a:has-text('Edit')").first).to_have_attribute("href", re.compile(r"category=\d+"))
     page.locator(f"tr:has-text('{MARKER}') a:has-text('Edit')").first.click()
     page.click("text=Cancel")
     page.wait_for_url(back)
@@ -502,6 +505,55 @@ def test_desktop_look(page):
         page.goto(UI + "onedrive")
         shot(page, f"onedrive-desktop-{scheme}")
     page.emulate_media(color_scheme="light")
+    remove_marked(page)
+
+
+def test_rows_on_a_phone_show_whole_values(page):
+    """Rows view on a phone: the date, the category and the amount are never cut short at the usual widths."""
+    add_expense(page, "1234.56", "Wheel alignment")
+    add_expense(page, "64990.00", "Cabin air filter")
+    page.goto(UI)
+    page.click("[data-view-choice=rows]")
+    cut = page.evaluate("""marker => [...document.querySelectorAll('tbody tr')].filter(r => r.textContent.includes(marker))
+        .flatMap(r => [...r.querySelectorAll('td.date, td.cat .chip, td.amount, td.odo, td.inv, td.actions')])
+        .filter(e => e.scrollWidth > e.clientWidth + 1).map(e => e.className + ': ' + e.textContent.trim())""", MARKER)
+    assert cut == [], f"cut short: {cut}"
+    assert not re.search(r"\d\d:\d\d", page.locator(f"tr:has-text('{MARKER}') td.date").first.inner_text())
+    shot(page, "list-rows-phone")
+    page.evaluate("localStorage.clear()")
+    remove_marked(page)
+
+
+def test_column_widths_can_be_dragged(page):
+    """Dragging a heading's edge changes that column only, is remembered, and a double-click undoes it."""
+    add_expense(page)
+    page.goto(UI)
+    widths = lambda: page.evaluate("[...document.querySelectorAll('thead th')].map(t => Math.round(t.getBoundingClientRect().width))")
+    usual = widths()
+    handle = page.locator("thead th").nth(2).locator(".col-resize")       # Vendor
+    box = handle.bounding_box()
+    x, y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+    page.mouse.move(x, y)
+    page.mouse.down()
+    page.mouse.move(x + 120, y, steps=4)
+    page.mouse.up()
+    wider = widths()
+    assert abs(wider[2] - (usual[2] + 120)) <= 3, (usual, wider)
+    assert all(abs(a - b) <= 2 for i, (a, b) in enumerate(zip(usual, wider)) if i != 2), (usual, wider)
+    assert "sort=" not in page.url, "dragging the edge must not sort the column"
+    page.reload()
+    assert widths() == wider, "the widths were not remembered"
+    page.select_option("select[name=sort]", "amount")                      # and they survive the list being swapped
+    page.wait_for_url(re.compile(r"sort=amount"))
+    assert widths() == wider
+    shot(page, "list-columns-resized")
+    page.locator("thead th").nth(2).locator(".col-resize").focus()
+    page.keyboard.press("ArrowLeft")
+    assert widths()[2] == wider[2] - 16
+    page.locator("thead th").nth(2).locator(".col-resize").dblclick()
+    assert widths() == usual
+    page.reload()
+    assert widths() == usual
     remove_marked(page)
 
 
@@ -621,6 +673,7 @@ def main():
         step("delete can be cancelled", test_delete_can_be_cancelled, page)
         step("amount field works out sums", test_amount_calculator, page)
         step("list: tiles or rows, sorting, and back to the same view", test_list_toggle_sort_and_return, page)
+        step("rows on a phone show whole dates, categories and amounts", test_rows_on_a_phone_show_whole_values, page)
         step("no sideways scroll on a phone", test_phone_layout_has_no_sideways_scroll, page)
         step("header stays tidy on a phone", test_header_stays_tidy_on_a_phone, page)
         step("phone list shows amount, invoice and edit", test_list_shows_key_fields_on_a_phone, page)
@@ -644,6 +697,7 @@ def main():
         step("dashboard renders with data and invoice links", test_dashboard, dash_page)
         step("header is one row on a desktop", test_header_on_a_desktop, desktop.new_page())
         step("desktop list and form, light and dark", test_desktop_look, desktop.new_page())
+        step("column widths can be dragged, are remembered, and reset", test_column_widths_can_be_dragged, desktop.new_page())
         step("footer links to the docs and names the build", test_footer_links_to_the_docs_and_names_the_build, desktop.new_page())
         remove_marked(page)
         browser.close()

@@ -12,14 +12,16 @@ Track what your Tesla costs to own, next to [TeslaMate](https://github.com/tesla
 
 Not affiliated with TeslaMate or Tesla. It's an unofficial add-on that reads TeslaMate's data.
 
-OneDrive is a trademark of Microsoft Corporation. This project is not affiliated with or endorsed by Microsoft. The OneDrive logo is fetched at runtime from [selfh.st/icons](https://selfh.st/icons) ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)); it is not part of this repository.
+OneDrive is a trademark of Microsoft Corporation and Grafana is a trademark of Grafana Labs. This project is not affiliated with or endorsed by either. The OneDrive and Grafana logos are fetched at runtime from [selfh.st/icons](https://selfh.st/icons) ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)); they are not part of this repository.
 
 - **Web UI** (Flask) to add/edit expenses: category, date, time, amount, odometer, vendor,
   notes and a link to the PDF invoice in your cloud storage. The odometer can be filled in from
   TeslaMate's own position data for the chosen date and time. The amount field works out sums
   (`120.50+89.95`, `400/3`) when you leave it, press Enter or save, and has keys for the operators.
   The list sorts by any column, either way (click a heading, or use **Sort by** and **Order**), and
-  switches between rows and tiles with the toggle beside the filter. Editing an expense, then saving
+  switches between rows and tiles with the toggle beside the filter. In rows, drag the edge of a
+  column heading to make that column wider or narrower (double-click it for the usual widths); your
+  widths are remembered in the browser. Editing an expense, then saving
   or cancelling, returns you to the category and order you were looking at. Each category has its
   own colour in the list, refunds and rebates show in green, and the app follows your device's light
   or dark setting.

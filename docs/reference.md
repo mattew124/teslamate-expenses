@@ -21,14 +21,15 @@ it). GitHub sees your server's address and a `User-Agent` of `teslamate-expenses
 from your data is sent. If GitHub can't be reached, the footer simply shows the version and tries
 again later. Set `UPDATE_CHECK=0` in `.env` and restart to switch the check off.
 
-The OneDrive button on the expense form shows OneDrive's logo. The logo isn't shipped with the app: the
-first time it is needed, the server asks `cdn.jsdelivr.net` once for a pinned copy from the
+The OneDrive button on the expense form shows OneDrive's logo, and the header's Dashboards link shows
+Grafana's. The logos aren't shipped with the app: the
+first time one is needed, the server asks `cdn.jsdelivr.net` once for a pinned copy from the
 [selfh.st/icons](https://selfh.st/icons) collection (licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)), checks that what comes back is a plain drawing, keeps it in memory and passes it to browsers. Nothing
-from your data is sent (jsDelivr sees your server's address). If it can't be reached, a plain cloud drawing
-that comes with the app is shown instead, and the server tries again later. Set `PROVIDER_ICONS=0` in
+from your data is sent (jsDelivr sees your server's address). If it can't be reached, a plain drawing
+that comes with the app (a cloud, a bar chart) is shown instead, and the server tries again later. Set `PROVIDER_ICONS=0` in
 `.env` and restart to never ask. The drawing is shown as the collection supplies it, except that the
 app rebuilds it from the parts it checked and writes its inline styles as plain attributes. OneDrive is a
-trademark of Microsoft Corporation.
+trademark of Microsoft Corporation; Grafana is a trademark of Grafana Labs.
 
 An installation on a release candidate (`0.3.0-rc1`) is told about newer candidates and the stable
 release that replaces them. One on a stable release is only told about stable releases.

@@ -49,7 +49,7 @@
   <tbody>
   {% for e in expenses %}
   <tr>
-    <td class="date" data-label="Date">{{ e.occurred_at|when }}</td>
+    <td class="date" data-label="Date" title="{{ e.occurred_at|when }}">{{ e.occurred_at|day }}</td>
     <td class="cat" data-label="Category"><span class="chip hue-{{ e.category_id % 10 }}">{{ e.category }}</span>{% if e.car_name and expenses|map(attribute='car_id')|unique|list|length > 1 %} <small>({{ e.car_name }})</small>{% endif %}</td>
     <td class="vendor" data-label="Vendor" title="{{ e.vendor or '' }}">{{ e.vendor or '–' }}</td>
     <td class="num amount{{ ' credit' if e.amount < 0 }}" data-label="Amount">{{ e.amount|money }}</td>

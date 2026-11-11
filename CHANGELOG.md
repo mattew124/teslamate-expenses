@@ -10,6 +10,8 @@ Each entry says what an installer must do to upgrade. Where nothing is said, pul
 ### Added
 
 - A PDF can be dropped onto the invoice box of the Add expense form, as well as chosen with the button.
+- Column widths in the rows layout can be changed by dragging the edge of a heading (double-click for the
+  usual widths); they are remembered in the browser.
 
 ### Changed
 
@@ -17,6 +19,15 @@ Each entry says what an installer must do to upgrade. Where nothing is said, pul
   you are on, categories as coloured chips, refunds in green, and a dark theme that follows the device.
   The expense list has a heading with the total beside it, and its tiles lead with the vendor and amount.
   The form is grouped into Invoice, Details, and Link and notes. Nothing to do when upgrading.
+- The expense list shows the date without the time of day (the time is the cell's tooltip, and still
+  on the edit form).
+- The header's Dashboards link shows the Grafana logo instead of an arrow. Like the OneDrive logo it is
+  fetched once by the server from the pinned selfh.st/icons collection, with a plain drawing as the
+  fallback; `PROVIDER_ICONS=0` switches both requests off.
+
+### Fixed
+
+- Going Back then Forward quickly on the expense list could leave the older list showing.
 
 ## 0.2.0-rc4 - 2026-11-11
 

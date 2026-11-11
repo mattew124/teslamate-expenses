@@ -154,12 +154,31 @@ th[aria-sort] { color: var(--text); }
 .hue-5 { --c: #d19a00; } .hue-6 { --c: #c0408f; } .hue-7 { --c: #2f9e5a; } .hue-8 { --c: #b3563b; } .hue-9 { --c: #8a8f1f; }
 
 /* Rows: columns keep their widths whatever is listed (so sorting or filtering doesn't make them jump);
-   a long value is cut short with an ellipsis, and the full text is the tooltip. */
-[data-view=rows] .list table { table-layout: fixed; min-width: 52rem; }
+   a long value is cut short with an ellipsis, and the full text is the tooltip. The widths are the
+   person's own once they drag a heading's edge: view.js puts the saved ones in these custom properties
+   before the page draws, and app.js does the dragging. Wider columns make the table wider, and it
+   scrolls sideways. */
+[data-view=rows] .list table { table-layout: fixed; min-width: var(--cols-total, 56rem); }
 [data-view=rows] .list td { overflow: hidden; text-overflow: ellipsis; }
 [data-view=rows] .list tbody tr:hover { background: var(--sunken); }
-col.c-date { width: 19%; } col.c-cat { width: 17%; } col.c-vendor { width: 20%; } col.c-amount { width: 12%; }
-col.c-odo { width: 12%; } col.c-inv { width: 10%; } col.c-act { width: 10%; }
+col.c-date { width: var(--col-date, 15%); }
+col.c-cat { width: var(--col-cat, 20%); }
+col.c-vendor { width: var(--col-vendor, 21%); }
+col.c-amount { width: var(--col-amount, 13%); }
+col.c-odo { width: var(--col-odo, 13%); }
+col.c-inv { width: var(--col-inv, 10%); }
+col.c-act { width: var(--col-act, 8%); }
+[data-view=rows] .list th { position: relative; }
+.col-resize { position: absolute; top: 0; right: -.6rem; width: 1.2rem; height: 100%; z-index: 1; cursor: col-resize; touch-action: none; }
+.col-resize::after { content: ""; position: absolute; left: 50%; top: 28%; height: 44%; width: 2px; margin-left: -1px;
+  border-radius: 1px; background: var(--line); }
+.col-resize:hover::after, .col-resize:focus-visible::after, .col-resize.dragging::after { background: var(--accent); top: 10%; height: 80%; }
+.col-resize:focus-visible { outline: 0; }
+/* Phones: less air round each cell, so more of the table is on screen at once. */
+@media (max-width: 40rem) {
+  [data-view=rows] .list th, [data-view=rows] .list td { padding: .6rem .6rem; }
+  [data-view=rows] .list th:first-child, [data-view=rows] .list td:first-child { padding-left: 1rem; }
+}
 
 /* Tiles: each expense is a card. app.js picks tiles for phones until the person chooses (the toggle is
    remembered); with rows chosen, the table scrolls sideways if it must. */
@@ -242,6 +261,7 @@ code.copy { display: block; margin-top: .25rem; padding: .4rem .6rem; border: 1p
   border-radius: var(--r-small); background: var(--sunken); overflow-wrap: anywhere; user-select: all; }
 img.provider-icon { height: 2.2rem; width: auto; vertical-align: middle; }  /* the drawing has space round the cloud */
 nav img.provider-icon, label img.provider-icon { height: 1.7rem; margin: -.3rem .35rem -.3rem 0; }
+nav img.nav-icon { height: 1.15rem; width: 1.15rem; margin-right: .4rem; vertical-align: -.2em; }
 h1 img.provider-icon, h2 img.provider-icon { height: 3rem; margin: -.6rem .25rem -.6rem 0; vertical-align: middle; }
 
 /* ---- importing invoices ---- */

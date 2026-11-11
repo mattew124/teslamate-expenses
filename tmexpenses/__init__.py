@@ -141,6 +141,10 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
     def when(value):
         return value.astimezone(ZoneInfo(tz)).strftime("%d %b %Y %H:%M")
 
+    @app.template_filter("day")
+    def day(value):
+        return value.astimezone(ZoneInfo(tz)).strftime("%d %b %Y")
+
     @app.after_request
     def security_headers(resp):
         resp.headers["Content-Security-Policy"] = (
@@ -158,7 +162,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
         # provider (Google Drive, say) is another entry here, not another edit to every template.
         storage = {"name": "OneDrive", "icon": url_for("provider_icon", name="onedrive"),
                    "credit": icons.CREDIT} if drive else None
-        return {"onedrive_enabled": drive is not None, "storage": storage}
+        return {"onedrive_enabled": drive is not None, "storage": storage, "icon_credit": icons.CREDIT}
 
     @app.context_processor
     def footer():
@@ -306,9 +310,11 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
 
     @app.get("/provider-icon/<name>")
     def provider_icon(name):
-        """The storage provider's logo: fetched once from its public source and kept (see icons.py),
-        or the bundled drawing when that isn't possible. Browsers may keep it, unlike the pages."""
-        if drive is None or name not in icons.SOURCES:
+        """Another product's logo (the storage provider's, Grafana's): fetched once from its public source
+        and kept (see icons.py), or the bundled drawing when that isn't possible. Browsers may keep it,
+        unlike the pages. The storage provider's is only served when there is one."""
+        source = icons.SOURCES.get(name)
+        if source is None or (source["storage"] and drive is None):
             abort(404)
         fetched = icon_cache.get(name)
         body = fetched or (Path(app.static_folder) / f"provider-{name}.svg").read_bytes()

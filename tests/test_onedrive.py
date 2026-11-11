@@ -909,7 +909,7 @@ def test_the_import_page_heading_carries_it(client, ms):
 def test_no_logo_when_there_is_no_storage_provider(app_for, ms):
     c = app_for(ms, key=None)
     for path in ("/", "/onedrive", "/categories"):
-        assert "provider-icon" not in c.get(path).data.decode()
+        assert "provider-icon/onedrive" not in c.get(path).data.decode()
 
 
 def test_the_logos_source_is_credited_on_the_onedrive_page(client, ms):
