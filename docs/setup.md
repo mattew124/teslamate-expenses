@@ -73,7 +73,7 @@
     to change them, and restarts never overwrite it. Without `FQDN_TM` they start empty, and you
     fill them in there.
 
-<!-- screenshot: settings-page - The Settings page, with the app and dashboard addresses -->
+![The Settings page, with the app and dashboard addresses](images/settings-page.png)
 
 ## The database
 
