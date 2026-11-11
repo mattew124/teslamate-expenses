@@ -157,6 +157,7 @@ document.addEventListener("DOMContentLoaded", () => {
         try { localStorage.setItem("expenses-view", root.dataset.view); } catch (e) { /* not remembered */ }
         markView();
       }));
+    bindColumns();
     const live = document.querySelector("form[data-live]");
     if (!live) return;
     live.querySelectorAll("[data-autosubmit]").forEach((el) =>
@@ -170,11 +171,69 @@ document.addEventListener("DOMContentLoaded", () => {
         showList(a.href, null);
       }));
   }
+  // Rows: drag the edge of a column heading (or focus it and use the arrow keys) to change that column's
+  // width; double-click it to go back to the built-in widths. The other columns keep theirs, so a wider
+  // column makes the table wider. The widths are remembered in the browser, like the layout.
+  function bindColumns() {
+    const cols = window.expenseColumns;
+    const heads = [...document.querySelectorAll(".list thead th")];
+    if (!cols || heads.length !== cols.names.length) return;
+    const measured = () => Object.fromEntries(heads.map((th, i) => [cols.names[i], Math.round(th.getBoundingClientRect().width)]));
+    const keep = (widths) => {
+      try { localStorage.setItem("expenses-columns", JSON.stringify(widths)); } catch (e) { /* not remembered */ }
+    };
+    heads.slice(0, -1).forEach((th, i) => {
+      const name = cols.names[i];
+      const handle = document.createElement("span");
+      handle.className = "col-resize";
+      handle.tabIndex = 0;
+      handle.setAttribute("role", "separator");
+      handle.setAttribute("aria-orientation", "vertical");
+      handle.setAttribute("aria-label", "Width of the " + (th.textContent.trim().replace(/\s*[▲▼]$/, "") || "last") + " column");
+      handle.title = "Drag to change the column's width. Double-click for the usual widths.";
+      const set = (widths, value) => { widths[name] = Math.max(56, Math.min(1200, Math.round(value))); cols.apply(widths); };
+      handle.addEventListener("pointerdown", (ev) => {
+        if (ev.button) return;
+        ev.preventDefault();
+        const widths = measured();
+        const from = widths[name];
+        const x0 = ev.clientX;
+        handle.setPointerCapture(ev.pointerId);
+        handle.classList.add("dragging");
+        const move = (e) => set(widths, from + e.clientX - x0);
+        const done = () => {
+          handle.removeEventListener("pointermove", move);
+          handle.classList.remove("dragging");
+          keep(widths);
+        };
+        handle.addEventListener("pointermove", move);
+        handle.addEventListener("pointerup", done, { once: true });
+        handle.addEventListener("pointercancel", done, { once: true });
+      });
+      handle.addEventListener("keydown", (ev) => {
+        if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") return;
+        ev.preventDefault();
+        const widths = measured();
+        set(widths, widths[name] + (ev.key === "ArrowRight" ? 16 : -16));
+        keep(widths);
+      });
+      handle.addEventListener("dblclick", () => {
+        try { localStorage.removeItem("expenses-columns"); } catch (e) { /* nothing kept */ }
+        cols.apply(null);
+      });
+      th.append(handle);
+    });
+  }
+  let listRequest = 0;
   async function showList(url, focusName, push = true) {
+    const mine = ++listRequest;
     try {
       const res = await fetch(url, { headers: { Accept: "text/html" } });
       if (!res.ok) throw new Error(res.status);
       const doc = new DOMParser().parseFromString(await res.text(), "text/html");
+      // Asked for something newer meanwhile (Back then Forward, two quick changes): that answer is the
+      // one to show, whichever arrives first.
+      if (mine !== listRequest) return;
       const fresh = doc.querySelector("main");
       if (!fresh) throw new Error("no list");
       // The table scrolls sideways on a phone: keep it where it was, rather than snapping back to the left.
@@ -406,6 +465,27 @@ document.addEventListener("DOMContentLoaded", () => {
       const body = new FormData();
       body.append("invoice_file", pdfInput.files[0]);
       prefillFrom(body);
+    });
+  }
+
+  // Dropping a PDF onto the invoice box is the same as choosing it with the button.
+  const dropBox = document.getElementById("invoice-drop");
+  if (dropBox && pdfInput) {
+    document.getElementById("invoice-drop-hint").hidden = false;
+    ["dragenter", "dragover"].forEach((name) => dropBox.addEventListener(name, (ev) => {
+      ev.preventDefault();
+      dropBox.classList.add("over");
+    }));
+    ["dragleave", "drop"].forEach((name) => dropBox.addEventListener(name, () => dropBox.classList.remove("over")));
+    dropBox.addEventListener("drop", (ev) => {
+      ev.preventDefault();
+      const pdf = [...((ev.dataTransfer && ev.dataTransfer.files) || [])]
+        .find((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name));
+      if (!pdf) return;
+      const chosen = new DataTransfer();
+      chosen.items.add(pdf);
+      pdfInput.files = chosen.files;
+      pdfInput.dispatchEvent(new Event("change", { bubbles: true }));
     });
   }
 

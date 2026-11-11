@@ -1,10 +1,11 @@
+import re
 from datetime import datetime
 
 import psycopg
 import pytest
 from psycopg.rows import dict_row
 
-from tmexpenses import create_app
+from tmexpenses import create_app, icons
 
 ORIGIN = {"Origin": "http://localhost"}
 
@@ -527,6 +528,121 @@ def test_saving_a_purchase_before_the_first_data_moves_the_dashboard_start(pg, a
     after = json.loads(target.read_text())["time"]["from"]
     assert after == "2019-03-01T00:00:00.000Z" and after < before
 
+
+# ---- look and feel: what the stylesheet hooks onto ----
+
+def test_header_marks_the_page_you_are_on(client):
+    home = client.get("/").data.decode()
+    assert home.count('aria-current="page"') == 1
+    assert re.search(r'<a href="/" aria-current="page">All</a>', home)
+    cats = client.get("/categories").data.decode()
+    assert re.search(r'<a href="/categories" aria-current="page">Categories</a>', cats)
+    assert 'aria-current="page">All<' not in cats
+    assert 'aria-current="page">Settings<' in client.get("/settings").data.decode()
+    assert 'aria-current' not in client.get("/new").data.decode()
+
+
+def test_list_has_a_heading_and_a_total(client, admin):
+    client.post("/new", data=form(admin), headers=ORIGIN)
+    client.post("/new", data=form(admin, amount="99.50", date="2026-11-08",
+                                  category_id=str(category_id(admin, "Insurance"))), headers=ORIGIN)
+    html = client.get("/").data.decode()
+    assert "<h1>All expenses</h1>" in html
+    assert re.search(r'class="total"[^>]*>\s*<small>2 items</small>\s*<strong>\$1,300\.00</strong>', html)
+    tyres = client.get(f"/?category={category_id(admin, 'Tyres')}").data.decode()
+    assert "<h1>Tyres</h1>" in tyres and "<small>1 item</small>" in tyres
+
+
+def test_category_is_a_chip_with_a_steady_colour(client, admin):
+    """The colour is a class picked from the category, never an inline style: the CSP forbids those."""
+    client.post("/new", data=form(admin), headers=ORIGIN)
+    client.post("/new", data=form(admin, date="2026-11-09", amount="5"), headers=ORIGIN)
+    client.post("/new", data=form(admin, date="2026-11-10", amount="6",
+                                  category_id=str(category_id(admin, "Insurance"))), headers=ORIGIN)
+    html = client.get("/").data.decode()
+    tyres = re.findall(r'<span class="chip hue-(\d)">Tyres</span>', html)
+    insurance = re.findall(r'<span class="chip hue-(\d)">Insurance</span>', html)
+    assert len(tyres) == 2 and len(set(tyres)) == 1 and len(insurance) == 1
+    assert tyres[0] != insurance[0], "the starter categories next to each other get different colours"
+    css = client.get("/static/style.css").data.decode()
+    for n in range(10):
+        assert f".hue-{n}" in css
+
+
+def test_a_refund_is_marked_as_a_credit(client, admin):
+    client.post("/new", data=form(admin), headers=ORIGIN)
+    client.post("/new", data=form(admin, amount="-3000", date="2026-11-08", vendor="State rebate"), headers=ORIGIN)
+    html = client.get("/").data.decode()
+    assert re.search(r'<td class="num amount credit"[^>]*>-\$3,000\.00</td>', html)
+    assert re.search(r'<td class="num amount"[^>]*>\$1,200\.50</td>', html)
+
+
+def test_no_page_uses_inline_styles(client, admin):
+    """style-src 'self' in the CSP: an inline style or <style> block is silently dropped by the browser."""
+    client.post("/new", data=form(admin), headers=ORIGIN)
+    for path in ("/", "/new", "/1/edit", "/categories", "/settings", "/onedrive", "/learned"):
+        resp = client.get(path)
+        assert resp.status_code == 200, path
+        html = resp.data.decode()
+        assert " style=" not in html and "<style" not in html, path
+
+
+def test_stylesheet_has_light_and_dark_colours_without_newer_css(client):
+    """Colours switch on prefers-color-scheme. light-dark() and color-mix() are left out: a browser
+    that doesn't know them drops the whole declaration, and the page loses its colours."""
+    css = client.get("/static/style.css").data.decode()
+    assert "prefers-color-scheme: dark" in css
+    assert "light-dark(" not in css and "color-mix(" not in css
+
+
+def test_form_is_grouped_and_amount_has_its_unit_beside_it(client):
+    html = client.get("/new").data.decode()
+    assert html.count('class="card stack"') >= 2
+    assert re.search(r'<span class="affix"><span>\$</span>\s*<input name="amount"', html)
+    assert re.search(r'<span class="affix">\s*<input name="odometer_km"[^>]*>\s*<span>km</span>', html)
+
+
+def test_dashboards_link_carries_the_grafana_icon_instead_of_an_arrow(client, admin):
+    admin.execute("UPDATE expenses.setting SET grafana_url = 'https://tm.example.test/grafana/d/tco'")
+    html = client.get("/").data.decode()
+    assert re.search(r'<a href="https://tm\.example\.test/grafana/d/tco" target="_blank" rel="noopener noreferrer">'
+                     r'<img src="/provider-icon/grafana" alt="" class="nav-icon">Dashboards</a>', html)
+    assert "Dashboards ↗" not in html
+
+
+def test_grafana_icon_needs_no_storage_provider(pg, admin, monkeypatch):
+    """The OneDrive logo is only served when uploads are set up; the Dashboards link is always there."""
+    from tests.test_icons import GOOD, Fetch
+    monkeypatch.delenv("BASE_PATH", raising=False)
+    connect = lambda: psycopg.connect(pg.app_url, row_factory=dict_row)
+    fetch = Fetch()
+    c = create_app(connect=connect, icon_fetch=fetch).test_client()
+    resp = c.get("/provider-icon/grafana")
+    assert resp.status_code == 200 and resp.mimetype == "image/svg+xml" and resp.data == GOOD
+    assert fetch.urls == [icons.SOURCES["grafana"]["url"]]
+    assert c.get("/provider-icon/onedrive").status_code == 404           # no storage provider here
+    # and with the request switched off or failing, the drawing that comes with the app
+    monkeypatch.setenv("PROVIDER_ICONS", "0")
+    off = create_app(connect=connect, icon_fetch=fetch).test_client().get("/provider-icon/grafana")
+    assert off.status_code == 200 and b"<svg" in off.data and off.data != GOOD and len(fetch.urls) == 1
+
+
+def test_list_shows_the_date_without_the_time(client, admin):
+    """The time of day is kept (and is the cell's tooltip); the column only shows the day."""
+    client.post("/new", data=form(admin), headers=ORIGIN)
+    html = client.get("/").data.decode()
+    assert '<td class="date" data-label="Date" title="07 Nov 2026 14:05">07 Nov 2026</td>' in html
+
+
+def test_column_widths_can_be_overridden_from_the_browser(client):
+    """Each column's width, and the table's, come from a custom property that view.js sets from the
+    person's saved choice (CSSOM, so the CSP is content), falling back to the built-in width."""
+    css = client.get("/static/style.css").data.decode()
+    for name in ("date", "cat", "vendor", "amount", "odo", "inv", "act"):
+        assert re.search(rf"col\.c-{name} \{{ width: var\(--col-{name}, [\d.]+%\); \}}", css), name
+    assert "min-width: var(--cols-total," in css
+    view = client.get("/static/view.js").data.decode()
+    assert "expenses-columns" in view and "setProperty" in view
 
 def test_static_urls_carry_a_version_so_a_stale_browser_cache_refetches(client):
     import re

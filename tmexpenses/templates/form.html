@@ -2,6 +2,7 @@
 {% from "_provider.html" import mark with context %}
 {% block title %}{{ 'Edit expense' if expense_id else 'Add expense' }}{% endblock %}
 {% macro err(field) %}{% if errors.get(field) %}<span class="error">{{ errors[field] }}</span>{% endif %}{% endmacro %}
+{% block main_attrs %} class="narrow"{% endblock %}
 {% block content %}
 <h1>{{ 'Edit expense' if expense_id else 'Add expense' }}</h1>
 {% if errors %}<p class="notice bad">Please fix the highlighted fields.</p>{% endif %}
@@ -20,23 +21,33 @@
   </div>{% endif %}
 </div>
 {% endif %}
-<form method="post" class="stack" id="expense-form" enctype="multipart/form-data"
-      {% if onedrive_connected %}data-onedrive-browse-url="{{ url_for('api_onedrive_browse', car_id=0) }}"{% endif %}
-      data-odometer-url="{{ url_for('api_odometer') }}" {% if not expense_id %}data-prefill-url="{{ url_for('api_prefill') }}" data-duplicates-url="{{ url_for('api_duplicates') }}"{% endif %}>
-  <input type="hidden" name="confirm_duplicate" value="{{ '1' if duplicates }}">
-  {% for name, value in view.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
+{% macro car_field() %}
   <label>Car
     <select name="car_id" required>
       {% if cars|length != 1 %}<option value="">Choose…</option>{% endif %}
       {% for c in cars %}<option value="{{ c.id }}" {{ 'selected' if values.car_id|string == c.id|string }}>{{ c.name or ('Car ' ~ c.id) }}</option>{% endfor %}
     </select>{{ err('car_id') }}
   </label>
+{% endmacro %}
+<form method="post" class="cards" id="expense-form" enctype="multipart/form-data"
+      {% if onedrive_connected %}data-onedrive-browse-url="{{ url_for('api_onedrive_browse', car_id=0) }}"{% endif %}
+      data-odometer-url="{{ url_for('api_odometer') }}" {% if not expense_id %}data-prefill-url="{{ url_for('api_prefill') }}" data-duplicates-url="{{ url_for('api_duplicates') }}"{% endif %}>
+  <input type="hidden" name="confirm_duplicate" value="{{ '1' if duplicates }}">
+  {% for name, value in view.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
 
   {% if onedrive_enabled %}
-  <label>Invoice PDF
-    <input type="file" name="invoice_file" accept="application/pdf,.pdf">{{ err('invoice_file') }}
-    <span class="or-pick"><span>or</span>
-      <button type="button" id="onedrive-pick" class="secondary">{{ mark() }} Choose from {{ storage.name }}</button></span>
+  <section class="card stack">
+  <h2 class="card-title">Invoice</h2>
+  {{ car_field() }}
+  <div class="field">
+    <label for="invoice-file">Invoice PDF</label>
+    <div class="drop" id="invoice-drop">
+      <input type="file" id="invoice-file" name="invoice_file" accept="application/pdf,.pdf">
+      <span class="or-pick"><span>or</span>
+        <button type="button" id="onedrive-pick" class="secondary">{{ mark() }} Choose from {{ storage.name }}</button></span>
+      <small id="invoice-drop-hint" hidden>You can also drop the PDF onto this box.</small>
+    </div>
+    {{ err('invoice_file') }}
     <small id="onedrive-pick-hint">Already in {{ storage.name }}? Pick it there instead of uploading it again.</small>
     {% if not expense_id %}<small id="prefill-hint">Choose the PDF next: the fields below are filled in from what can be read in it. Check them before saving.</small>{% endif %}
     {% if onedrive_connected %}
@@ -44,9 +55,13 @@
     {% else %}
     <small><a href="{{ url_for('onedrive_page') }}">Connect OneDrive</a> to upload invoices from here.</small>
     {% endif %}
-  </label>
+  </div>
+  </section>
   {% endif %}
 
+  <section class="card stack">
+  <h2 class="card-title">Details</h2>
+  {% if not onedrive_enabled %}{{ car_field() }}{% endif %}
   <label>Category
     <select name="category_id" required>
       <option value="">Choose…</option>
@@ -60,8 +75,9 @@
     <label>Time <input type="time" name="time" value="{{ values.time }}" required></label>
   </div>
 
-  <label>Amount paid ($) <small>(negative for a rebate or refund)</small>
-    <input name="amount" inputmode="decimal" autocomplete="off" placeholder="0.00" value="{{ values.amount }}" required>{{ err('amount') }}
+  <label>Amount paid <small>(negative for a rebate or refund)</small>
+    <span class="affix"><span>$</span>
+      <input name="amount" inputmode="decimal" autocomplete="off" placeholder="0.00" value="{{ values.amount }}" required></span>{{ err('amount') }}
     <small>Or a sum, like 120.50+89.95 or 400/3: it's worked out when you leave the field.
       <span id="amount-calc" role="status"></span></small>
     <span id="amount-keys" class="keys" hidden>
@@ -75,20 +91,26 @@
     </span>
   </label>
 
-  <label>Odometer (km)
-    <input name="odometer_km" inputmode="decimal" autocomplete="off" value="{{ values.odometer_km }}">{{ err('odometer_km') }}
+  <label>Odometer
+    <span class="affix">
+      <input name="odometer_km" inputmode="decimal" autocomplete="off" value="{{ values.odometer_km }}">
+      <span>km</span></span>{{ err('odometer_km') }}
     <small><button type="button" id="fill-odometer" class="linklike">Fill from TeslaMate</button>
       <span id="odometer-hint"></span></small>
   </label>
 
   <label>Vendor / shop <input name="vendor" maxlength="500" value="{{ values.vendor }}">{{ err('vendor') }}</label>
+  </section>
 
+  <section class="card stack">
+  <h2 class="card-title">Link and notes</h2>
   <label>Invoice link
     <input type="url" name="invoice_url" placeholder="https://…" value="{{ values.invoice_url }}">{{ err('invoice_url') }}
     <small>{% if onedrive_enabled %}Or paste{% else %}A{% endif %} a share link to the PDF, e.g. from OneDrive or Google Drive.</small>
   </label>
 
   <label>Notes <textarea name="notes" rows="3" maxlength="2000">{{ values.notes }}</textarea>{{ err('notes') }}</label>
+  </section>
 
   <div class="row">
     <button type="submit" class="button">{{ 'Save anyway' if duplicates else 'Save' }}</button>

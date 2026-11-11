@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "_provider.html" import mark with context %}
 {% block title %}Categories{% endblock %}
+{% block main_attrs %} class="narrow"{% endblock %}
 {% block content %}
 <h1>Categories</h1>
 <ul class="plain category-list">
@@ -20,7 +21,7 @@
 </ul>
 {% if onedrive_enabled %}<p><small>Uploaded invoices go into this subfolder of the car's OneDrive folder, made when first
   needed. Leave it blank to use a folder named after the category, e.g. Tyres and Wheel alignment can both use “Maintenance”.</small></p>{% endif %}
-<form method="post" class="stack">
+<form method="post" class="card stack">
   <label>New category <input name="name" maxlength="60" required placeholder="e.g. Servicing">
     {% if error %}<span class="error">{{ error }}</span>{% endif %}</label>
   <button type="submit" class="button">Add category</button>

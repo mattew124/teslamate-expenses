@@ -13,17 +13,21 @@
 </head>
 <body>
   <header>
-    <a class="brand" href="{{ url_for('index') }}"><img src="{{ url_for('static', filename='icon.svg') }}" alt="" width="28" height="28">Expenses</a>
-    <a class="button add" href="{{ url_for('new') }}">+ Add</a>
-    <nav>
-      <a href="{{ url_for('index') }}">All</a>
-      <a href="{{ url_for('categories') }}">Categories</a>
-      {% if grafana_url %}<a href="{{ grafana_url }}" target="_blank" rel="noopener noreferrer">Dashboards ↗</a>{% endif %}
-      {% if onedrive_enabled %}<a href="{{ url_for('onedrive_page') }}">{{ mark() }}OneDrive</a>{% endif %}
-      <a href="{{ url_for('settings') }}">Settings</a>
-    </nav>
+    <div class="bar">
+      <a class="brand" href="{{ url_for('index') }}"><img src="{{ url_for('static', filename='icon.svg') }}" alt="" width="28" height="28">Expenses</a>
+      {% set endpoint = request.endpoint or '' %}
+      {% macro at(section) %}{% if section %} aria-current="page"{% endif %}{% endmacro %}
+      <nav>
+        <a href="{{ url_for('index') }}"{{ at(endpoint == 'index') }}>All</a>
+        <a href="{{ url_for('categories') }}"{{ at(endpoint == 'categories') }}>Categories</a>
+        {% if grafana_url %}<a href="{{ grafana_url }}" target="_blank" rel="noopener noreferrer"><img src="{{ url_for('provider_icon', name='grafana') }}" alt="" class="nav-icon">Dashboards</a>{% endif %}
+        {% if onedrive_enabled %}<a href="{{ url_for('onedrive_page') }}"{{ at(endpoint.startswith('onedrive') or endpoint.startswith('learned')) }}>{{ mark() }}OneDrive</a>{% endif %}
+        <a href="{{ url_for('settings') }}"{{ at(endpoint == 'settings') }}>Settings</a>
+      </nav>
+      <a class="button add" href="{{ url_for('new') }}">+ Add</a>
+    </div>
   </header>
-  <main>
+  <main{% block main_attrs %}{% endblock %}>
     {% if message %}<p class="notice">{{ message }}</p>{% endif %}
     {% block content %}{% endblock %}
   </main>

@@ -1,4 +1,5 @@
-"""The storage provider's icon, fetched from its public source instead of being shipped in this repository.
+"""Other products' icons (the storage provider's, Grafana's), fetched from their public source instead of
+being shipped in this repository.
 
 Logos belong to their owners, so the app asks for the picture when it is first needed: one anonymous
 GET of a pinned commit of the selfh.st/icons collection (CC BY 4.0) on jsDelivr, from the server, never
@@ -26,10 +27,19 @@ log = logging.getLogger("tmexpenses.icons")
 # single-colour drawing; a logo that carries its own colours has None. selfh.st/icons is CC BY 4.0: the
 # credit is in the docs and on the OneDrive page (see CREDIT).
 SOURCES = {
+    # `storage`: the storage provider's logo, served only when uploads are set up.
     "onedrive": {
         "url": "https://cdn.jsdelivr.net/gh/selfhst/icons@7ffe1c720c0ff64e2769197fa52631b9f980c135"
                "/svg/microsoft-onedrive.svg",
         "colour": None,
+        "storage": True,
+    },
+    # Beside the header's Dashboards link.
+    "grafana": {
+        "url": "https://cdn.jsdelivr.net/gh/selfhst/icons@7ffe1c720c0ff64e2769197fa52631b9f980c135"
+               "/svg/grafana.svg",
+        "colour": None,
+        "storage": False,
     },
 }
 CREDIT = {"text": "selfh.st/icons", "url": "https://selfh.st/icons", "licence": "CC BY 4.0",

@@ -42,8 +42,15 @@ def cache(fetch, enabled=True, clock=None):
 
 
 def test_the_source_is_pinned_to_an_exact_commit_over_https():
-    url = icons.SOURCES["onedrive"]["url"]
-    assert re.fullmatch(r"https://cdn\.jsdelivr\.net/gh/selfhst/icons@[0-9a-f]{40}/svg/microsoft-onedrive\.svg", url)
+    files = {"onedrive": "microsoft-onedrive", "grafana": "grafana"}
+    assert set(icons.SOURCES) == set(files)
+    for name, file in files.items():
+        url = icons.SOURCES[name]["url"]
+        assert re.fullmatch(rf"https://cdn\.jsdelivr\.net/gh/selfhst/icons@[0-9a-f]{{40}}/svg/{file}\.svg", url), name
+
+
+def test_only_the_storage_logo_waits_for_a_storage_provider():
+    assert icons.SOURCES["onedrive"]["storage"] is True and icons.SOURCES["grafana"]["storage"] is False
 
 
 def test_a_fetched_icon_is_kept():
