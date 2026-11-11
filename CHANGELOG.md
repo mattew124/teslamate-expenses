@@ -12,6 +12,11 @@ Each entry says what an installer must do to upgrade. Where nothing is said, pul
 - Docs: a worked example of publishing the app through Traefik and a Cloudflare Tunnel, gated by
   Cloudflare Access (Publishing with Traefik and Cloudflare). Nothing to do to upgrade.
 
+### Fixed
+
+- The Rows and Tiles buttons did nothing in a browser that still held the previous version's cached
+  files. Stylesheet and script addresses now carry a version, so an upgrade always loads matching files.
+
 ## 0.2.0-rc4 - 2026-11-11
 
 The fourth candidate for 0.2.0. Everything under 0.2.0-rc1 to 0.2.0-rc3 below applies to

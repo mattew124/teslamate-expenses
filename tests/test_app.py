@@ -526,3 +526,11 @@ def test_saving_a_purchase_before_the_first_data_moves_the_dashboard_start(pg, a
     assert resp.status_code == 303
     after = json.loads(target.read_text())["time"]["from"]
     assert after == "2019-03-01T00:00:00.000Z" and after < before
+
+
+def test_static_urls_carry_a_version_so_a_stale_browser_cache_refetches(client):
+    import re
+    page = client.get("/").data.decode()
+    urls = re.findall(r'(?:src|href)="(/static/(?:app\.js|view\.js|style\.css)\?v=[0-9a-f]+)"', page)
+    assert len(urls) == 3
+    assert all(client.get(u).status_code == 200 for u in urls)
