@@ -432,17 +432,24 @@ def test_upload_replaces_link_on_edit(client, ms, admin):
     assert len(ms.uploads()) == 1
 
 
-@pytest.mark.parametrize("setup,expected", [
-    ("no-sign-in", "Connect OneDrive"),
-    ("no-folder", "folder for this car"),
-])
-def test_upload_needs_sign_in_and_folder(client, ms, admin, setup, expected):
+@pytest.mark.parametrize("setup", ["no-sign-in", "no-folder"])
+def test_missing_onedrive_setup_still_saves_expense(client, ms, admin, setup):
     if setup == "no-folder":
         sign_in(client, ms)
-    resp = client.post("/new", data=with_pdf(form(admin, vendor="Keep me")), headers=ORIGIN)
-    assert resp.status_code == 400
-    assert expected in resp.data.decode() and b"Keep me" in resp.data
-    assert rows(admin) == [] and ms.uploads() == []
+    resp = client.post("/new", data=with_pdf(form(admin, vendor="Keep me", invoice_url="")), headers=ORIGIN)
+    assert resp.status_code == 303 and "not_uploaded" in resp.headers["Location"]
+    assert rows(admin)[0]["vendor"] == "Keep me" and not rows(admin)[0]["invoice_url"]
+    assert ms.uploads() == []
+    assert b"was not uploaded" in client.get(resp.headers["Location"]).data
+
+
+def test_edit_upload_says_link_replaced(client, ms, admin):
+    client.post("/new", data=form(admin, invoice_url="https://example.com/old"), headers=ORIGIN)
+    sign_in(client, ms)
+    choose_folder(client)
+    resp = client.post("/1/edit", data=with_pdf(form(admin, invoice_url="https://example.com/old")), headers=ORIGIN)
+    assert "updated_replaced" in resp.headers["Location"]
+    assert b"previous file" in client.get(resp.headers["Location"]).data
 
 
 def test_not_a_pdf_is_refused_before_upload(client, ms, admin):
