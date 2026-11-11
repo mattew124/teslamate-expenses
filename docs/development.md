@@ -19,6 +19,7 @@ scripts/dev.sh up             # http://localhost:8089/expenses-dev/ and :8090/ex
 scripts/dev.sh test-browser   # Playwright in a container; screenshots in .dev/screenshots
 scripts/dev.sh refresh        # re-copy TeslaMate data, keeping your test expenses
 scripts/dev.sh reset          # wipe the test database
+scripts/dev.sh sample-expenses  # add made-up expenses to try the app with; `clear` removes them
 scripts/dev.sh schema         # regenerate db/teslamate-schema.sql after a TeslaMate upgrade
 scripts/dev.sh setup          # in a new worktree: create .venv
 scripts/dev.sh down           # stop the stack, keeping its data

@@ -7,6 +7,11 @@ Each entry says what an installer must do to upgrade. Where nothing is said, pul
 
 ## Unreleased
 
+### Added
+
+- Docs: a worked example of publishing the app through Traefik and a Cloudflare Tunnel, gated by
+  Cloudflare Access (Publishing with Traefik and Cloudflare). Nothing to do to upgrade.
+
 ### Fixed
 
 - The Rows and Tiles buttons did nothing in a browser that still held the previous version's cached
