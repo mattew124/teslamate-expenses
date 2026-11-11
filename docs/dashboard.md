@@ -14,7 +14,7 @@ A **rebate or refund** (a state EV rebate, an insurance refund for ending a poli
 negative amount, such as `-3000`. It lowers the category's total and everything built on it, so the
 cost figures are net of what you got back. The pie can't show a negative slice, so a category whose total ends up below zero is left out of it.
 
-<!-- screenshot: dashboard - The Cost of Ownership dashboard in Grafana -->
+![The Cost of Ownership dashboard in Grafana](images/dashboard.png)
 
 Headline panels are all-time; the charts, pie and table follow the dashboard time range, which starts at your
 earliest data (Grafana has no "all time", so the app works the start out each time it starts, and a

@@ -7,6 +7,10 @@ Each entry says what an installer must do to upgrade. Where nothing is said, pul
 
 ## Unreleased
 
+### Added
+
+- Docs and README: screenshots of the expense list, form, settings and Grafana dashboard.
+
 ## 0.2.0-rc5 - 2026-11-11
 
 The fifth candidate for 0.2.0. Everything under 0.2.0-rc1 to 0.2.0-rc4 below applies to

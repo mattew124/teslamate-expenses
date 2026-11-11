@@ -19,6 +19,7 @@ scripts/dev.sh up             # http://localhost:8089/expenses-dev/ and :8090/ex
 scripts/dev.sh test-browser   # Playwright in a container; screenshots in .dev/screenshots
 scripts/dev.sh refresh        # re-copy TeslaMate data, keeping your test expenses
 scripts/dev.sh reset          # wipe the test database
+scripts/dev.sh demo up         # second stack of invented data, for screenshots (see below)
 scripts/dev.sh sample-expenses  # add made-up expenses to try the app with; `clear` removes them
 scripts/dev.sh schema         # regenerate db/teslamate-schema.sql after a TeslaMate upgrade
 scripts/dev.sh setup          # in a new worktree: create .venv
@@ -73,10 +74,28 @@ A pull request that changes what a user or installer sees updates the pages it a
 visibly changed screen also needs a screenshot in the docs.
 
 **Screenshots must never show real data, so they can't come from the dev stack**, which copies your
-real cars and charging costs. Until there's a demo-data seed to take them from, and the look of the app
-has settled, no images are committed (a test enforces this). Instead, add a marker on its own line,
-at the place in the page the screenshot belongs: an HTML comment holding `screenshot:`, a short name,
-a dash and what it should show, as in `<!-- screenshot: settings-page - The Settings page -->`. Markers don't appear on the
+real cars and charging costs. They come from the demo stack instead, whose data is invented:
+
+```bash
+scripts/dev.sh demo up
+```
+
+```bash
+scripts/dev.sh demo screenshots
+```
+
+`demo up` builds a separate stack (its own database, app and Grafana, at `<path>-demo/`). Each time it is
+built, the empty `cars`, `positions` and `charging_processes` tables are created from a fresh schema-only
+dump of your live TeslaMate, so the demo can't fall behind TeslaMate's schema; no row is read. The rows
+come from `scripts/demo-seed.sql` (one made-up car, three years of odometer readings and charging
+sessions) plus the sample expenses. `demo reset` rebuilds it, `demo destroy` removes it. Files land in
+`.dev/demo-screenshots`; copy the ones you want into `docs/images/` and look at each first, as the app
+shows your own addresses on some screens (`tests/browser/screenshots.py` swaps those for example ones).
+`dev.sh screenshots` works only after `demo`, as above. A test fails if an image in `docs/` isn't under `docs/images/`.
+
+Where a page needs a screenshot that hasn't been taken yet, add a marker on its own line, at the place
+in the page it belongs: an HTML comment holding `screenshot:`, a short name, a dash and what it should
+show, as in `<!-- screenshot: settings-page - The Settings page -->`. Markers don't appear on the
 site. To list the screenshots still to take:
 
 ```bash

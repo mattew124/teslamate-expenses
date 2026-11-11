@@ -25,8 +25,8 @@ OneDrive is a trademark of Microsoft Corporation and Grafana is a trademark of G
   or cancelling, returns you to the category and order you were looking at. Each category has its
   own colour in the list, refunds and rebates show in green, and the app follows your device's light
   or dark setting.
-  <!-- screenshot: expense-list-rows - The expense list as rows on a desktop, with category colours and the total -->
-  <!-- screenshot: expense-list-tiles - The expense list as tiles, with the sort and layout controls -->
+  ![The expense list as rows on a desktop, with category colours and the total](images/expense-list-rows.png)
+  ![The expense list as tiles, with the sort and layout controls](images/expense-list-tiles.png)
   <!-- screenshot: amount-calculator - The amount field with a sum typed in and its result -->
 - **Optional OneDrive upload**: choose the invoice PDF in the form, or drop it onto the invoice box,
   and it goes into that car's OneDrive folder, with the link filled in for you.
@@ -36,7 +36,7 @@ OneDrive is a trademark of Microsoft Corporation and Grafana is a trademark of G
   vs charging, cost per km, per day and per month, monthly spend by category, cumulative cost, and
   a table of every expense with a clickable invoice link.
 
-<!-- screenshot: expense-form - The form for adding an expense -->
+![The form for adding an expense](images/expense-form.png)
 
 Starter categories: Initial purchase, Insurance, Registration, Tyres, Cabin air filter,
 Air filter, Wheel alignment, Tyre rotation. Add more on the **Categories** page

@@ -34,6 +34,12 @@
   vs charging, cost per km, per day and per month, monthly spend by category, cumulative cost, and
   a table of every expense with a clickable invoice link.
 
+<p align="center"><img src="docs/images/dashboard.png" alt="The Cost of Ownership dashboard in Grafana" width="720"></p>
+
+<p align="center"><img src="docs/images/expense-list-rows.png" alt="The expense list, with category colours and the total" width="720"></p>
+
+<sub>Screenshots use invented data.</sub>
+
 ```
  browser ──► proxy + forward-auth ──► expenses (Flask/gunicorn) ──► TeslaMate Postgres
                                                                        ▲   schema `expenses`
