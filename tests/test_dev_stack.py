@@ -191,3 +191,17 @@ def test_real_uploads_are_kept_to_the_test_folder():
     helper = (ROOT / "scripts" / "onedrive-test-folder.py").read_text()
     assert 'FOLDER = "Expenses test"' in helper
 
+
+
+def test_sample_expenses_are_made_up_and_stay_in_the_test_database():
+    """The sample data is for the dev stack only: it runs through dev_psql (the test database), writes
+    nothing but expenses, reads only what the app reads, and holds nothing from a real installation."""
+    sql = (ROOT / "scripts" / "dev-sample-expenses.sql").read_text()
+    code = re.sub(r"--[^\n]*", "", sql)
+    assert set(re.findall(r"(?:INSERT INTO|DELETE FROM|UPDATE)\s+([\w.]+)", code)) == {"expenses.expense"}
+    assert set(re.findall(r"(?:FROM|JOIN)\s+((?:public|expenses)\.\w+)", code)) <= {
+        "expenses.expense", "expenses.category", "public.cars", "public.positions"}
+    assert set(re.findall(r"https?://([^/'\s]+)", sql)) == {"example.com"}
+    assert 'dev_psql -v "tz=$APP_TZ" < scripts/dev-sample-expenses.sql' in SCRIPT
+    assert "sample-expenses)\n        ensure_env" in SCRIPT      # never past the dev stack's own checks
+    assert "LIKE 'Sample data%'" in sql and "LIKE 'Sample data%'" in SCRIPT   # clear removes only these

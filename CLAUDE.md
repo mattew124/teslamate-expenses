@@ -34,7 +34,7 @@ Grafana dashboard (`grafana/`). See README.md and `docs/`, the documentation sit
 
 ```bash
 .venv/bin/python -m pytest -q    # needs docker; starts a throwaway Postgres
-scripts/dev.sh up                # dev stack; `refresh`, `reset`, `down`, `logs`
+scripts/dev.sh up                # dev stack; `refresh`, `reset`, `down`, `logs`, `sample-expenses`
 scripts/dev.sh test-browser      # Playwright, real Chromium; screenshots in .dev/screenshots
 .venv/bin/zensical serve         # docs preview; needs requirements-docs.txt
 ```
