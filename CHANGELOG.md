@@ -7,6 +7,11 @@ Each entry says what an installer must do to upgrade. Where nothing is said, pul
 
 ## Unreleased
 
+## 0.2.0-rc5 - 2026-11-11
+
+The fifth candidate for 0.2.0. Everything under 0.2.0-rc1 to 0.2.0-rc4 below applies to
+anyone upgrading to it, including their action-needed items.
+
 ### Added
 
 - A PDF can be dropped onto the invoice box of the Add expense form, as well as chosen with the button.
