@@ -196,8 +196,6 @@ class LocalFolder:
         root, parent = self._dir(parent_id)
         if not _plain_name(name):
             raise StorageError("That isn't a name a folder can have.")
-        if os.path.lexists(os.path.join(parent, name)):
-            raise StorageError(f"A folder called “{name}” already exists here.")
         # The name comes from a form: resolve it and make sure it lands directly in the parent, as every
         # other path here is checked against the root, before anything is made.
         target = os.path.realpath(os.path.join(parent, name))
