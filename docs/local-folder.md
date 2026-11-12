@@ -84,8 +84,12 @@ to read and write the folder.
   that user must own the folder.
 
 Invoices the app saves can be read by everyone on the server and written by their owner and group
-(`664`), never by everyone. The umask narrows that further: run the container with `umask 007` (or
-use `file_mode=0660` on a share) to keep them private to the owner and group.
+(`664`), never by everyone. To keep them private to the owner and group, close the folder itself, as
+nobody can open a file in a folder they can't enter (on a share, `dir_mode=0770` above does this):
+
+```bash
+sudo chmod 770 /mnt/nas/cars/invoices
+```
 
 To run the app as another user, set these in `.env` and start it again:
 
