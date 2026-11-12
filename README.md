@@ -69,6 +69,12 @@ docker compose up -d    # localhost:8088/expenses/
 Then add the dashboard to TeslaMate's Grafana, and optionally turn on OneDrive uploads:
 see [Setup](https://mattew124.github.io/teslamate-expenses/setup/).
 
+## TeslaMate version
+
+Tested with TeslaMate 4.4.0. TeslaMate has no stable database schema, so the app stops on start
+if the database is from a newer TeslaMate than that, rather than showing wrong numbers
+(`ALLOW_UNTESTED_TESLAMATE=1` overrides it). A weekly check tests each new TeslaMate release.
+
 ## License
 
 MIT. `db/teslamate-schema.sql` is generated from [TeslaMate](https://github.com/teslamate-org/teslamate)'s

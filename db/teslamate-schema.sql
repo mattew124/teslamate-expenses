@@ -108,6 +108,11 @@ CREATE SEQUENCE public.positions_id_seq
 
 ALTER SEQUENCE public.positions_id_seq OWNED BY public.positions.id;
 
+CREATE TABLE public.schema_migrations (
+    version bigint NOT NULL,
+    inserted_at timestamp(0) without time zone
+);
+
 ALTER TABLE ONLY public.cars ALTER COLUMN id SET DEFAULT nextval('public.cars_id_seq'::regclass);
 
 ALTER TABLE ONLY public.charging_processes ALTER COLUMN id SET DEFAULT nextval('public.charging_processes_id_seq'::regclass);
@@ -120,6 +125,8 @@ ALTER TABLE ONLY public.charging_processes
     ADD CONSTRAINT charging_processes_pkey PRIMARY KEY (id);
 ALTER TABLE ONLY public.positions
     ADD CONSTRAINT positions_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.schema_migrations
+    ADD CONSTRAINT schema_migrations_pkey PRIMARY KEY (version);
 CREATE UNIQUE INDEX cars_eid_index ON public.cars USING btree (eid);
 
 CREATE UNIQUE INDEX cars_settings_id_index ON public.cars USING btree (settings_id);

@@ -174,7 +174,7 @@ def test_a_pdf_odometer_beats_teslamate(client, admin):
 
 
 def test_odometer_stays_blank_when_teslamate_has_nothing(client, admin):
-    admin.execute("TRUNCATE positions")
+    admin.execute("TRUNCATE positions CASCADE")   # CASCADE: real TeslaMate tables reference it
     assert 'name="odometer_km_2"' in client.get("/onedrive/import/1?sync=1").data.decode()
 
 

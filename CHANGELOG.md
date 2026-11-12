@@ -9,6 +9,12 @@ Each entry says what an installer must do to upgrade. Where nothing is said, pul
 
 ### Added
 
+- The app records the TeslaMate release it was tested with (4.4.0) and refuses to start if the
+  database is from a newer one, naming both. `ALLOW_UNTESTED_TESLAMATE=1` starts it anyway and logs an
+  error. It reads TeslaMate's `schema_migrations` table to tell: if you use `scripts/provision-db.sh`,
+  re-run it to grant that read.
+- `scripts/teslamate-compat.sh` tests this project against any TeslaMate release in a throwaway database,
+  and a weekly workflow does so for the latest release.
 - Docs and README: screenshots of the expense list, form, settings and Grafana dashboard.
 
 ## 0.2.0-rc5 - 2026-11-11

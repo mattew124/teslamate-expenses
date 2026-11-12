@@ -38,6 +38,10 @@ release that replaces them. One on a stable release is only told about stable re
 
 The app connects as `DATABASE_USER` with `DATABASE_PASS` to `DATABASE_NAME` on `DATABASE_HOST` (default `database`, the TeslaMate service name) and `DATABASE_PORT` (default `5432`). Set the last two in `.env` only if TeslaMate's database runs under another name or port.
 
+## TeslaMate version
+
+Each release is tested against one TeslaMate release (shown in the footer's release notes and in `tmexpenses/compat.py`). TeslaMate has no stable database schema, so on start the app compares the newest migration in TeslaMate's `schema_migrations` table with the one it was tested against. If the database is **newer**, the app stops with a message saying so; upgrade teslamate-expenses to a release that lists a newer TeslaMate. `ALLOW_UNTESTED_TESLAMATE=1` (in `.env`, restart to apply) starts it anyway and logs an error on every start; use it only for a short while, since a changed table can make pages or the dashboard wrong or fail. An older TeslaMate is not refused. If the role cannot read `schema_migrations`, the app warns and carries on.
+
 ## Logs
 
 `docker logs` shows gunicorn's request lines plus the app's own events. `LOG_LEVEL` (`debug`, `info` the default, `warning`, `error`; set in `.env`, restart to change) sets both. `info` records startup, the update check's result, schema changes, expenses saved, updated or deleted, and OneDrive sign-in and upload results. `debug` adds detail such as retries. Tokens, secrets, vendors, notes and amounts are never logged, except that file names, which can contain a vendor, appear at `debug`.

@@ -296,7 +296,7 @@ def test_ownership_view_without_purchase_or_data(admin):
     admin.execute("INSERT INTO positions (latitude, longitude, date, odometer, car_id) VALUES (0, 0, '2025-01-10 00:00', 2000, 1), (0, 0, '2025-02-10', 2600, 1)")
     r = admin.execute("SELECT * FROM expenses.ownership").fetchone()
     assert (r["tco"], r["start_km"], r["distance_km"]) == (0, 2000, 600)
-    admin.execute("TRUNCATE positions")
+    admin.execute("TRUNCATE positions CASCADE")   # CASCADE: real TeslaMate tables reference it
     r = admin.execute("SELECT * FROM expenses.ownership").fetchone()
     assert r["distance_km"] is None and r["owned_since"] is None
 
@@ -381,22 +381,6 @@ def test_settings_invoice_date_format(client, admin):
 
 
 # ---- the app sets up its own schema on start ---------------------------------
-
-@pytest.fixture()
-def blank_db(pg):
-    """A TeslaMate database as TeslaMate leaves it: its own tables, no `expenses` schema."""
-    import secrets
-    from tests.conftest import STUBS
-    name = f"blank_{secrets.token_hex(4)}"
-    with pg.admin() as conn:
-        conn.execute(f'CREATE DATABASE "{name}"')
-    url = f"postgresql://postgres:{pg.admin_pass}@127.0.0.1:{pg.port}/{name}"
-    with psycopg.connect(url, autocommit=True) as conn:
-        conn.execute(STUBS)
-    yield url
-    with pg.admin() as conn:
-        conn.execute(f'DROP DATABASE "{name}" WITH (FORCE)')
-
 
 def tables(url):
     with psycopg.connect(url) as conn:

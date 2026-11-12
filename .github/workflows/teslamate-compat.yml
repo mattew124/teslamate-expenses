@@ -1,0 +1,60 @@
+# TeslaMate has no stable database schema, so a new TeslaMate release can break this app
+# without any change here. Weekly, run the suite against the latest release's real schema,
+# and open (or update) one issue when it doesn't pass cleanly.
+# Exit 2 = passes but is newer than recorded: run scripts/teslamate-compat.sh VERSION --record.
+name: TeslaMate compatibility
+on:
+  schedule:
+    - cron: "43 20 * * 1"   # weekly, Monday morning in Australia (UTC)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  latest:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.15"
+      - run: python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+      - name: Test against the latest TeslaMate
+        id: compat
+        run: |
+          set +e
+          scripts/teslamate-compat.sh latest 2>&1 | tee compat.log
+          echo "status=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+      - name: Open or update the issue
+        if: steps.compat.outputs.status != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATUS: ${{ steps.compat.outputs.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Latest TeslaMate release needs attention"
+          if [ "$STATUS" = 2 ]; then
+              what="The tests pass on the latest TeslaMate, but it is newer than the one recorded in tmexpenses/compat.py, so the app refuses to run on it. Run \`scripts/teslamate-compat.sh latest --record\`, update the docs and CHANGELOG, and release."
+          else
+              what="The tests failed, or a table we read changed, on the latest TeslaMate. Reproduce with \`scripts/teslamate-compat.sh latest\`."
+          fi
+          body="$what
+
+          Run: $RUN_URL
+
+          \`\`\`
+          $(tail -n 40 compat.log)
+          \`\`\`"
+          existing="$(gh issue list --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+              gh issue comment "$existing" --body "$body"
+          else
+              gh issue create --title "$title" --body "$body"
+          fi
+          exit 1

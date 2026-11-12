@@ -8,6 +8,41 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 The tests load TeslaMate's real table definitions (`db/teslamate-schema.sql`), start the app so
 it creates its own schema, and also cover the optional `scripts/provision-db.sh` role.
 
+## Testing against a TeslaMate release
+
+TeslaMate can change its tables in any release, so each release of this app records the one it was
+tested with (`TESTED_TESLAMATE` and `TESTED_MIGRATION` in `tmexpenses/compat.py`) and refuses to
+start on a newer database. To try a new TeslaMate, with nothing but docker and the `.venv`:
+
+```bash
+scripts/teslamate-compat.sh 4.5.0            # or `latest`; defaults to the recorded release
+scripts/teslamate-compat.sh 4.5.0 --record   # after it passes: update the schema snapshot and compat.py
+```
+
+It starts a throwaway Postgres, lets the real `teslamate/teslamate` image migrate it, compares the
+tables we read with `db/teslamate-schema.sql`, runs the whole suite on that schema, and compares the
+newest migration with the recorded one. Exit status 0 means tested, 1 means a failure or a changed table,
+2 means it passes but is newer than recorded. A weekly *TeslaMate compatibility* workflow runs it against
+the latest release and opens an issue when it doesn't exit 0. After `--record`, update the CHANGELOG
+(an upgrade note) and the README line naming the tested release.
+
+## The TeslaMate project listing
+
+TeslaMate's "Projects using TeslaMate" page describes this app. The text we want there is
+`.github/teslamate-listing.md`, and its first line records a hash of the README's feature list
+that it was written against. A pull request that changes a feature bullet in the README fails
+`tests/test_listing.py` until you have checked the listing still describes the app (a new storage
+option, say), edited it if not, and set the hash the failure message gives.
+
+```bash
+scripts/teslamate-listing.sh check     # how TeslaMate's page differs from our entry (read-only)
+scripts/teslamate-listing.sh propose   # open or refresh the pull request on teslamate-org/teslamate
+```
+
+Proposing the change to TeslaMate is a step of the release process (RELEASING.md, step 7), run by
+hand after a stable release, not by CI: it publishes under your GitHub account. `propose` updates the
+same branch and pull request each time.
+
 ## Dev stack
 
 `scripts/dev.sh` runs the UI and Grafana on their own test database, not on the TeslaMate

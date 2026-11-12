@@ -69,9 +69,12 @@ def test_only_reads_from_the_seed_source():
         assert statement.startswith(("SELECT ", "COPY (SELECT ")), statement
         if statement.startswith("COPY"):
             assert statement.endswith("TO STDOUT"), statement
-    # The only other command against the source is the schema-only dump.
+    # The only other command against the source is the schema-only dump, in its own script.
     execs = [l for l in SCRIPT.splitlines() if "docker exec" in l and "SEED_FROM" in l]
-    assert len(execs) == 2 and "--schema-only" in execs[1]
+    assert len(execs) == 1
+    dump = (ROOT / "scripts" / "dump-teslamate-schema.sh").read_text()
+    (dump_exec,) = [l for l in dump.splitlines() if "docker exec" in l]
+    assert "--schema-only" in dump_exec
 
 
 def test_positions_are_hourly_and_stripped_of_location():
