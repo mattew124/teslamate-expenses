@@ -38,10 +38,11 @@
 
 5. **OneDrive (optional).** See [OneDrive uploads](onedrive.md).
 
-6. **Grafana.** The app writes its own dashboard, with your `APP_TZ` as its timezone (there's no timezone box; it's set in the compose file, as in TeslaMate), to
-    the `teslamate-expenses-dashboards` volume each time it starts, so the dashboard always matches
-    the version you run. Give TeslaMate's Grafana that volume and `grafana/provider.yml`, in
-    TeslaMate's compose file:
+6. **Grafana.** Each time it starts, the app writes its own dashboard to the
+    `teslamate-expenses-dashboards` volume, so the dashboard always matches the version you run. Its
+    timezone is your `APP_TZ` (there's no timezone box on the dashboard; it's set in the compose file,
+    as in TeslaMate). Give TeslaMate's Grafana that volume and `grafana/provider.yml`, in TeslaMate's
+    compose file:
 
     ```yaml
     services:
@@ -60,10 +61,13 @@
     docker compose up -d grafana
     ```
 
-    The dashboard appears under **Expenses** (datasource `TeslaMate`, tested on Grafana 13).
-    Provisioned dashboards can't be edited in Grafana; to customise, import
-    `grafana/cost-of-ownership.json` by hand instead (Dashboards → New → Import), set the
-    `tz` variable to your IANA zone (Dashboard settings → Variables) and save, and set `DASHBOARD_DIR=` empty in `.env`.
+    The dashboard appears under **Expenses** (datasource `TeslaMate`, tested on Grafana 13);
+    [What the dashboard counts](dashboard.md) explains it.
+
+    Provisioned dashboards can't be edited in Grafana. To customise it, import
+    `grafana/cost-of-ownership.json` by hand instead (Dashboards → New → Import), set the `tz`
+    variable to your IANA zone (Dashboard settings → Variables) and save, then set `DASHBOARD_DIR=`
+    empty in `.env` so the app stops writing its own copy.
 
 7. **Check the links.** On first start the app uses `FQDN_TM` to pre-fill its **Settings** page
     (the same idea as TeslaMate's): this app at `https://$FQDN_TM$BASE_PATH/` and the dashboard at
@@ -73,7 +77,7 @@
     to change them, and restarts never overwrite it. Without `FQDN_TM` they start empty, and you
     fill them in there.
 
-![The Settings page, with the app and dashboard addresses](images/settings-page.png)
+    ![The Settings page, with the app and dashboard addresses](images/settings-page.png)
 
 ## The database
 
