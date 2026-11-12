@@ -716,7 +716,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
         with connect() as conn:
             db.save_onedrive_account(conn, auth_state=None, auth_expires_at=None)
         if request.args.get("error"):
-            log.warning("Microsoft didn't connect OneDrive: %s", request.args["error"])
+            log.warning("Microsoft didn't connect OneDrive: %s", docinfo.quote(request.args["error"]))
             return render_storage(status=400, notice="Microsoft didn't connect OneDrive: "
                                    + (request.args.get("error_description") or request.args["error"]))
         try:
@@ -842,8 +842,9 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
             row["note"] = exc.user_message
             return row
         have, missing = docinfo.found(guess)
-        log.debug("import file=%s folder=%s size=%s sha256=%s found=%s missing=%s ms=%d", docinfo.quote(f["name"]),
-                  docinfo.quote(f["folder"]), f["size"], docinfo.sha12(pdf), have, missing, timer.ms)
+        # The bytes actually read, not the size the page sent back: that is only what the listing said.
+        log.debug("import file=%s folder=%s bytes=%d sha256=%s found=%s missing=%s ms=%d", docinfo.quote(f["name"]),
+                  docinfo.quote(f["folder"]), len(pdf), docinfo.sha12(pdf), have, missing, timer.ms)
         row.update(
             date=guess["date"].isoformat() if guess["date"] else "",
             category_id=str(by_name.get(guess["category"], "")),
@@ -1031,7 +1032,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
             car = car_or_404(car_id)
             n = request.form.get("n", type=int)
             f = {k: request.form.get(k, "") for k in ("id", "name", "folder", "url")}
-            f["size"] = request.form.get("size", "")
+            f["size"] = request.form.get("size", type=int)    # only logged; a number, so it can't forge a line
             if n is None or n < 0 or not f["id"] or not f["name"]:
                 abort(400)
             ctx = import_context(car_id, kind)

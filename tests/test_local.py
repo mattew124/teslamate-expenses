@@ -412,6 +412,16 @@ def test_preview_proposes_from_the_pdf_and_links_to_it(stocked, admin):
     assert stocked.get("/local/file", query_string={"path": TYRES}).data == b"%PDF-tyres"
 
 
+def test_a_forged_size_cant_add_a_line_to_the_log(stocked, caplog):
+    caplog.set_level("DEBUG", logger="tmexpenses")      # the app's own logger, where the read is logged
+    stocked.post("/local/import/1/read", headers=ORIGIN, data={
+        "n": "0", "id": TYRES, "url": TYRES, "name": "261024 - Tyres.pdf", "folder": "",
+        "size": "10\n2026-11-13 [ERROR] forged entry"})
+    logged = [r.getMessage() for r in caplog.records if "import file=" in r.getMessage()]
+    assert logged, "the read should be logged at debug"
+    assert not any("forged" in m for m in logged)
+
+
 def test_confirm_imports_ticked_rows_with_their_paths_and_only_once(stocked, admin):
     resp = stocked.post("/local/import/1", data=post_rows(admin), headers=ORIGIN)
     assert resp.status_code == 303 and "msg=imported" in resp.headers["Location"]

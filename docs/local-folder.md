@@ -83,6 +83,10 @@ to read and write the folder.
   export with `all_squash` writes everything as its `anonuid`/`anongid`, whoever the app runs as, so
   that user must own the folder.
 
+Invoices the app saves can be read by everyone on the server and written by their owner and group
+(`664`), never by everyone. The umask narrows that further: run the container with `umask 007` (or
+use `file_mode=0660` on a share) to keep them private to the owner and group.
+
 To run the app as another user, set these in `.env` and start it again:
 
 ```bash

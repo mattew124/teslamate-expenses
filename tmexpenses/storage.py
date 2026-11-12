@@ -23,11 +23,16 @@ import os
 import secrets
 from pathlib import Path
 
+from . import docinfo
+
 log = logging.getLogger("tmexpenses.storage")
 
 MAX_DEPTH = 4    # subfolders below a car's folder that are searched for PDFs
 MAX_PDF_BYTES = 20 * 1024 * 1024
 MAX_SUFFIX = 1000   # "name (999).pdf": far more clashes than one name will ever see
+# New invoice files: the folder's owner and group may write them, everyone else only read. The umask can
+# narrow this further; nothing the app saves is ever writable by everyone.
+FILE_MODE = 0o664
 
 
 class StorageError(Exception):
@@ -70,8 +75,9 @@ class OneDriveStore:
 
 
 def _plain_name(name):
+    """One file or folder name: no path separators, no control characters, not hidden."""
     return (isinstance(name, str) and name not in ("", ".", "..") and not name.startswith(".")
-            and "/" not in name and "\x00" not in name)
+            and "/" not in name and not any(ord(ch) < 32 or ord(ch) == 127 for ch in name))
 
 
 class LocalFolder:
@@ -206,7 +212,7 @@ class LocalFolder:
                 os.mkdir(target)
             except FileExistsError:
                 raise StorageError(f"A folder called “{name}” already exists here.") from None
-        log.debug("folder created name=%r parent=%s", name, self._id(root, parent))
+        log.debug("folder created name=%s parent=%s", docinfo.quote(name), docinfo.quote(self._id(root, parent)))
         return self.folder(self._id(root, Path(target)))
 
     def ensure_subfolder(self, parent_id, name):
@@ -235,7 +241,7 @@ class LocalFolder:
         tmp = folder / f".upload-{secrets.token_hex(8)}.tmp"
         with _os_errors("write"):
             try:
-                with open(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666), "wb") as handle:
+                with open(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, FILE_MODE), "wb") as handle:
                     handle.write(content)
                     handle.flush()
                     os.fsync(handle.fileno())
@@ -260,7 +266,7 @@ class LocalFolder:
             except FileExistsError:
                 raise StorageError(f"A file called “{new_name}” already exists there.") from None
             os.replace(path, target)
-        log.debug("rename item=%s to=%r", item_id, new_name)
+        log.debug("rename item=%s to=%s", docinfo.quote(item_id), docinfo.quote(new_name))
         return self._id(root, target)
 
     def pdfs(self, folder_id):
@@ -292,7 +298,7 @@ def _claim(folder, names):
     ours to move a file onto. Raises FileExistsError when every one is taken."""
     for name in names:
         try:
-            os.close(os.open(folder / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666))
+            os.close(os.open(folder / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, FILE_MODE))
         except FileExistsError:
             continue
         return folder / name

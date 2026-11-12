@@ -150,6 +150,27 @@ def test_upload_writes_the_file_and_leaves_no_temporary_file(local, root):
     assert (root / "Model 3" / "Tyres" / "261107 Tyres.pdf").read_bytes() == PDF
 
 
+def test_saved_files_are_never_writable_by_everyone_whatever_the_umask(local, root):
+    old = os.umask(0)
+    try:
+        ref = local.upload("/Model 3", "a.pdf", PDF)
+        local.upload("/Model 3", "a.pdf", PDF)              # through the name-claiming path too
+    finally:
+        os.umask(old)
+    for path in (root / "Model 3").glob("*.pdf"):
+        assert path.stat().st_mode & 0o002 == 0, (path.name, oct(path.stat().st_mode))
+    assert local.download(ref) == PDF
+
+
+def test_names_with_control_characters_are_refused(local, root):
+    for bad in ("a\nb", "tab\there", "bell\x07"):
+        with pytest.raises(storage.StorageError):
+            local.create_folder("/", bad)
+        with pytest.raises(storage.StorageError):
+            local.upload("/Model 3", bad + ".pdf", PDF)
+    assert sorted(p.name for p in root.iterdir()) == ["Model 3"]
+
+
 def test_a_name_clash_gets_a_suffix_and_never_overwrites(local, root):
     first = local.upload("/Model 3", "a.pdf", PDF)
     second = local.upload("/Model 3", "a.pdf", PDF + b"2")
