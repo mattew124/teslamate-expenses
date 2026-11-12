@@ -105,6 +105,19 @@ def test_create_folder_fails_on_a_name_that_is_taken_or_not_a_plain_name(local, 
     assert sorted(p.name for p in root.iterdir()) == ["Model 3"]
 
 
+def test_a_new_folder_name_that_resolves_out_of_the_folder_is_refused(local, root, tmp_path):
+    """A name already taken by a symlink that leads out: refused, and nothing is made where it points."""
+    (root / "Model 3" / "away").symlink_to(tmp_path / "outside", target_is_directory=True)
+    with pytest.raises(storage.StorageError):
+        local.create_folder("/Model 3", "away")
+    assert sorted(p.name for p in (tmp_path / "outside").iterdir()) == ["secret.pdf"]
+
+
+def test_an_error_carries_the_text_written_for_the_user():
+    err = storage.StorageError("Choose a folder first.")
+    assert err.user_message == "Choose a folder first." == str(err)
+
+
 def test_ensure_subfolder_finds_any_case_and_makes_what_is_missing(local, root):
     assert local.ensure_subfolder("/Model 3", "tyres") == "/Model 3/Tyres"
     assert local.ensure_subfolder("/Model 3", "Insurance") == "/Model 3/Insurance"

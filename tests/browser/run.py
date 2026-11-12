@@ -195,6 +195,9 @@ def picker_checks(page):
     page.goto(UI + "storage")
     if not page.locator("button:has-text('Disconnect')").count():
         raise Skip("dev stack isn't connected to OneDrive (scripts/dev.sh onedrive-link)")
+    # The form's picker opens whichever storage the car uses: only a car on OneDrive tests OneDrive's.
+    if not any(t.strip().startswith("OneDrive:") for t in page.locator("ul.folders small").all_inner_texts()):
+        raise Skip("no car uses a OneDrive folder (scripts/dev.sh onedrive-link)")
     page.goto(UI + "new")
     if not page.locator("select[name=car_id]").input_value():
         page.select_option("select[name=car_id]", index=1)

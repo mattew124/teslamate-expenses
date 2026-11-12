@@ -310,7 +310,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
             store, ref = upload_invoice(values, pdf)
         except storage.StorageError as exc:
             log.warning("invoice upload failed: %s", exc)
-            errors["invoice_file"] = str(exc)
+            errors["invoice_file"] = exc.user_message
             return values, errors
         # The new file is the expense's invoice, wherever the one before it was.
         values["invoice_url"] = values["invoice_path"] = None
@@ -724,7 +724,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
                                        request.args.get("code", ""), callback_url(), pending[1])
         except onedrive.OneDriveError as exc:
             log.warning("OneDrive sign-in failed: %s", exc)
-            return render_storage(status=400, notice=str(exc))
+            return render_storage(status=400, notice=exc.user_message)
         name = drive.account_name(tokens["access_token"]) or "your Microsoft account"
         with connect() as conn:
             db.save_onedrive_account(conn, refresh_token=drive.encrypt(tokens["refresh_token"]), account=name)
@@ -752,7 +752,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
             path = local.file(ref)
         except storage.StorageError as exc:
             log.warning("invoice not served: %s", exc)
-            return render_template("error.html", title="Invoice not found", text=str(exc)), 404
+            return render_template("error.html", title="Invoice not found", text=exc.user_message), 404
         resp = send_file(path, mimetype="application/pdf", download_name=path.name,
                          as_attachment=bool(request.args.get("download")))
         resp.headers["Cache-Control"] = "private, no-cache"   # the browser may keep it, but asks each time
@@ -783,10 +783,10 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
             return redirect(url_for("storage_page"), 303)
         except onedrive.SignInExpired as exc:
             log.warning("OneDrive sign-in has expired: %s", exc)
-            return render_storage(status=400, notice=str(exc))
+            return render_storage(status=400, notice=exc.user_message)
         except storage.StorageError as exc:
             log.warning("%s folder browse failed: %s", kind, exc)
-            return render_storage(status=502, notice=str(exc))
+            return render_storage(status=502, notice=exc.user_message)
         return render_template("browse.html", kind=kind, car=car, here=here, children=children,
                                is_root=folder_id is None or here["is_root"], error=error,
                                new_name=request.form.get("name", "") if error else ""), status
@@ -839,7 +839,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
                                      ctx["settings"]["multi_amount"])
         except storage.StorageError as exc:
             log.warning("import file=%s folder=%s skipped: %s", docinfo.quote(f["name"]), docinfo.quote(f["folder"]), exc)
-            row["note"] = str(exc)
+            row["note"] = exc.user_message
             return row
         have, missing = docinfo.found(guess)
         log.debug("import file=%s folder=%s size=%s sha256=%s found=%s missing=%s ms=%d", docinfo.quote(f["name"]),
@@ -940,7 +940,8 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
             except onedrive.NotConnected:
                 return redirect(url_for(page), 303)
             except (ValueError, storage.StorageError) as exc:
-                return render_browse(store, car, parent_id, error=str(exc), status=400)
+                said = exc.user_message if isinstance(exc, storage.StorageError) else str(exc)   # or the name's ValueError
+                return render_browse(store, car, parent_id, error=said, status=400)
             return redirect(url_for(f"{kind}_browse", car_id=car_id, folder=created["id"]), 303)
 
         @app.post(f"/{kind}/folders/<int:car_id>", endpoint=f"{kind}_choose_folder")
@@ -994,9 +995,9 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
             except onedrive.NotConnected:
                 return redirect(url_for(page), 303)
             except onedrive.SignInExpired as exc:
-                return render_storage(status=400, notice=str(exc))
+                return render_storage(status=400, notice=exc.user_message)
             except storage.StorageError as exc:
-                return render_storage(status=502, notice=str(exc))
+                return render_storage(status=502, notice=exc.user_message)
             return render_import(store, car, rows, remaining=len(pending) - len(rows), skipped=skipped, status=200,
                                  notice=None if files else "No PDFs found in that folder.")
 
@@ -1011,12 +1012,12 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
             try:
                 files, pending, skipped = pending_files(store, ctx, car_id)
             except onedrive.NotConnected as exc:
-                return jsonify(error=str(exc), url=url_for(page)), 409
+                return jsonify(error=exc.user_message, url=url_for(page)), 409
             except onedrive.SignInExpired as exc:
-                return jsonify(error=str(exc), url=url_for(page)), 400
+                return jsonify(error=exc.user_message, url=url_for(page)), 400
             except storage.StorageError as exc:
                 log.warning("import scan failed: %s", exc)
-                return jsonify(error=str(exc)), 502
+                return jsonify(error=exc.user_message), 502
             # Every file, not a batch: the page reads them one request at a time, so none waits on the others.
             log.debug("import scan car=%d listed=%d already_imported=%d skipped=%d pending=%d", car_id, len(files),
                       len(files) - len(pending) - skipped, skipped, len(pending))
@@ -1037,7 +1038,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
             try:
                 row = read_file(store, car, ctx, n, f)
             except storage.StorageError as exc:
-                row = import_row(n, name=f["name"], folder=f["folder"], url=f["url"], note=str(exc))
+                row = import_row(n, name=f["name"], folder=f["folder"], url=f["url"], note=exc.user_message)
             return render_template("_import_row.html", r=row, n=n, categories=ctx["categories"], errors={},
                                    kind=kind, link=store.link)
 
@@ -1137,17 +1138,17 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
                 folder = car_folder(conn, car_id, kind)
                 ready = connected(conn, kind)
             if not ready:
-                return jsonify(error=str(onedrive.NotConnected()), url=url_for(page)), 409
+                return jsonify(error=onedrive.NotConnected().user_message, url=url_for(page)), 409
             if not wanted and not folder:
                 return jsonify(error=info["choose_first"], url=url_for(page)), 409
             folder_id = None if wanted == "root" else (wanted or folder["folder_id"])
             try:
                 here, folders, files = store.contents(folder_id)
             except onedrive.SignInExpired as exc:
-                return jsonify(error=str(exc), url=url_for(page)), 409
+                return jsonify(error=exc.user_message, url=url_for(page)), 409
             except storage.StorageError as exc:
                 log.warning("%s file picker failed: %s", kind, exc)
-                return jsonify(error=str(exc)), 502
+                return jsonify(error=exc.user_message), 502
             return jsonify(id=here["id"], path=here["path"], parent_id=here["parent_id"], is_root=here["is_root"],
                            folders=folders, files=files)
 
@@ -1227,7 +1228,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
                 data = store_for(kind).download(request.form[f"{kind}_id"])
             except storage.StorageError as exc:
                 log.warning("prefill from %s failed: %s", STORES[kind]["label"], exc)
-                return jsonify(error=str(exc)), 502
+                return jsonify(error=exc.user_message), 502
         try:
             pdf = validation.parse_invoice_pdf(filename, data)
         except ValueError as exc:

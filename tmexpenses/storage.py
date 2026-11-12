@@ -31,7 +31,13 @@ MAX_SUFFIX = 1000   # "name (999).pdf": far more clashes than one name will ever
 
 
 class StorageError(Exception):
-    """Carries a message fit to show the user."""
+    """A failure to tell the person using the app about. `user_message` is the text written for them, and
+    the only part of an error a page or reply may show: never str() of it, which a subclass or a library
+    could fill with internals."""
+
+    def __init__(self, user_message):
+        super().__init__(user_message)
+        self.user_message = user_message
 
 
 class OneDriveStore:
@@ -190,13 +196,20 @@ class LocalFolder:
         root, parent = self._dir(parent_id)
         if not _plain_name(name):
             raise StorageError("That isn't a name a folder can have.")
+        if os.path.lexists(os.path.join(parent, name)):
+            raise StorageError(f"A folder called “{name}” already exists here.")
+        # The name comes from a form: resolve it and make sure it lands directly in the parent, as every
+        # other path here is checked against the root, before anything is made.
+        target = os.path.realpath(os.path.join(parent, name))
+        if not target.startswith(str(parent) + os.sep) or os.path.dirname(target) != str(parent):
+            raise StorageError("That isn't a name a folder can have.")
         with _os_errors("write"):
             try:
-                (parent / name).mkdir()
+                os.mkdir(target)
             except FileExistsError:
                 raise StorageError(f"A folder called “{name}” already exists here.") from None
         log.debug("folder created name=%r parent=%s", name, self._id(root, parent))
-        return self.folder(self._id(root, parent / name))
+        return self.folder(self._id(root, Path(target)))
 
     def ensure_subfolder(self, parent_id, name):
         """The folder called `name` (any case) directly inside parent_id, made if it isn't

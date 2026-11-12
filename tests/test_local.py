@@ -10,7 +10,7 @@ import psycopg
 import pytest
 from psycopg.rows import dict_row
 
-from tmexpenses import create_app, invoices
+from tmexpenses import create_app, invoices, storage
 from tests.test_app import ORIGIN, category_id, form, rows
 from tests.test_import import TEXT, TYRES_TEXT
 from tests.test_onedrive import KEY, choose_folder, ms, sign_in, with_pdf  # noqa: F401  (ms is a fixture)
@@ -311,6 +311,26 @@ def test_the_picker_starts_in_the_cars_folder_and_goes_up(client, admin, root):
     top = client.get("/api/local/browse/1?folder=root").get_json()
     assert top["is_root"] is True and top["parent_id"] is None and [f["name"] for f in top["folders"]] == ["Cars"]
     assert client.get("/api/local/browse/1?folder=/../x").status_code == 502
+
+
+class LeakyError(storage.StorageError):
+    """An error whose str() carries internals, as a library's might: only user_message may be shown."""
+
+    def __str__(self):
+        return "Traceback (most recent call last): /srv/tmexpenses/secret.py line 1"
+
+
+@pytest.mark.parametrize("call", ["picker", "scan", "prefill"])
+def test_an_error_reply_shows_only_the_text_written_for_the_user(client, root, monkeypatch, call):
+    choose(client)
+    for name in ("contents", "pdfs", "download"):
+        monkeypatch.setattr(storage.LocalFolder, name,
+                            lambda *a, **k: (_ for _ in ()).throw(LeakyError("The share is offline.")))
+    resp = {"picker": lambda: client.get("/api/local/browse/1"),
+            "scan": lambda: client.get("/local/import/1/scan"),
+            "prefill": lambda: client.post("/api/prefill", headers=ORIGIN,
+                                           data={"local_id": "/Cars/Test car/a.pdf", "name": "a.pdf"})}[call]()
+    assert resp.status_code == 502 and resp.get_json() == {"error": "The share is offline."}
 
 
 def test_the_picker_needs_a_folder_for_the_car(client):
