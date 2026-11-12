@@ -23,7 +23,8 @@ Each entry says what an installer must do to upgrade. Where nothing is said, pul
   (docs, "Invoice folder on the server"). To upgrade without it, pull the new image; the app adds two
   columns to its own tables on start. With a least-privilege role (`SKIP_MIGRATE=1`), re-run
   `scripts/provision-db.sh` as for any upgrade.
-- Docs and README: screenshots of the expense list, form, settings and Grafana dashboard.
+- Docs and README: screenshots of the expense list, form, settings, Grafana dashboard, the Invoice
+  storage page, the invoice folder window and the import preview.
 
 ## 0.2.0-rc5 - 2026-11-11
 

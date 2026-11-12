@@ -11,7 +11,7 @@ folder you chose for that car. Invoices already in the folder can be
 [imported](importing.md), with the same preview and learning. Both can be on at once: each car uses
 one or the other.
 
-<!-- screenshot: storage-page - The Invoice storage page, with the folder on the server and a folder chosen for a car -->
+![The Invoice storage page, with the folder on the server and a folder chosen for a car](images/storage-page.png)
 
 ## Turning it on
 
@@ -117,7 +117,7 @@ opens over the form, in the car's folder: open a folder to go into it, or **Up**
 far as the top of the mounted folder. Choosing a PDF makes it the expense's invoice and fills in the
 form from what can be read in it. Nothing is copied or moved.
 
-<!-- screenshot: local-folder-picker - The invoice folder window on the Add expense form, listing folders and PDFs -->
+![The invoice folder window on the Add expense form, listing folders and PDFs](images/local-folder-picker.png)
 
 **Opening an invoice.** The **PDF** link in the expense list opens it in the browser's own PDF
 viewer. The edit page shows the file's name, with a **Download** link beside it, and a box to remove

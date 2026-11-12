@@ -6,6 +6,7 @@ It only reads: no expense is added, edited or deleted. Files go to OUT, named af
 """
 
 import os
+import re
 
 from playwright.sync_api import expect, sync_playwright
 
@@ -41,6 +42,22 @@ def main():
         page.fill("[name=grafana_url]", "https://teslamate.example.com/grafana/d/tm-expenses-tco/cost-of-ownership")
         page.fill("[name=expenses_url]", "https://teslamate.example.com/expenses/")
         shot(page, "settings-page", full_page=True)
+
+        # Invoice storage. The OneDrive card's setup steps show this stack's own callback address:
+        # fold them away, as they are once OneDrive is set up.
+        page.goto(UI + "storage")
+        page.evaluate("document.querySelectorAll('details').forEach((d) => { d.open = false; })")
+        shot(page, "storage-page", full_page=True)
+        car = re.search(r"local/import/(\d+)", page.locator("a[href*='local/import/']").first.get_attribute("href")).group(1)
+        page.goto(UI + "new")
+        page.click("#onedrive-pick")
+        expect(page.locator("#onedrive-picker-path")).to_have_text("/Sample invoices")
+        expect(page.locator("#onedrive-picker-list li").first).to_be_visible()
+        shot(page, "local-folder-picker")
+        # The import preview of the made-up invoices `demo up` put in the folder. Nothing is imported.
+        page.goto(UI + f"local/import/{car}")
+        expect(page.locator("#import-status-text")).to_have_text(re.compile(r"^Read \d+ PDF"), timeout=180000)
+        shot(page, "import-preview", full_page=True)
 
         big = browser.new_context(viewport={"width": 1600, "height": 1800}, device_scale_factor=1,
                                   color_scheme="light", locale="en-AU")

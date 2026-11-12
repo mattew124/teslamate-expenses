@@ -70,8 +70,10 @@ SHOTS=.dev/screenshots; [ "$DEMO" = 0 ] || SHOTS=.dev/demo-screenshots
 INVOICES=.dev/invoices; [ "$DEMO" = 0 ] || INVOICES=.dev/demo-invoices
 DEV_UID="$(id -u)"; DEV_GID="$(id -g)"
 export DEV_UID DEV_GID DEV_INVOICES_DIR="$ROOT/$INVOICES"
-# Shown on the app's Invoice storage page. Not in the demo: its screenshots are published.
-[ "$DEMO" = 1 ] || export DEV_INVOICES_SHOWN="$ROOT/$INVOICES"
+# Shown on the app's Invoice storage page. The demo's screenshots are published, so it shows an
+# example path instead of this checkout's.
+export DEV_INVOICES_SHOWN="$ROOT/$INVOICES"
+[ "$DEMO" = 0 ] || export DEV_INVOICES_SHOWN=/mnt/nas/cars/invoices
 
 # ---- which dev stack this checkout owns ----------------------------------------
 
@@ -256,6 +258,11 @@ SQL
 demo_data() {
     dev_psql < scripts/demo-seed.sql
     dev_psql -v "tz=$APP_TZ" < scripts/dev-sample-expenses.sql
+    # Made-up invoices in the invoice folder, and each car pointed at them, for the import screenshots.
+    python3 scripts/dev-sample-invoices.py "$ROOT/$INVOICES" >/dev/null
+    dev_psql -c "INSERT INTO expenses.car_folder (car_id, folder_id, folder_path, backend)
+                 SELECT id, '/Sample invoices', '/Sample invoices', 'local' FROM public.cars
+                 ON CONFLICT (car_id) DO NOTHING"
     # The app works out the dashboard's time range from the data at start-up, and started with none.
     compose restart expenses-dev >/dev/null
     compose up -d --wait >/dev/null
