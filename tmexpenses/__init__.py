@@ -16,12 +16,12 @@ from datetime import date, datetime, time as dtime, timedelta, timezone
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
-from flask import Flask, abort, g, jsonify, make_response, redirect, render_template, request, url_for
+from flask import Flask, abort, g, jsonify, make_response, redirect, render_template, request, send_file, url_for
 
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from . import dashboard, db, docinfo, icons, invoices, logs, onedrive, updates, validation
+from . import dashboard, db, docinfo, icons, invoices, logs, onedrive, storage, updates, validation
 
 log = logging.getLogger("tmexpenses.app")
 
@@ -29,14 +29,16 @@ MESSAGES = {
     "saved": "Expense saved.",
     "updated": "Expense updated.",
     "deleted": "Expense deleted.",
-    "saved_uploaded": "Expense saved. The invoice was uploaded to OneDrive and linked.",
-    "updated_uploaded": "Expense updated. The invoice was uploaded to OneDrive and linked.",
-    "updated_replaced": "Expense updated. The invoice link now points to the new upload; the previous file "
-                        "is still in OneDrive.",
-    "saved_not_uploaded": "Expense saved, but the invoice PDF was not uploaded: OneDrive isn't set up for this "
-                          "car. Set it up on the OneDrive page, then edit the expense to upload it.",
-    "updated_not_uploaded": "Expense updated, but the invoice PDF was not uploaded: OneDrive isn't set up for "
-                            "this car. Set it up on the OneDrive page, then upload it again.",
+    "saved_uploaded": "Expense saved. The invoice was saved in the car's folder and linked.",
+    "updated_uploaded": "Expense updated. The invoice was saved in the car's folder and linked.",
+    "updated_replaced": "Expense updated. It now points to the new invoice; the previous file is still "
+                        "where it was.",
+    "saved_not_uploaded": "Expense saved, but the invoice PDF was not uploaded: nowhere is set up for this "
+                          "car's invoices. Choose its folder on the Invoice storage page, then edit the expense "
+                          "to upload it.",
+    "updated_not_uploaded": "Expense updated, but the invoice PDF was not uploaded: nowhere is set up for "
+                            "this car's invoices. Choose its folder on the Invoice storage page, then upload "
+                            "it again.",
     "category": "Category added.",
     "settings": "Settings saved.",
     "folders": "Folders saved.",
@@ -57,7 +59,17 @@ IMPORT_BATCH = 10
 IMPORT_BUDGET_SECONDS = 75
 # Fields of an import row compared with what the owner submits, to learn from corrections.
 LEARN_FIELDS = ("date", "category_id", "vendor", "amount", "odometer_km")
-
+# The places invoices can be kept, as the pages name them. All are set up on the one Invoice storage
+# page, each in its own card (templates/_storage_<kind>.html); another provider is another entry here,
+# a store for it in storage.py and its card.
+STORES = {
+    "local": {"label": "the invoice folder", "title": "Folder on this server", "short": "server folder",
+              "where": "the car's invoice folder",
+              "choose_first": "Choose a folder for this car on the Invoice storage page first."},
+    "onedrive": {"label": "OneDrive", "title": "OneDrive", "short": "OneDrive folder",
+                 "where": "the car's OneDrive folder",
+                 "choose_first": "Choose a OneDrive folder for this car on the Invoice storage page first."},
+}
 
 
 class PrefixMiddleware:
@@ -120,6 +132,17 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
         drive = onedrive.OneDrive(os.environ["EXPENSES_ENCRYPTION_KEY"], onedrive_transport)
     elif os.environ.get("ONEDRIVE_TOKEN_KEY"):
         log.warning("ONEDRIVE_TOKEN_KEY was renamed EXPENSES_ENCRYPTION_KEY; OneDrive stays off until it is set.")
+    # INVOICES_DIR turns on keeping invoices in a folder on the server: a host folder (a NAS share,
+    # say) mounted into the container. The app serves those PDFs itself, at /invoice/<id>.
+    local = None
+    invoices_dir = os.environ.get("INVOICES_DIR", "").strip()
+    if invoices_dir:
+        local = storage.LocalFolder(invoices_dir, link=lambda ref: url_for("local_file", path=ref))
+        # Only for showing: where that folder is on the server itself, which the container can't see.
+        local_shown = (os.environ.get("INVOICES_HOST_DIR", "").strip() or invoices_dir).rstrip("/")
+        if not local.available():
+            log.warning("INVOICES_DIR %s isn't there (not mounted?): invoices can't be saved or shown until it is",
+                        invoices_dir)
     # The image is built with its release version in APP_VERSION; anything else is a development build.
     version = os.environ.get("APP_VERSION", "")
     update_check = updates.UpdateCheck(version, fetch=release_fetch,
@@ -132,8 +155,9 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
     # The proxy's scheme and host, so the OneDrive callback address is the
     # public one. The app is only reachable through the proxy (or on loopback).
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=0, x_proto=1, x_host=1)
-    log.info("started: version=%s tz=%s base_path=%s onedrive=%s update_check=%s", version or "dev", tz,
-             base_path or "/", "on" if drive else "off", "on" if update_check.active else "off")
+    log.info("started: version=%s tz=%s base_path=%s onedrive=%s invoice_folder=%s update_check=%s", version or "dev",
+             tz, base_path or "/", "on" if drive else "off", "on" if local else "off",
+             "on" if update_check.active else "off")
     update_check.status()    # starts the first check now, so the footer knows by the first page
 
     # ---- helpers --------------------------------------------------------------
@@ -187,9 +211,10 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
     def onedrive_flag():
         # `storage` is the provider the app is set up with: its name and icon for the pages. Another
         # provider (Google Drive, say) is another entry here, not another edit to every template.
-        storage = {"name": "OneDrive", "icon": url_for("provider_icon", name="onedrive"),
-                   "credit": icons.CREDIT} if drive else None
-        return {"onedrive_enabled": drive is not None, "storage": storage, "icon_credit": icons.CREDIT}
+        provider = {"name": "OneDrive", "icon": url_for("provider_icon", name="onedrive"),
+                    "credit": icons.CREDIT} if drive else None
+        return {"onedrive_enabled": drive is not None, "local_enabled": local is not None,
+                "uploads_enabled": bool(drive or local), "storage": provider, "icon_credit": icons.CREDIT}
 
     @app.context_processor
     def footer():
@@ -225,7 +250,11 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
     def form_context(values=None, errors=None, expense_id=None):
         with connect() as conn:
             account = db.onedrive_account(conn) if drive else None
+            folders = db.car_folders(conn)
             return {
+                # Which storage each car's invoices go to, for the file picker: only where it can be used.
+                "car_storage": {car_id: f["backend"] for car_id, f in folders.items() if store_for(f["backend"])},
+                "default_storage": "onedrive" if drive else "local",
                 "cars": db.cars(conn),
                 "categories": db.categories(conn),
                 "values": values or {},
@@ -256,7 +285,9 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
                 log.debug("duplicate check: %d possible duplicate(s) of car=%d, held for confirmation", len(matches),
                           values["car_id"])
                 return values, {"_duplicates": dup_view(matches)}
-        if drive is None:
+        if form.get("remove_invoice"):
+            values["invoice_path"] = None       # the file itself stays in the folder
+        if not (drive or local):
             return values, errors
         upload = request.files.get("invoice_file")
         try:
@@ -270,18 +301,38 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
             errors["invoice_file"] = "Fix the fields above, then choose the PDF again."
             return values, errors
         if not upload_ready(values["car_id"]):
-            # OneDrive not connected, or no folder for this car: that must not stop the expense being saved.
-            log.info("invoice upload skipped: OneDrive isn't set up for car %s", values["car_id"])
+            # No folder for this car, or its storage isn't connected: that must not stop the expense being saved.
+            log.info("invoice upload skipped: no invoice storage is set up for car %s", values["car_id"])
             g.invoice_note = "not_uploaded"
             return values, errors
+        had_invoice = bool(values["invoice_url"] or values["invoice_path"])
         try:
-            g.invoice_note = "replaced" if request.form.get("invoice_url") else "uploaded"
-            values["invoice_url"] = upload_invoice(values, pdf)
-            log.info("invoice uploaded to OneDrive (%d bytes)", len(pdf))
-        except onedrive.OneDriveError as exc:
-            log.warning("invoice upload to OneDrive failed: %s", exc)
+            store, ref = upload_invoice(values, pdf)
+        except storage.StorageError as exc:
+            log.warning("invoice upload failed: %s", exc)
             errors["invoice_file"] = str(exc)
+            return values, errors
+        # The new file is the expense's invoice, wherever the one before it was.
+        values["invoice_url"] = values["invoice_path"] = None
+        values[store.ref_field] = ref
+        g.invoice_note = "replaced" if had_invoice else "uploaded"
+        log.info("invoice uploaded to %s (%d bytes)", store.name, len(pdf))
         return values, errors
+
+    def store_for(kind):
+        """The storage of that kind, or None when this installation doesn't have it."""
+        if kind == "onedrive" and drive is not None:
+            return storage.OneDriveStore(drive, access_token)
+        return local if kind == "local" else None
+
+    def car_folder(conn, car_id, kind):
+        """The car's folder, if it is in that storage."""
+        folder = db.car_folders(conn).get(car_id)
+        return folder if folder and folder["backend"] == kind else None
+
+    def connected(conn, kind):
+        """Ready to use? OneDrive needs a sign-in; the folder on the server needs nothing."""
+        return kind == "local" or bool((db.onedrive_account(conn) or {}).get("refresh_token"))
 
     kept = {}   # this worker's access token: {"key": the stored refresh token it came with, "token", "until"}
 
@@ -311,9 +362,10 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
         return tokens["access_token"]
 
     def upload_ready(car_id):
+        """Has this car a folder, in a storage this installation has and can use right now?"""
         with connect() as conn:
-            connected = (db.onedrive_account(conn) or {}).get("refresh_token")
-            return bool(connected and db.car_folders(conn).get(car_id))
+            folder = db.car_folders(conn).get(car_id)
+            return bool(folder and store_for(folder["backend"]) and connected(conn, folder["backend"]))
 
     def saved_msg(base):
         """The notice after saving: says what happened to an uploaded invoice, if one was chosen."""
@@ -325,33 +377,32 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
         return base + "_uploaded" if note else base
 
     def upload_invoice(values, pdf):
+        """Save the PDF in the car's folder, in its category's subfolder. -> (the storage it went to,
+        the file's reference there)."""
         with connect() as conn:
             folder = db.car_folders(conn).get(values["car_id"])
+            store = store_for(folder["backend"]) if folder else None
             category_row = next(c for c in db.categories(conn) if c["id"] == values["category_id"])
             category = category_row["name"]
-            connected = (db.onedrive_account(conn) or {}).get("refresh_token")
             settings_row = db.get_settings(conn)
             car_name = next((c["name"] for c in db.cars(conn) if c["id"] == values["car_id"]), None)
-        if not connected:
-            raise onedrive.NotConnected()
-        if not folder:
-            raise onedrive.OneDriveError("Choose a OneDrive folder for this car on the OneDrive page first.")
+        if store is None:      # parse() checks upload_ready first; the folder was cleared in between
+            raise storage.StorageError("Choose a folder for this car on the Invoice storage page first.")
         name = validation.invoice_filename(
             values["occurred_at"], category, values["vendor"], settings_row["invoice_date_format"],
             settings_row["invoice_name_format"], car=car_name, amount=values["amount"])
         timer = docinfo.Timer()
-        token = access_token()
         subfolder = validation.safe_folder_name(category_row["upload_folder"] or category)
-        link = drive.upload(token, drive.ensure_subfolder(token, folder["folder_id"], subfolder), name, pdf)
-        log.debug("upload name=%s subfolder=%s bytes=%d sha256=%s category=%r ms=%d",
-                  docinfo.quote(name), subfolder, len(pdf), docinfo.sha12(pdf), category, timer.ms)
-        return link
+        ref = store.upload(store.ensure_subfolder(folder["folder_id"], subfolder), name, pdf)
+        log.debug("upload name=%s to=%s subfolder=%s bytes=%d sha256=%s category=%r ms=%d", docinfo.quote(name),
+                  store.kind, subfolder, len(pdf), docinfo.sha12(pdf), category, timer.ms)
+        return store, ref
 
     def form_values(form):
         """Echo the raw submission back into the form after a validation error."""
         return {k: form.get(k, "") for k in (
             "car_id", "category_id", "date", "time", "amount", "odometer_km",
-            "vendor", "notes", "invoice_url")}
+            "vendor", "notes", "invoice_url", "invoice_path")}
 
     # ---- routes ---------------------------------------------------------------
 
@@ -425,7 +476,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
         n, renamed, failed = (request.args.get(k, 0, type=int) for k in ("n", "renamed", "rename_failed"))
         text = f"Imported {n} invoice{'' if n == 1 else 's'}." if n else MESSAGES["imported"]
         if renamed:
-            text += f" Renamed {renamed} in OneDrive."
+            text += f" Renamed {renamed}{'' if request.args.get('store') == 'local' else ' in OneDrive'}."
         if failed:
             text += f" Couldn't rename {failed} (a file with that name may already exist): imported with the old name."
         return text
@@ -472,7 +523,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
             "amount": f"{row['amount']:.2f}",
             "odometer_km": "" if row["odometer_km"] is None else f"{row['odometer_km']:.1f}",
             "vendor": row["vendor"] or "", "notes": row["notes"] or "",
-            "invoice_url": row["invoice_url"] or "",
+            "invoice_url": row["invoice_url"] or "", "invoice_path": row["invoice_path"] or "",
         }
         return render_template("form.html", **form_context(values, expense_id=expense_id))
 
@@ -568,27 +619,40 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
             abort(404)
         return car
 
+    @app.get("/storage")
+    def storage_page():
+        return render_storage()
+
     @app.get("/onedrive")
     def onedrive_page():
-        return render_onedrive()
+        """Where OneDrive was set up before every storage shared one page: old links still arrive."""
+        return redirect(url_for("storage_page"), 302)
 
-    def render_onedrive(errors=None, status=200, notice=None):
-        message = MESSAGES.get(request.args.get("msg", ""))
-        if drive is None:
-            return render_template("onedrive.html", message=message), status
+    def render_storage(errors=None, status=200, notice=None):
+        """The one page for everywhere invoices can be kept: a card to set up each place, then the
+        folder each car uses. `providers` is what the page loops over, in STORES' order."""
+        account = None
         with connect() as conn:
-            account = db.onedrive_account(conn)
             cars, folders = db.cars(conn), db.car_folders(conn)
             settings_row = db.get_settings(conn)
+            if drive is not None:
+                account = db.onedrive_account(conn)
         expires = account and account["secret_expires"]
+        # ready: a car's folder can be chosen there now (the folder is mounted; OneDrive is signed in).
+        ready = {"local": local is not None and local.available(),
+                 "onedrive": bool(account and account["refresh_token"])}
+        providers = [{"kind": kind, **info, "enabled": store_for(kind) is not None, "ready": ready[kind]}
+                     for kind, info in STORES.items()]
         ctx = {
-            "account": account, "cars": cars, "folders": folders,
-            "connected": bool(account and account["refresh_token"]),
-            "callback_url": callback_url(), "errors": errors or {}, "name_example": name_example(settings_row),
-            "values": request.form if errors else {}, "message": message, "notice": notice,
+            "providers": providers, "cars": cars, "folders": folders, "account": account,
+            "connected": ready["onedrive"], "callback_url": callback_url() if drive is not None else None,
+            "errors": errors or {}, "values": request.form if errors else {}, "notice": notice,
+            "message": MESSAGES.get(request.args.get("msg", "")), "name_example": name_example(settings_row),
             "secret_days_left": (expires - date.today()).days if expires else None,
+            "available": ready["local"], "root": str(local.root) if local else None,
+            "local_shown": local_shown if local else None,
         }
-        return render_template("onedrive.html", **ctx), status
+        return render_template("storage.html", **ctx), status
 
     @app.post("/onedrive/credentials")
     def onedrive_credentials():
@@ -604,12 +668,12 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
         if not secret:
             errors["client_secret"] = "Paste the client secret's Value (not its Secret ID)."
         if errors:
-            return render_onedrive(errors, 400)
+            return render_storage(errors, 400)
         with connect() as conn:
             # A new registration can't use the old one's sign-in.
             db.save_onedrive_account(conn, client_secret=drive.encrypt(secret), refresh_token=None,
                                      account=None, auth_state=None, auth_expires_at=None, **fields)
-        return redirect(url_for("onedrive_page", msg="credentials"), 303)
+        return redirect(url_for("storage_page", msg="credentials"), 303)
 
     @app.post("/onedrive/connect")
     def onedrive_connect():
@@ -617,7 +681,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
         with connect() as conn:
             account = db.onedrive_account(conn)
         if not account or not account["client_id"]:
-            return redirect(url_for("onedrive_page"), 303)
+            return redirect(url_for("storage_page"), 303)
         state, verifier, challenge = onedrive.new_pkce()
         with connect() as conn:
             db.save_onedrive_account(
@@ -646,26 +710,26 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
         if (not pending or account["auth_expires_at"] < datetime.now(timezone.utc)
                 or not hmac.compare_digest(pending[0], state)
                 or not hmac.compare_digest(request.cookies.get(STATE_COOKIE, ""), state)):
-            return render_onedrive(status=400, notice=(
+            return render_storage(status=400, notice=(
                 "This sign-in wasn't started from this browser, or took longer than "
                 f"{SIGN_IN_MINUTES} minutes. Press Connect OneDrive to try again."))
         with connect() as conn:
             db.save_onedrive_account(conn, auth_state=None, auth_expires_at=None)
         if request.args.get("error"):
             log.warning("Microsoft didn't connect OneDrive: %s", request.args["error"])
-            return render_onedrive(status=400, notice="Microsoft didn't connect OneDrive: "
+            return render_storage(status=400, notice="Microsoft didn't connect OneDrive: "
                                    + (request.args.get("error_description") or request.args["error"]))
         try:
             tokens = drive.redeem_code(account["client_id"], drive.decrypt(account["client_secret"]),
                                        request.args.get("code", ""), callback_url(), pending[1])
         except onedrive.OneDriveError as exc:
             log.warning("OneDrive sign-in failed: %s", exc)
-            return render_onedrive(status=400, notice=str(exc))
+            return render_storage(status=400, notice=str(exc))
         name = drive.account_name(tokens["access_token"]) or "your Microsoft account"
         with connect() as conn:
             db.save_onedrive_account(conn, refresh_token=drive.encrypt(tokens["refresh_token"]), account=name)
         log.info("OneDrive connected")
-        resp = redirect(url_for("onedrive_page", msg="connected"), 303)
+        resp = redirect(url_for("storage_page", msg="connected"), 303)
         resp.delete_cookie(STATE_COOKIE, path=request.script_root or "/")
         return resp
 
@@ -675,109 +739,105 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
         with connect() as conn:
             db.save_onedrive_account(conn, refresh_token=None, account=None)
         log.info("OneDrive disconnected")
-        return redirect(url_for("onedrive_page", msg="disconnected"), 303)
+        return redirect(url_for("storage_page", msg="disconnected"), 303)
 
-    @app.get("/onedrive/browse/<int:car_id>")
-    def onedrive_browse(car_id):
-        need_drive()
-        return render_browse(car_or_404(car_id), request.args.get("folder") or None)
+    # ---- the invoice folder on the server ---------------------------------------
 
-    def render_browse(car, folder_id, error=None, status=200):
+    def send_invoice(ref):
+        """A PDF from the invoice folder, shown in the browser's own viewer (?download=1 saves it
+        instead). The folder is behind the same forward-auth as every other page."""
+        if local is None:
+            abort(404)
         try:
-            token = access_token()
-            here = drive.folder(token, folder_id)
-            children = drive.subfolders(token, folder_id)
+            path = local.file(ref)
+        except storage.StorageError as exc:
+            log.warning("invoice not served: %s", exc)
+            return render_template("error.html", title="Invoice not found", text=str(exc)), 404
+        resp = send_file(path, mimetype="application/pdf", download_name=path.name,
+                         as_attachment=bool(request.args.get("download")))
+        resp.headers["Cache-Control"] = "private, no-cache"   # the browser may keep it, but asks each time
+        return resp
+
+    @app.get("/invoice/<int:expense_id>")
+    def invoice(expense_id):
+        """The expense's stored invoice: what the list and the Grafana dashboard link to."""
+        with connect() as conn:
+            row = load_or_404(conn, expense_id)
+        if not row["invoice_path"]:
+            abort(404)
+        return send_invoice(row["invoice_path"])
+
+    @app.get("/local/file")
+    def local_file():
+        """A PDF in the folder that has no expense yet (the import page links to these)."""
+        return send_invoice(request.args.get("path", ""))
+
+    # ---- what both storages do: a folder per car, importing, the file picker -------
+
+    def render_browse(store, car, folder_id, error=None, status=200):
+        kind = store.kind
+        try:
+            here = store.folder(folder_id)
+            children = store.subfolders(folder_id)
         except onedrive.NotConnected:
-            return redirect(url_for("onedrive_page"), 303)
+            return redirect(url_for("storage_page"), 303)
         except onedrive.SignInExpired as exc:
             log.warning("OneDrive sign-in has expired: %s", exc)
-            return render_onedrive(status=400, notice=str(exc))
-        except onedrive.OneDriveError as exc:
-            log.warning("OneDrive folder browse failed: %s", exc)
-            return render_onedrive(status=502, notice=str(exc))
-        return render_template("browse.html", car=car, here=here, children=children,
-                               is_root=folder_id is None, error=error,
+            return render_storage(status=400, notice=str(exc))
+        except storage.StorageError as exc:
+            log.warning("%s folder browse failed: %s", kind, exc)
+            return render_storage(status=502, notice=str(exc))
+        return render_template("browse.html", kind=kind, car=car, here=here, children=children,
+                               is_root=folder_id is None or here["is_root"], error=error,
                                new_name=request.form.get("name", "") if error else ""), status
-
-    @app.post("/onedrive/browse/<int:car_id>/new-folder")
-    def onedrive_new_folder(car_id):
-        need_drive()
-        car = car_or_404(car_id)
-        parent_id = request.form.get("parent_id") or None
-        try:
-            name = validation.parse_folder_name(request.form.get("name"))
-            created = drive.create_folder(access_token(), parent_id, name)
-        except onedrive.NotConnected:
-            return redirect(url_for("onedrive_page"), 303)
-        except (ValueError, onedrive.OneDriveError) as exc:
-            return render_browse(car, parent_id, error=str(exc), status=400)
-        return redirect(url_for("onedrive_browse", car_id=car_id, folder=created["id"]), 303)
-
-    @app.post("/onedrive/folders/<int:car_id>")
-    def onedrive_choose_folder(car_id):
-        need_drive()
-        car_or_404(car_id)
-        try:
-            chosen = drive.folder(access_token(), request.form.get("folder_id") or None)
-        except onedrive.OneDriveError as exc:
-            log.warning("OneDrive folder choice failed: %s", exc)
-            return render_onedrive(status=400, notice=f"Couldn't use that folder: {exc}")
-        with connect() as conn:
-            db.set_car_folder(conn, car_id, chosen["id"], chosen["path"])
-        return redirect(url_for("onedrive_page", msg="folders"), 303)
-
-    @app.post("/onedrive/folders/<int:car_id>/clear")
-    def onedrive_clear_folder(car_id):
-        need_drive()
-        car_or_404(car_id)
-        with connect() as conn:
-            db.clear_car_folder(conn, car_id)
-        return redirect(url_for("onedrive_page", msg="folders"), 303)
-
-    # ---- import existing invoices from the car's OneDrive folder --------------
 
     def import_row(n, **fields):
         return {"n": n, "include": False, "skip": False, "date": "", "category_id": "", "vendor": "",
                 "amount": "", "odometer_km": "", "url": "", "name": "", "folder": "",
                 "note": "", "id": "", "guess": {}, "new_name": "", "rename": False, "odo_note": "", "duplicates": [], **fields}
 
-    def render_import(car, rows, remaining=0, errors=None, status=200, notice=None, skipped=None):
+    def import_page(store, car, **ctx):
+        """The import page's template with what every version of it needs. A row's `url` is the file's
+        reference (what the expense will store); `link` turns it into an address to open."""
+        return render_template("import.html", car=car, kind=store.kind, info=STORES[store.kind], link=store.link,
+                               learn_after=invoices.LEARN_AFTER, **ctx)
+
+    def render_import(store, car, rows, remaining=0, errors=None, status=200, notice=None, skipped=None):
         with connect() as conn:
             categories = db.categories(conn)
             if skipped is None:
                 skipped = len(db.skipped_import_urls(conn, car["id"]))
-        return render_template("import.html", car=car, rows=rows, remaining=remaining,
-                               errors=errors or {}, categories=categories, notice=notice, skipped=skipped,
-                               learn_after=invoices.LEARN_AFTER), status
+        return import_page(store, car, rows=rows, remaining=remaining, errors=errors or {}, categories=categories,
+                           notice=notice, skipped=skipped), status
 
-    def import_context(car_id):
+    def import_context(car_id, kind):
         """What reading a file needs: the folder, category names, learned labels and settings."""
         with connect() as conn:
-            return {"folder": db.car_folders(conn).get(car_id), "categories": db.categories(conn),
+            return {"folder": car_folder(conn, car_id, kind), "categories": db.categories(conn),
                     "learned": db.learned(conn, invoices.LEARN_AFTER), "settings": db.get_settings(conn),
-                    "connected": bool((db.onedrive_account(conn) or {}).get("refresh_token"))}
+                    "connected": connected(conn, kind)}
 
-    def pending_files(token, ctx, car_id):
+    def pending_files(store, ctx, car_id):
         """-> (all PDFs in the folder, those with no expense yet and not skipped, how many were skipped)."""
-        files = drive.pdfs(token, ctx["folder"]["folder_id"])
+        files = store.pdfs(ctx["folder"]["folder_id"])
         with connect() as conn:
-            known = db.known_invoice_urls(conn, [f["web_url"] for f in files])
+            known = db.known_invoices(conn, [f["web_url"] for f in files])
             skipped = db.skipped_import_urls(conn, car_id)
         left = [f for f in files if f["web_url"] not in known]
         pending = [f for f in left if f["web_url"] not in skipped]
         return files, pending, len(left) - len(pending)
 
-    def read_file(token, car, ctx, n, f):
-        """Download one PDF and propose its expense: an import row. A file that can't be fetched
+    def read_file(store, car, ctx, n, f):
+        """Read one PDF and propose its expense: an import row. A file that can't be fetched
         becomes a row saying why, never an error for the whole page."""
         by_name = {c["name"]: c["id"] for c in ctx["categories"]}
         row = import_row(n, url=f["url"], name=f["name"], folder=f["folder"], id=f["id"])
         timer = docinfo.Timer()
         try:
-            pdf = drive.download(token, f["id"])
+            pdf = store.download(f["id"])
             guess = invoices.propose(f["folder"], f["name"], invoices.extract_text(pdf), list(by_name), ctx["learned"],
                                      ctx["settings"]["multi_amount"])
-        except onedrive.OneDriveError as exc:
+        except storage.StorageError as exc:
             log.warning("import file=%s folder=%s skipped: %s", docinfo.quote(f["name"]), docinfo.quote(f["folder"]), exc)
             row["note"] = str(exc)
             return row
@@ -818,99 +878,11 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
     def file_entry(f):
         return {"id": f["id"], "name": f["name"], "folder": f["folder"], "url": f["web_url"], "size": f["size"]}
 
-    @app.get("/onedrive/import/<int:car_id>")
-    def onedrive_import(car_id):
-        """The page comes up at once, with a progress bar: its script then asks for the file list
-        (/scan) and for each file in turn (/read), so nothing waits on OneDrive or OCR. With
-        ?sync=1 (no JavaScript) everything is read before the page is sent."""
-        need_drive()
-        car = car_or_404(car_id)
-        ctx = import_context(car_id)
-        if not ctx["folder"] or not ctx["connected"]:
-            return redirect(url_for("onedrive_page"), 303)
-        if not request.args.get("sync"):
-            with connect() as conn:
-                skipped = len(db.skipped_import_urls(conn, car_id))
-            return render_template("import.html", car=car, rows=[], remaining=0, errors={}, scanning=True, skipped=skipped,
-                                   categories=ctx["categories"], notice=None, learn_after=invoices.LEARN_AFTER)
-        try:
-            token = access_token()
-            files, pending, skipped = pending_files(token, ctx, car_id)
-            log.debug("import scan car=%d listed=%d already_imported=%d pending=%d batch=%d", car_id, len(files),
-                      len(files) - len(pending), len(pending), min(len(pending), IMPORT_BATCH))
-            rows, round_timer = [], docinfo.Timer()
-            for n, f in enumerate(pending[:IMPORT_BATCH]):
-                if n and round_timer.ms > IMPORT_BUDGET_SECONDS * 1000:
-                    log.debug("import scan stopped after %d files: over the %ds budget", n, IMPORT_BUDGET_SECONDS)
-                    break
-                rows.append(read_file(token, car, ctx, n, file_entry(f)))
-        except onedrive.NotConnected:
-            return redirect(url_for("onedrive_page"), 303)
-        except onedrive.SignInExpired as exc:
-            return render_onedrive(status=400, notice=str(exc))
-        except onedrive.OneDriveError as exc:
-            return render_onedrive(status=502, notice=str(exc))
-        return render_import(car, rows, remaining=len(pending) - len(rows), skipped=skipped, status=200,
-                             notice=None if files else "No PDFs found in that folder.")
-
-    @app.get("/onedrive/import/<int:car_id>/scan")
-    def onedrive_import_scan(car_id):
-        """The files still to import, listed but not read: {listed, already_imported, remaining, files}."""
-        need_drive()
-        car_or_404(car_id)
-        ctx = import_context(car_id)
-        if not ctx["folder"]:
-            return jsonify(error="Choose a OneDrive folder for this car on the OneDrive page first.",
-                           url=url_for("onedrive_page")), 409
-        try:
-            files, pending, skipped = pending_files(access_token(), ctx, car_id)
-        except onedrive.NotConnected as exc:
-            return jsonify(error=str(exc), url=url_for("onedrive_page")), 409
-        except onedrive.SignInExpired as exc:
-            return jsonify(error=str(exc), url=url_for("onedrive_page")), 400
-        except onedrive.OneDriveError as exc:
-            log.warning("import scan failed: %s", exc)
-            return jsonify(error=str(exc)), 502
-        # Every file, not a batch: the page reads them one request at a time, so none waits on the others.
-        log.debug("import scan car=%d listed=%d already_imported=%d skipped=%d pending=%d", car_id, len(files),
-                  len(files) - len(pending) - skipped, skipped, len(pending))
-        return jsonify(listed=len(files), already_imported=len(files) - len(pending) - skipped, skipped=skipped,
-                       remaining=0, files=[file_entry(f) for f in pending])
-
-    @app.post("/onedrive/import/<int:car_id>/read")
-    def onedrive_import_read(car_id):
-        """One file's row (an HTML fragment) for the page to add to the table."""
-        need_drive()
-        car = car_or_404(car_id)
-        n = request.form.get("n", type=int)
-        f = {k: request.form.get(k, "") for k in ("id", "name", "folder", "url")}
-        f["size"] = request.form.get("size", "")
-        if n is None or n < 0 or not f["id"] or not f["name"]:
-            abort(400)
-        ctx = import_context(car_id)
-        try:
-            row = read_file(access_token(), car, ctx, n, f)
-        except onedrive.NotConnected as exc:
-            row = import_row(n, name=f["name"], folder=f["folder"], url=f["url"], note=str(exc))
-        except onedrive.OneDriveError as exc:
-            row = import_row(n, name=f["name"], folder=f["folder"], url=f["url"], note=str(exc))
-        return render_template("_import_row.html", r=row, n=n, categories=ctx["categories"], errors={})
-
-    @app.post("/onedrive/import/<int:car_id>/unskip")
-    def onedrive_import_unskip(car_id):
-        """Offer the skipped files again."""
-        need_drive()
-        car_or_404(car_id)
-        with connect() as conn:
-            db.clear_skipped_imports(conn, car_id)
-        return redirect(url_for("onedrive_import", car_id=car_id), 303)
-
-    def learn_from(imported):
+    def learn_from(store, imported):
         """Remember what the owner's corrections show: the label printed beside a value they
         changed, and which category a vendor's invoices get. Best effort: whatever goes
         wrong here must never undo or block the import that has just been saved."""
         try:
-            token = None
             with connect() as conn:
                 for row, values in imported:
                     if row["vendor"]:
@@ -921,8 +893,7 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
                     changed = [f for f in invoices.LEARNABLE if typed[f] is not None and not same_value(f, typed[f], guess.get(f))]
                     if not changed or not row["id"]:
                         continue
-                    token = token or access_token()
-                    text = invoices.extract_text(drive.download(token, row["id"]))
+                    text = invoices.extract_text(store.download(row["id"]))
                     for field in changed:
                         for label in invoices.find_labels(text, field, typed[field]):
                             db.record_label(conn, field, label)
@@ -941,79 +912,247 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
         except (ArithmeticError, ValueError, TypeError):
             return False
 
-    @app.post("/onedrive/import/<int:car_id>")
-    def onedrive_import_confirm(car_id):
-        need_drive()
-        car = car_or_404(car_id)
-        with connect() as conn:
-            car_ids = {c["id"] for c in db.cars(conn)}
-            cat_rows = db.categories(conn)
-            cat_ids = {c["id"] for c in cat_rows}
-            settings_row = db.get_settings(conn)
-        cat_names = {c["id"]: c["name"] for c in cat_rows}
-        count = min(request.form.get("count", type=int) or 0, 200)
-        rows, chosen, errors, skip_urls = [], [], {}, []
-        for n in range(count):
-            def f(key, n=n):
-                return request.form.get(f"{key}_{n}", "")
+    def storage_routes(kind):
+        """One storage's routes, at /onedrive/... or /local/...: choosing each car's folder, importing
+        the invoices already in it, and the Add form's file picker. The same code serves both."""
+        info = STORES[kind]
+        page = "storage_page"
 
-            row = import_row(n, include=bool(f("include")), skip=bool(f("skip")), rename=bool(f("rename")), date=f("date"), category_id=f("category_id"),
-                             vendor=f("vendor"), amount=f("amount"), odometer_km=f("odometer_km"),
-                             url=f("url"), name=f("name"), folder=f("folder"), id=f("id"),
-                             guess={k: f(f"guess_{k}") for k in LEARN_FIELDS})
-            rows.append(row)
-            if row["skip"] and row["url"]:
-                skip_urls.append(row["url"])
-                continue
-            if not row["include"]:
-                continue
-            values, row_errors = validation.parse_expense_form({
-                "car_id": car_id, "category_id": row["category_id"], "date": row["date"], "time": "12:00",
-                "amount": row["amount"], "odometer_km": row["odometer_km"], "vendor": row["vendor"],
-                "invoice_url": row["url"]}, tz, car_ids, cat_ids)
-            if not row["url"]:
-                row_errors["invoice_url"] = "Missing link to the PDF."
-            if row_errors:
-                errors[n] = " ".join(row_errors.values())
-            else:
-                chosen.append((row, values))
-        if errors:
-            return render_import(car, rows, errors=errors, status=400)
-        if skip_urls:
+        def need_store():
+            store = store_for(kind)
+            if store is None:
+                abort(404)
+            return store
+
+        @app.get(f"/{kind}/browse/<int:car_id>", endpoint=f"{kind}_browse")
+        def browse(car_id):
+            store = need_store()
+            return render_browse(store, car_or_404(car_id), request.args.get("folder") or None)
+
+        @app.post(f"/{kind}/browse/<int:car_id>/new-folder", endpoint=f"{kind}_new_folder")
+        def new_folder(car_id):
+            store = need_store()
+            car = car_or_404(car_id)
+            parent_id = request.form.get("parent_id") or None
+            try:
+                name = validation.parse_folder_name(request.form.get("name"))
+                created = store.create_folder(parent_id, name)
+            except onedrive.NotConnected:
+                return redirect(url_for(page), 303)
+            except (ValueError, storage.StorageError) as exc:
+                return render_browse(store, car, parent_id, error=str(exc), status=400)
+            return redirect(url_for(f"{kind}_browse", car_id=car_id, folder=created["id"]), 303)
+
+        @app.post(f"/{kind}/folders/<int:car_id>", endpoint=f"{kind}_choose_folder")
+        def choose_folder(car_id):
+            store = need_store()
+            car_or_404(car_id)
+            try:
+                chosen = store.folder(request.form.get("folder_id") or None)
+            except storage.StorageError as exc:
+                log.warning("%s folder choice failed: %s", kind, exc)
+                return render_storage(status=400, notice=f"Couldn't use that folder: {exc}")
             with connect() as conn:
-                db.skip_imports(conn, car_id, skip_urls)
-        if not chosen:
+                db.set_car_folder(conn, car_id, chosen["id"], chosen["path"], kind)
+            return redirect(url_for(page, msg="folders"), 303)
+
+        @app.post(f"/{kind}/folders/<int:car_id>/clear", endpoint=f"{kind}_clear_folder")
+        def clear_folder(car_id):
+            need_store()
+            car_or_404(car_id)
+            with connect() as conn:
+                db.clear_car_folder(conn, car_id, kind)
+            return redirect(url_for(page, msg="folders"), 303)
+
+        # ---- import the invoices already in the car's folder ----------------------
+
+        @app.get(f"/{kind}/import/<int:car_id>", endpoint=f"{kind}_import")
+        def import_start(car_id):
+            """The page comes up at once, with a progress bar: its script then asks for the file list
+            (/scan) and for each file in turn (/read), so nothing waits on the storage or OCR. With
+            ?sync=1 (no JavaScript) everything is read before the page is sent."""
+            store = need_store()
+            car = car_or_404(car_id)
+            ctx = import_context(car_id, kind)
+            if not ctx["folder"] or not ctx["connected"]:
+                return redirect(url_for(page), 303)
+            if not request.args.get("sync"):
+                with connect() as conn:
+                    skipped = len(db.skipped_import_urls(conn, car_id))
+                return import_page(store, car, rows=[], remaining=0, errors={}, scanning=True, skipped=skipped,
+                                   categories=ctx["categories"], notice=None)
+            try:
+                files, pending, skipped = pending_files(store, ctx, car_id)
+                log.debug("import scan car=%d listed=%d already_imported=%d pending=%d batch=%d", car_id, len(files),
+                          len(files) - len(pending), len(pending), min(len(pending), IMPORT_BATCH))
+                rows, round_timer = [], docinfo.Timer()
+                for n, f in enumerate(pending[:IMPORT_BATCH]):
+                    if n and round_timer.ms > IMPORT_BUDGET_SECONDS * 1000:
+                        log.debug("import scan stopped after %d files: over the %ds budget", n, IMPORT_BUDGET_SECONDS)
+                        break
+                    rows.append(read_file(store, car, ctx, n, file_entry(f)))
+            except onedrive.NotConnected:
+                return redirect(url_for(page), 303)
+            except onedrive.SignInExpired as exc:
+                return render_storage(status=400, notice=str(exc))
+            except storage.StorageError as exc:
+                return render_storage(status=502, notice=str(exc))
+            return render_import(store, car, rows, remaining=len(pending) - len(rows), skipped=skipped, status=200,
+                                 notice=None if files else "No PDFs found in that folder.")
+
+        @app.get(f"/{kind}/import/<int:car_id>/scan", endpoint=f"{kind}_import_scan")
+        def import_scan(car_id):
+            """The files still to import, listed but not read: {listed, already_imported, remaining, files}."""
+            store = need_store()
+            car_or_404(car_id)
+            ctx = import_context(car_id, kind)
+            if not ctx["folder"]:
+                return jsonify(error=info["choose_first"], url=url_for(page)), 409
+            try:
+                files, pending, skipped = pending_files(store, ctx, car_id)
+            except onedrive.NotConnected as exc:
+                return jsonify(error=str(exc), url=url_for(page)), 409
+            except onedrive.SignInExpired as exc:
+                return jsonify(error=str(exc), url=url_for(page)), 400
+            except storage.StorageError as exc:
+                log.warning("import scan failed: %s", exc)
+                return jsonify(error=str(exc)), 502
+            # Every file, not a batch: the page reads them one request at a time, so none waits on the others.
+            log.debug("import scan car=%d listed=%d already_imported=%d skipped=%d pending=%d", car_id, len(files),
+                      len(files) - len(pending) - skipped, skipped, len(pending))
+            return jsonify(listed=len(files), already_imported=len(files) - len(pending) - skipped, skipped=skipped,
+                           remaining=0, files=[file_entry(f) for f in pending])
+
+        @app.post(f"/{kind}/import/<int:car_id>/read", endpoint=f"{kind}_import_read")
+        def import_read(car_id):
+            """One file's row (an HTML fragment) for the page to add to the table."""
+            store = need_store()
+            car = car_or_404(car_id)
+            n = request.form.get("n", type=int)
+            f = {k: request.form.get(k, "") for k in ("id", "name", "folder", "url")}
+            f["size"] = request.form.get("size", "")
+            if n is None or n < 0 or not f["id"] or not f["name"]:
+                abort(400)
+            ctx = import_context(car_id, kind)
+            try:
+                row = read_file(store, car, ctx, n, f)
+            except storage.StorageError as exc:
+                row = import_row(n, name=f["name"], folder=f["folder"], url=f["url"], note=str(exc))
+            return render_template("_import_row.html", r=row, n=n, categories=ctx["categories"], errors={},
+                                   kind=kind, link=store.link)
+
+        @app.post(f"/{kind}/import/<int:car_id>/unskip", endpoint=f"{kind}_import_unskip")
+        def import_unskip(car_id):
+            """Offer the skipped files again."""
+            need_store()
+            car_or_404(car_id)
+            with connect() as conn:
+                db.clear_skipped_imports(conn, car_id)
+            return redirect(url_for(f"{kind}_import", car_id=car_id), 303)
+
+        @app.post(f"/{kind}/import/<int:car_id>", endpoint=f"{kind}_import_confirm")
+        def import_confirm(car_id):
+            store = need_store()
+            car = car_or_404(car_id)
+            ref_field = store.ref_field
+            with connect() as conn:
+                car_ids = {c["id"] for c in db.cars(conn)}
+                cat_rows = db.categories(conn)
+                cat_ids = {c["id"] for c in cat_rows}
+                settings_row = db.get_settings(conn)
+            cat_names = {c["id"]: c["name"] for c in cat_rows}
+            count = min(request.form.get("count", type=int) or 0, 200)
+            rows, chosen, errors, skip_urls = [], [], {}, []
+            for n in range(count):
+                def f(key, n=n):
+                    return request.form.get(f"{key}_{n}", "")
+
+                row = import_row(n, include=bool(f("include")), skip=bool(f("skip")), rename=bool(f("rename")), date=f("date"), category_id=f("category_id"),
+                                 vendor=f("vendor"), amount=f("amount"), odometer_km=f("odometer_km"),
+                                 url=f("url"), name=f("name"), folder=f("folder"), id=f("id"),
+                                 guess={k: f(f"guess_{k}") for k in LEARN_FIELDS})
+                rows.append(row)
+                if row["skip"] and row["url"]:
+                    skip_urls.append(row["url"])
+                    continue
+                if not row["include"]:
+                    continue
+                values, row_errors = validation.parse_expense_form({
+                    "car_id": car_id, "category_id": row["category_id"], "date": row["date"], "time": "12:00",
+                    "amount": row["amount"], "odometer_km": row["odometer_km"], "vendor": row["vendor"],
+                    ref_field: row["url"]}, tz, car_ids, cat_ids)
+                if not row["url"]:
+                    row_errors[ref_field] = "Missing link to the PDF."
+                if row_errors:
+                    errors[n] = " ".join(row_errors.values())
+                else:
+                    chosen.append((row, values))
+            if errors:
+                return render_import(store, car, rows, errors=errors, status=400)
             if skip_urls:
-                return redirect(url_for("onedrive_import", car_id=car_id), 303)
-            return render_import(car, rows, status=400, notice="Tick at least one invoice to import.")
-        imported, renamed, rename_failed = [], 0, 0
-        with connect() as conn:
-            known = db.known_invoice_urls(conn, [v["invoice_url"] for _, v in chosen])
-        token = None
-        for row, values in chosen:
-            if values["invoice_url"] in known:   # a double submit imports once
-                continue
-            target = validation.invoice_filename(
-                values["occurred_at"].astimezone(ZoneInfo(tz)), cat_names[values["category_id"]], values["vendor"],
-                settings_row["invoice_date_format"], settings_row["invoice_name_format"],
-                car=car["name"], amount=values["amount"])
-            if row["rename"] and row["id"] and target != row["name"]:
-                try:
-                    token = token or access_token()
-                    values["invoice_url"] = drive.rename(token, row["id"], target)
-                    renamed += 1
-                except onedrive.OneDriveError as exc:
-                    rename_failed += 1           # import it anyway, still pointing at the old name
-                    log.warning("import rename item=%s to=%s failed: %s", row["id"], docinfo.quote(target), exc)
+                with connect() as conn:
+                    db.skip_imports(conn, car_id, skip_urls)
+            if not chosen:
+                if skip_urls:
+                    return redirect(url_for(f"{kind}_import", car_id=car_id), 303)
+                return render_import(store, car, rows, status=400, notice="Tick at least one invoice to import.")
+            imported, renamed, rename_failed = [], 0, 0
             with connect() as conn:
-                db.insert_expense(conn, values)
-            imported.append((row, values))
-        log.debug("import confirm car=%d rows=%d imported=%d skipped_known=%d renamed=%d rename_failed=%d", car_id,
-                  len(chosen), len(imported), len(chosen) - len(imported), renamed, rename_failed)
-        refresh_dashboard()
-        learn_from(imported)
-        return redirect(url_for("index", msg="imported", n=len(imported), renamed=renamed,
-                                rename_failed=rename_failed), 303)
+                known = db.known_invoices(conn, [v[ref_field] for _, v in chosen])
+            for row, values in chosen:
+                if values[ref_field] in known:   # a double submit imports once
+                    continue
+                target = validation.invoice_filename(
+                    values["occurred_at"].astimezone(ZoneInfo(tz)), cat_names[values["category_id"]], values["vendor"],
+                    settings_row["invoice_date_format"], settings_row["invoice_name_format"],
+                    car=car["name"], amount=values["amount"])
+                if row["rename"] and row["id"] and target != row["name"]:
+                    try:
+                        values[ref_field] = store.rename(row["id"], target)
+                        if kind == "local":
+                            row["id"] = values[ref_field]    # there the reference is where the file is
+                        renamed += 1
+                    except storage.StorageError as exc:
+                        rename_failed += 1           # import it anyway, still pointing at the old name
+                        log.warning("import rename item=%s to=%s failed: %s", row["id"], docinfo.quote(target), exc)
+                with connect() as conn:
+                    db.insert_expense(conn, values)
+                imported.append((row, values))
+            log.debug("import confirm car=%d rows=%d imported=%d skipped_known=%d renamed=%d rename_failed=%d", car_id,
+                      len(chosen), len(imported), len(chosen) - len(imported), renamed, rename_failed)
+            refresh_dashboard()
+            learn_from(store, imported)
+            more = {"store": kind} if kind == "local" else {}
+            return redirect(url_for("index", msg="imported", n=len(imported), renamed=renamed,
+                                    rename_failed=rename_failed, **more), 303)
+
+        @app.get(f"/api/{kind}/browse/<int:car_id>", endpoint=f"api_{kind}_browse")
+        def api_browse(car_id):
+            """One folder for the Add form's file picker. Starts in the car's folder; ?folder=<id> goes
+            elsewhere (up included) and ?folder=root is the top of the storage."""
+            store = need_store()
+            car_or_404(car_id)
+            wanted = request.args.get("folder")
+            with connect() as conn:
+                folder = car_folder(conn, car_id, kind)
+                ready = connected(conn, kind)
+            if not ready:
+                return jsonify(error=str(onedrive.NotConnected()), url=url_for(page)), 409
+            if not wanted and not folder:
+                return jsonify(error=info["choose_first"], url=url_for(page)), 409
+            folder_id = None if wanted == "root" else (wanted or folder["folder_id"])
+            try:
+                here, folders, files = store.contents(folder_id)
+            except onedrive.SignInExpired as exc:
+                return jsonify(error=str(exc), url=url_for(page)), 409
+            except storage.StorageError as exc:
+                log.warning("%s file picker failed: %s", kind, exc)
+                return jsonify(error=str(exc)), 502
+            return jsonify(id=here["id"], path=here["path"], parent_id=here["parent_id"], is_root=here["is_root"],
+                           folders=folders, files=files)
+
+    for kind in STORES:
+        storage_routes(kind)
 
     def name_example(values):
         """What an uploaded file would be called under the saved (or just-typed, if valid) settings."""
@@ -1073,47 +1212,21 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
                                multi_choices=validation.MULTI_AMOUNT_CHOICES, example=name_example(values),
                                message=MESSAGES.get(request.args.get("msg", ""))), (400 if errors else 200)
 
-    @app.get("/api/onedrive/browse/<int:car_id>")
-    def api_onedrive_browse(car_id):
-        """One folder for the Add form's file picker. Starts in the car's folder; ?folder=<id> goes
-        elsewhere (up included) and ?folder=root is the top of the drive."""
-        need_drive()
-        car_or_404(car_id)
-        wanted = request.args.get("folder")
-        with connect() as conn:
-            car_folder = db.car_folders(conn).get(car_id)
-            connected = (db.onedrive_account(conn) or {}).get("refresh_token")
-        if not connected:
-            return jsonify(error=str(onedrive.NotConnected()), url=url_for("onedrive_page")), 409
-        if not wanted and not car_folder:
-            return jsonify(error="Choose a OneDrive folder for this car on the OneDrive page first.",
-                           url=url_for("onedrive_page")), 409
-        folder_id = None if wanted == "root" else (wanted or car_folder["folder_id"])
-        try:
-            token = access_token()
-            here, folders, files = drive.contents(token, folder_id)
-        except onedrive.SignInExpired as exc:
-            return jsonify(error=str(exc), url=url_for("onedrive_page")), 409
-        except onedrive.OneDriveError as exc:
-            log.warning("OneDrive file picker failed: %s", exc)
-            return jsonify(error=str(exc)), 502
-        return jsonify(id=here["id"], path=here["path"], parent_id=here["parent_id"], is_root=here["is_root"],
-                       folders=folders, files=files)
-
     @app.post("/api/prefill")
     def api_prefill():
         """Read an invoice PDF and propose the form's fields, for the Add page: the one just chosen
-        on the computer, or (onedrive_id and name) one already in OneDrive."""
+        on the computer, or one already in a storage (onedrive_id or local_id, and name)."""
         timer = docinfo.Timer()
         upload = request.files.get("invoice_file")
         filename = upload and upload.filename
         data = upload.read() if upload else b""
-        if not upload and request.form.get("onedrive_id") and drive is not None:
+        kind = next((k for k in STORES if request.form.get(f"{k}_id") and store_for(k)), None)
+        if not upload and kind:
             filename = request.form.get("name", "")
             try:
-                data = drive.download(access_token(), request.form["onedrive_id"])
-            except onedrive.OneDriveError as exc:
-                log.warning("prefill from OneDrive failed: %s", exc)
+                data = store_for(kind).download(request.form[f"{kind}_id"])
+            except storage.StorageError as exc:
+                log.warning("prefill from %s failed: %s", STORES[kind]["label"], exc)
                 return jsonify(error=str(exc)), 502
         try:
             pdf = validation.parse_invoice_pdf(filename, data)

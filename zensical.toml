@@ -10,6 +10,7 @@ nav = [
   { "Setup" = "setup.md" },
   { "Publishing (Traefik and Cloudflare)" = "publishing.md" },
   { "OneDrive uploads" = "onedrive.md" },
+  { "Invoice folder on the server" = "local-folder.md" },
   { "Importing invoices" = "importing.md" },
   { "Dashboard" = "dashboard.md" },
   { "Reference" = "reference.md" },

@@ -80,7 +80,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (link) {
         const a = document.createElement("a");
         a.href = link;
-        a.textContent = " Go to the OneDrive page";
+        a.textContent = " Go to the " + (f.dataset.setupLabel || "Invoice storage page");
         text.append(a);
       }
     };
@@ -489,12 +489,26 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Choose a PDF that is already in OneDrive: a window over the form, so there's no page to come back
-  // from. It opens in the car's folder and can go up from there. The file isn't copied: its link becomes
-  // the invoice link, and what can be read in it fills the form as a chosen file would.
+  // Choose a PDF that is already in the car's storage (OneDrive, or the invoice folder on the server):
+  // a window over the form, so there's no page to come back from. It opens in the car's folder and can
+  // go up from there. The file isn't copied: it becomes the expense's invoice (its link, or its path in
+  // the folder), and what can be read in it fills the form as a chosen file would.
   const picker = document.getElementById("onedrive-picker");
   const pickButton = document.getElementById("onedrive-pick");
-  if (picker && pickButton && form.dataset.onedriveBrowseUrl) {
+  const browseUrls = { onedrive: form.dataset.onedriveBrowseUrl, local: form.dataset.localBrowseUrl };
+  if (picker && pickButton && (browseUrls.onedrive || browseUrls.local)) {
+    // The storage the chosen car's folder is in; a car without one gets the installation's own.
+    const storageOf = () => {
+      const option = form.elements.car_id.selectedOptions && form.elements.car_id.selectedOptions[0];
+      const own = option && option.dataset.storage;
+      if (browseUrls[own]) return own;
+      if (browseUrls[form.dataset.defaultStorage]) return form.dataset.defaultStorage;
+      return browseUrls.onedrive ? "onedrive" : "local";
+    };
+    const showStorage = () => document.querySelectorAll("[data-storage-label]").forEach((el) => {
+      el.hidden = el.dataset.storageLabel !== storageOf();
+    });
+    showStorage();
     const pickHint = document.getElementById("onedrive-pick-hint");
     const status = document.getElementById("onedrive-picker-status");
     const pathBox = document.getElementById("onedrive-picker-path");
@@ -517,12 +531,13 @@ document.addEventListener("DOMContentLoaded", () => {
     // time the window opens, so what it shows is never older than that.
     let seen = new Map();
     const fetchFolder = (car, folder) => {
-      const key = car + "/" + (folder || "");
+      const kind = storageOf();
+      const key = kind + "/" + car + "/" + (folder || "");
       if (!seen.has(key)) {
-        const url = form.dataset.onedriveBrowseUrl.replace(/0$/, car) + (folder ? "?folder=" + encodeURIComponent(folder) : "");
+        const url = browseUrls[kind].replace(/0$/, car) + (folder ? "?folder=" + encodeURIComponent(folder) : "");
         const asked = fetch(url).then(async (res) => {
           const data = await res.json();
-          if (!res.ok) throw new Error(data.error || "Couldn't open OneDrive.");
+          if (!res.ok) throw new Error(data.error || (kind === "local" ? "Couldn't open the invoice folder." : "Couldn't open OneDrive."));
           return data;
         });
         seen.set(key, asked);
@@ -556,12 +571,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function choose(file) {
       picker.close();
-      if (pdfInput) pdfInput.value = "";      // the OneDrive file replaces any chosen on this computer
-      form.elements.invoice_url.value = file.web_url;
+      if (pdfInput) pdfInput.value = "";      // the file picked here replaces any chosen on this computer
+      const kind = storageOf();
+      if (kind === "local") {
+        // No link to fill in: the expense keeps the file's path, and the app serves it.
+        const stored = document.getElementById("stored-invoice");
+        const link = document.getElementById("stored-invoice-link");
+        form.elements.invoice_path.value = file.id;
+        form.elements.remove_invoice.checked = false;
+        link.textContent = file.name;
+        link.href = stored.dataset.fileUrl + "?path=" + encodeURIComponent(file.id);
+        stored.hidden = false;
+      } else {
+        form.elements.invoice_url.value = file.web_url;
+      }
       pickHint.textContent = "Linked: " + file.name;
       if (prefillHint && form.dataset.prefillUrl) {
         const body = new FormData();
-        body.append("onedrive_id", file.id);
+        body.append(kind + "_id", file.id);
         body.append("name", file.name);
         prefillFrom(body);
       }
@@ -574,7 +601,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     document.getElementById("onedrive-picker-close").addEventListener("click", () => picker.close());
     // The car decides where the window starts: a different car means a different folder.
-    form.elements.car_id.addEventListener("change", () => { seen = new Map(); if (picker.open) show(null); });
+    form.elements.car_id.addEventListener("change", () => { seen = new Map(); showStorage(); if (picker.open) show(null); });
   }
   // New expense with nothing typed yet: fill automatically.
   if (!odo.value) fill(false);

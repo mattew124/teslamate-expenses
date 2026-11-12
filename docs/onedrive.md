@@ -3,7 +3,8 @@
 With this on, the expense form takes the invoice PDF itself. The app uploads it to a subfolder of
 the folder you chose for that car, names it from the expense (`261107 Tyres - Tyre Shop.pdf`) and
 stores the file's OneDrive link as the expense's invoice link. It works with a personal Microsoft
-account (OneDrive Personal).
+account (OneDrive Personal). To keep the PDFs on your own server instead, see
+[Invoice folder on the server](local-folder.md); with both on, each car uses one or the other.
 
 ## Turning it on
 
@@ -20,16 +21,16 @@ account (OneDrive Personal).
 
 2. **Register an app with Microsoft** (once per installation; see
     [Registering the app](#registering-the-app) below), then enter its client ID and secret on
-    the app's **OneDrive** page. The page shows the exact redirect URI to register.
+    the app's **Invoice storage** page, in its OneDrive card, which shows the exact redirect URI to register.
 
 3. **Connect OneDrive.** You sign in on Microsoft's page and come straight back. The app asks
     for delegated `Files.ReadWrite` and `offline_access`.
 
-4. **Choose a folder for each car** by browsing your OneDrive, creating one with **New folder**
+4. **Choose a folder for each car**, under **Folder per car** on the same page, by browsing your OneDrive, creating one with **New folder**
     if it doesn't exist yet. Uploads go by the folder's ID, so renaming or moving it later
     doesn't break them.
 
-<!-- screenshot: onedrive-page - The OneDrive page, connected, with a folder chosen for a car -->
+<!-- screenshot: storage-page-onedrive - The Invoice storage page with OneDrive connected and a folder chosen for a car -->
 
 ## Where files go
 
@@ -89,7 +90,7 @@ sign in as the account whose OneDrive gets the invoices.
 2. **Name:** anything, e.g. `teslamate-expenses`.
 3. **Supported account types:** **Personal Microsoft accounts only**. "Accounts in any
     organizational directory and personal Microsoft accounts" also works.
-4. **Redirect URI:** platform **Web**, and the address shown on the app's OneDrive page,
+4. **Redirect URI:** platform **Web**, and the address shown in the OneDrive card of the app's Invoice storage page,
     `https://<your host><BASE_PATH>/onedrive/callback`. It must match byte for byte, scheme
     and path included, and Microsoft accepts plain `http://` only for `localhost`. Then
     **Register**.
@@ -103,7 +104,7 @@ sign in as the account whose OneDrive gets the invoices.
     straight away; it's shown only once, and the **Secret ID** next to it is not the secret.
     Secrets last at most 24 months, so note the **Expires** date.
 8. From **Overview**, copy the **Application (client) ID**. It isn't secret.
-9. On the app's **OneDrive** page, paste the client ID, the secret's value and its expiry date,
+9. On the app's **Invoice storage** page, paste the client ID, the secret's value and its expiry date,
     then press **Connect OneDrive**.
 
 A dev stack or second installation needs its own callback address: add it as another **Web**

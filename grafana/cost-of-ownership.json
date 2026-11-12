@@ -1498,7 +1498,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT e.occurred_at AS \"Date\", c.name AS \"Category\", e.vendor AS \"Vendor\", e.amount AS \"Amount\",\n       e.odometer_km AS \"Odometer\", e.invoice_url AS \"Invoice\", e.notes AS \"Notes\"\nFROM expenses.expense e JOIN expenses.category c ON c.id = e.category_id\nWHERE e.car_id = $car_id AND $__timeFilter(e.occurred_at)\nORDER BY e.occurred_at DESC",
+          "rawSql": "SELECT e.occurred_at AS \"Date\", c.name AS \"Category\", e.vendor AS \"Vendor\", e.amount AS \"Amount\",\n       e.odometer_km AS \"Odometer\", CASE WHEN e.invoice_path IS NOT NULL THEN rtrim(${expenses_url:sqlstring}, '/') || '/invoice/' || e.id ELSE e.invoice_url END AS \"Invoice\",\n       e.notes AS \"Notes\"\nFROM expenses.expense e JOIN expenses.category c ON c.id = e.category_id\nWHERE e.car_id = $car_id AND $__timeFilter(e.occurred_at)\nORDER BY e.occurred_at DESC",
           "refId": "A"
         }
       ]

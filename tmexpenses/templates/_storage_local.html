@@ -1,0 +1,22 @@
+{# The card of the Invoice storage page for the folder on the server (INVOICES_DIR). #}
+<section class="card stack" id="local">
+  <h2>Folder on this server</h2>
+  {% if not local_enabled %}
+  <p>Invoice PDFs can be kept in a folder on this server (a NAS share, say) instead of in cloud storage, and
+    opened from the expense list. To turn it on, mount the folder into the app's container and set
+    <code>INVOICES_DIR</code> to where it is mounted (see <a href="https://mattew124.github.io/teslamate-expenses/local-folder/">Invoice folder on the server</a>
+    in the documentation), then restart the app.</p>
+  {% elif available %}
+  <p>Invoices are kept in <code>{{ local_shown }}</code> on this server{% if local_shown != root %}
+    (mounted in the app's container at <code>{{ root }}</code>){% else %}, as the app's container sees it{% endif %}.</p>
+  <small>Only you can open them: the app sends them through the same sign-in as its pages. The app can
+    read and write everything in this folder, so mount only the folder that holds the cars' invoices.
+    A file is never overwritten: a name that is taken gets “ (1)” added. If you rename or move a car's
+    folder on the server, choose it again below.</small>
+  {% else %}
+  <p class="notice bad">The folder <code>{{ local_shown }}</code>{% if local_shown != root %} (mounted in the app's container at
+    <code>{{ root }}</code>){% endif %} isn't there. Is it mounted into the container, and is the share it's on connected?
+    Until it is back, stored invoices can't be opened and nothing can be saved. The app never creates this folder
+    itself, so nothing is written to the wrong disk.</p>
+  {% endif %}
+</section>

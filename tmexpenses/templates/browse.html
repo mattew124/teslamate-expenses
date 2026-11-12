@@ -3,24 +3,24 @@
 {% block title %}Choose folder{% endblock %}
 {% block main_attrs %} class="narrow"{% endblock %}
 {% block content %}
-<h1>{{ mark() }} Folder for {{ car.name or ('Car ' ~ car.id) }}</h1>
+<h1>{% if kind == 'onedrive' %}{{ mark() }} {% endif %}Folder for {{ car.name or ('Car ' ~ car.id) }}</h1>
 <p class="here"><code>{{ here.path }}</code></p>
 <ul class="plain folder-list">
   {% if not is_root %}
-  <li><a href="{{ url_for('onedrive_browse', car_id=car.id, folder=here.parent_id) if here.parent_id else url_for('onedrive_browse', car_id=car.id) }}">⬑ Up</a></li>
+  <li><a href="{{ url_for(kind ~ '_browse', car_id=car.id, folder=here.parent_id) if here.parent_id else url_for(kind ~ '_browse', car_id=car.id) }}">⬑ Up</a></li>
   {% endif %}
   {% for f in children %}
-  <li><a href="{{ url_for('onedrive_browse', car_id=car.id, folder=f.id) }}">📁 {{ f.name }}</a></li>
+  <li><a href="{{ url_for(kind ~ '_browse', car_id=car.id, folder=f.id) }}">📁 {{ f.name }}</a></li>
   {% else %}
   <li><small>No folders in here.</small></li>
   {% endfor %}
 </ul>
-<form method="post" action="{{ url_for('onedrive_choose_folder', car_id=car.id) }}" class="row">
+<form method="post" action="{{ url_for(kind ~ '_choose_folder', car_id=car.id) }}" class="row">
   <input type="hidden" name="folder_id" value="{{ '' if is_root else here.id }}">
   <button type="submit" class="button">Use {{ here.path }}</button>
-  <a href="{{ url_for('onedrive_page') }}">Cancel</a>
+  <a href="{{ url_for('storage_page') }}">Cancel</a>
 </form>
-<form method="post" action="{{ url_for('onedrive_new_folder', car_id=car.id) }}" class="stack new-folder">
+<form method="post" action="{{ url_for(kind ~ '_new_folder', car_id=car.id) }}" class="stack new-folder">
   <input type="hidden" name="parent_id" value="{{ '' if is_root else here.id }}">
   <label>New folder in <code>{{ here.path }}</code>
     <input name="name" maxlength="255" autocomplete="off" placeholder="e.g. Invoices" value="{{ new_name }}">

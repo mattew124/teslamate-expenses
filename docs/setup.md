@@ -11,7 +11,8 @@
     TeslaMate and its other add-ons use (they're in TeslaMate's compose file), and `FQDN_TM` to the
     same value as TeslaMate's compose variable. `FQDN_TM` is read on first start only (step 7), so
     set it now. Set `APP_TZ` to your IANA timezone. For OneDrive, add the key from
-    [OneDrive uploads](onedrive.md) now too, or later with a restart.
+    [OneDrive uploads](onedrive.md) now too, or later with a restart. To keep invoices in a folder
+    on this server instead, see [Invoice folder on the server](local-folder.md).
 
 2. **Back up TeslaMate's database.** The first start adds the `expenses` schema to it and changes
     nothing else, but take a backup first, as for any upgrade that touches the database.
@@ -28,7 +29,8 @@
     app creates its schema by itself; see [The database](#the-database).
 
 4. **Check it started.** The first start logs `schema created`, then
-    `started: ... onedrive=on` (or `off` without the key):
+    `started: ... onedrive=on` (or `off` without the key) and `invoice_folder=off` (or `on` with
+    a mounted invoice folder):
 
     ```bash
     docker compose logs expenses | grep -E 'schema|started'
@@ -36,7 +38,9 @@
 
     Behind forward-auth, open the address in a private window: it must send you to the login page.
 
-5. **OneDrive (optional).** See [OneDrive uploads](onedrive.md).
+5. **Somewhere for invoices (optional).** See [OneDrive uploads](onedrive.md) or
+    [Invoice folder on the server](local-folder.md). Without either, an expense can still carry a
+    link you paste.
 
 6. **Grafana.** Each time it starts, the app writes its own dashboard to the
     `teslamate-expenses-dashboards` volume, so the dashboard always matches the version you run. Its

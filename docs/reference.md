@@ -4,6 +4,8 @@
 
 **Invoice links** must be `https://` (rendered as a link, so `javascript:`/`data:` are refused). Whoever opens one needs access to it, and it lasts as long as its sharing settings. An uploaded invoice's link is its plain OneDrive address, not a share link: it opens for you, signed in to that Microsoft account, and for nobody else.
 
+An invoice kept in the [invoice folder on the server](local-folder.md) has no link at all. The expense stores the file's path below that folder, and the app serves it at `/invoice/<expense id>`, behind the same forward-auth as every page: shown in the browser's PDF viewer, or saved as a file with `?download=1`. Only PDFs inside the mounted folder are ever served.
+
 ## Version and updates
 
 The footer of every page links to this documentation and shows the installed version. A released
@@ -40,7 +42,7 @@ The app connects as `DATABASE_USER` with `DATABASE_PASS` to `DATABASE_NAME` on `
 
 ## Logs
 
-`docker logs` shows gunicorn's request lines plus the app's own events. `LOG_LEVEL` (`debug`, `info` the default, `warning`, `error`; set in `.env`, restart to change) sets both. `info` records startup, the update check's result, schema changes, expenses saved, updated or deleted, and OneDrive sign-in and upload results. `debug` adds detail such as retries. Tokens, secrets, vendors, notes and amounts are never logged, except that file names, which can contain a vendor, appear at `debug`.
+`docker logs` shows gunicorn's request lines plus the app's own events. `LOG_LEVEL` (`debug`, `info` the default, `warning`, `error`; set in `.env`, restart to change) sets both. `info` records startup, the update check's result, schema changes, expenses saved, updated or deleted, OneDrive sign-in and upload results, and anything the invoice folder on the server refuses (a missing folder, no permission). `debug` adds detail such as retries. Tokens, secrets, vendors, notes and amounts are never logged, except that file names, which can contain a vendor, appear at `debug`.
 
 ## Timezone
 
@@ -52,4 +54,4 @@ POSTs must carry a same-origin `Origin`/`Referer` header (CSRF guard). Plain `cu
 
 ## Not covered yet
 
-Depreciation or resale value (so "TCO" is spend, not net cost), storing invoices in the app itself (they go to your cloud storage), deleting categories.
+Depreciation or resale value (so "TCO" is spend, not net cost), deleting invoice files from the app (it removes the link; the file stays), deleting categories.

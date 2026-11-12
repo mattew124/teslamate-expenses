@@ -108,10 +108,11 @@ def test_large_pdf_is_accepted(page):
 
 def test_import_page_shows_progress(page):
     """The import page opens at once and reports its progress, instead of a blank wait."""
-    page.goto(UI + "onedrive")
-    if "Connected as" not in page.inner_text("main") or not page.query_selector("text=Import existing invoices"):
+    page.goto(UI + "storage")
+    link = page.locator("a[href*='onedrive/import/']").first
+    if "Connected as" not in page.inner_text("main") or not link.count():
         raise Skip("dev stack isn't connected to OneDrive with a car folder")
-    car = re.search(r"onedrive/import/(\d+)", page.get_attribute("text=Import existing invoices", "href")).group(1)
+    car = re.search(r"onedrive/import/(\d+)", link.get_attribute("href")).group(1)
     started = time.time()
     page.goto(UI + f"onedrive/import/{car}", wait_until="domcontentloaded")
     assert time.time() - started < 5, "the import page should open at once, not wait for OneDrive"
@@ -149,17 +150,17 @@ def check_skip_prompt(page):
 
 def in_test_folder(page, back_to=None):
     """Whether every car points inside the test folder, the only place a test may write."""
-    page.goto(UI + "onedrive")
-    paths = page.locator("ul.folders small").all_inner_texts()
+    page.goto(UI + "storage")
+    rows = [t.strip() for t in page.locator("ul.folders small").all_inner_texts()]
     if back_to:
         page.goto(back_to, wait_until="domcontentloaded")
-    return bool(paths) and all(p.strip().startswith("/" + TEST_FOLDER) for p in paths)
+    return bool(rows) and all(r.startswith("OneDrive: /" + TEST_FOLDER) for r in rows)
 
 
 def test_real_upload(page):
     """Saves an expense with a PDF, through the real OneDrive, into the test folder only.
     The expense is deleted again; the file stays (the app has no delete) for the import check."""
-    page.goto(UI + "onedrive")
+    page.goto(UI + "storage")
     if not page.locator("button:has-text('Disconnect')").count():
         raise Skip("dev stack isn't connected to OneDrive (scripts/dev.sh onedrive-link)")
     if not in_test_folder(page):
@@ -191,7 +192,7 @@ def test_onedrive_picker(page):
 def picker_checks(page):
     """The Add form's file picker (read-only): opens in the car's folder, goes up and back down,
     and choosing a PDF links it. Needs a connected drive whose car folder holds a PDF."""
-    page.goto(UI + "onedrive")
+    page.goto(UI + "storage")
     if not page.locator("button:has-text('Disconnect')").count():
         raise Skip("dev stack isn't connected to OneDrive (scripts/dev.sh onedrive-link)")
     page.goto(UI + "new")
@@ -234,6 +235,157 @@ def picker_checks(page):
         raise Skip("no PDF in the car's folder or the folders directly in it")
     pdf.first.click()
     expect(page.locator("input[name=invoice_url]")).to_have_value(re.compile(r"^https://"))
+
+
+# ---- the invoice folder on the server ---------------------------------------------
+
+LOCAL_FOLDER = "Browser test"      # the only folder in the dev stack's invoice volume these checks write to
+ORIGIN = {"Origin": "http://expenses-dev:8080"}
+
+
+def readable_pdf(text):
+    """A one-page PDF a viewer will actually draw, with `text` on it."""
+    stream = f"BT /F1 24 Tf 72 720 Td ({text}) Tj ET".encode()
+    objects = [b"<< /Type /Catalog /Pages 2 0 R >>", b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+               b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R "
+               b"/Resources << /Font << /F1 5 0 R >> >> >>",
+               b"<< /Length %d >>\nstream\n%s\nendstream" % (len(stream), stream),
+               b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"]
+    out, offsets = b"%PDF-1.4\n", []
+    for n, body in enumerate(objects, 1):
+        offsets.append(len(out))
+        out += b"%d 0 obj\n%s\nendobj\n" % (n, body)
+    xref = len(out)
+    out += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objects) + 1)
+    out += b"".join(b"%010d 00000 n \n" % o for o in offsets)
+    return out + b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objects) + 1, xref)
+
+
+def first_car(page):
+    page.goto(UI + "storage")
+    link = page.locator("ul.folders a[href*='local/browse/']").first
+    if not link.count():
+        raise Skip("the invoice folder isn't on in this stack (an image from before it existed?)")
+    expect(page.locator("#local")).to_contain_text("Invoices are kept in")      # with the folder's path
+    return re.search(r"local/browse/(\d+)", link.get_attribute("href")).group(1)
+
+
+def car_folder(page, car):
+    """Where the car's invoices go now, to put back afterwards: (storage, folder id) or None."""
+    for kind in ("onedrive", "local"):
+        resp = page.request.get(UI + f"api/{kind}/browse/{car}")
+        if resp.status == 200:
+            return kind, resp.json()["id"]
+    return None
+
+
+def restore_car_folder(page, car, before):
+    if before is None:
+        resp = page.request.post(UI + f"local/folders/{car}/clear", headers=ORIGIN)
+    else:
+        resp = page.request.post(UI + f"{before[0]}/folders/{car}", headers=ORIGIN, form={"folder_id": before[1]})
+    assert resp.ok, f"couldn't put the car's folder back: HTTP {resp.status}"
+
+
+def test_local_folder(page, pdf_page):
+    """The whole of the invoice folder on the server, in a real browser: choose the car's folder with
+    the picker, save an expense with a PDF, open that PDF from the list, pick it again from the Add
+    form, and see it offered by the import. The car's own folder (OneDrive or not) is put back."""
+    car = first_car(page)
+    before = car_folder(page, car)
+    try:
+        local_folder_checks(page, pdf_page, car)
+    finally:
+        restore_car_folder(page, car, before)
+
+
+def local_folder_checks(page, pdf_page, car):
+    # The folder picker: from the top of the mount, make the test folder if this is the first run, use it.
+    page.goto(UI + f"local/browse/{car}")
+    expect(page.locator("h1")).to_contain_text("Folder for")
+    expect(page.locator("p.here code")).to_have_text("/")
+    expect(page.get_by_text("⬑ Up")).to_have_count(0)                # nothing above the mounted folder
+    if page.get_by_role("link", name="📁 " + LOCAL_FOLDER, exact=True).count():
+        page.get_by_role("link", name="📁 " + LOCAL_FOLDER, exact=True).click()
+    else:
+        page.fill("form.new-folder input[name=name]", LOCAL_FOLDER)
+        page.click("form.new-folder button")
+    expect(page.locator("p.here code")).to_have_text("/" + LOCAL_FOLDER)
+    expect(page.get_by_text("⬑ Up")).to_be_visible()
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    shot(page, "local-folder-browser")
+    page.click("button:has-text('Use ')")
+    page.wait_for_url(re.compile(r"/storage\?msg=folders"))
+    expect(page.locator("ul.folders small").first).to_have_text(re.compile(rf"^Folder on this server: .*/{LOCAL_FOLDER}$"))
+    expect(page.get_by_text("Import existing invoices").first).to_be_visible()
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    shot(page, "storage-page")
+
+    # Save an expense with a PDF: it lands in the folder, and the list links to the app's own copy.
+    page.goto(UI + "new")
+    expect(page.locator("#onedrive-pick")).to_contain_text("Choose from the invoice folder")
+    page.set_input_files("input[name=invoice_file]", {
+        "name": "browser-test.pdf", "mimeType": "application/pdf", "buffer": readable_pdf(MARKER + " invoice")})
+    page.wait_for_load_state("networkidle")
+    page.select_option("select[name=category_id]", label="Tyres")
+    page.fill("input[name=amount]", "418.27")
+    page.fill("input[name=vendor]", MARKER)
+    page.fill("input[name=invoice_url]", "")
+    page.click("button[type=submit].button")
+    page.wait_for_url(re.compile(r"msg=saved"))
+    link = page.locator("tbody tr", has_text=MARKER).locator("a:has-text('PDF')").first
+    href = link.get_attribute("href")
+    assert re.search(r"/invoice/\d+$", href), f"the list should link to the stored invoice, not {href}"
+
+    # The PDF itself: sent inline as a PDF, and the browser's own viewer draws it under the app's CSP.
+    resp = page.request.get(UI.rstrip("/") + href[len(BASE):])
+    assert resp.status == 200 and resp.headers["content-type"] == "application/pdf"
+    assert resp.headers["content-disposition"].startswith("inline") and resp.body().startswith(b"%PDF-")
+    assert "default-src 'none'" in resp.headers["content-security-policy"]
+    saved = page.request.get(UI.rstrip("/") + href[len(BASE):] + "?download=1")
+    assert saved.headers["content-disposition"].startswith("attachment")
+    blocked, refused = [], []
+    pdf_page.on("console", lambda m: blocked.append(m.text) if m.type == "error" and "404" not in m.text else None)
+    # The browser also asks the site's root for a favicon, which is outside the app's path: not ours to answer.
+    pdf_page.on("response", lambda r: refused.append(f"{r.status} {r.url}")
+                if r.status >= 400 and not r.url.endswith("/favicon.ico") else None)
+    shown = pdf_page.goto(UI.rstrip("/") + href[len(BASE):])
+    assert shown.status == 200 and shown.headers["content-type"] == "application/pdf"
+    pdf_page.wait_for_timeout(2000)             # let the viewer draw before the picture is taken
+    # Chromium shows a PDF in its own viewer, a built-in extension page framed inside the tab.
+    assert any(f.url.startswith("chrome-extension://") for f in pdf_page.frames), \
+        f"the PDF viewer didn't open: {[f.url for f in pdf_page.frames]}"
+    pdf_page.screenshot(path=f"{OUT}/local-invoice-inline.png")
+    assert not blocked and not refused, f"the browser reported errors showing the PDF: {blocked + refused}"
+
+    # The edit page names the stored file and offers to remove it.
+    page.locator("tbody tr", has_text=MARKER).locator("a:has-text('Edit')").first.click()
+    expect(page.locator("#stored-invoice-link")).to_contain_text(MARKER)
+    expect(page.locator("input[name=remove_invoice]")).not_to_be_checked()
+    shot(page, "local-invoice-on-edit")
+
+    # The Add form's file picker opens in the car's folder and links a PDF that is already there.
+    page.goto(UI + "new")
+    expect(page.locator("#stored-invoice")).to_be_hidden()          # nothing stored yet, so nothing to show
+    page.click("#onedrive-pick")
+    dialog = page.locator("#onedrive-picker")
+    expect(dialog).to_be_visible()
+    expect(dialog.locator("#onedrive-picker-title")).to_contain_text("invoice folder")
+    expect(dialog.locator("#onedrive-picker-path")).to_have_text("/" + LOCAL_FOLDER)
+    dialog.get_by_role("button", name="📁 Maintenance", exact=True).click()     # where Tyres invoices go
+    expect(dialog.locator("#onedrive-picker-path")).to_have_text(f"/{LOCAL_FOLDER}/Maintenance")
+    shot(page, "form-local-picker")
+    dialog.locator("#onedrive-picker-list li button", has_text="📄").first.click()
+    expect(dialog).not_to_be_visible()
+    expect(page.locator("input[name=invoice_path]")).to_have_value(re.compile(rf"^/{LOCAL_FOLDER}/Maintenance/.+\.pdf$"))
+    expect(page.locator("#stored-invoice")).to_be_visible()
+    expect(page.locator("#stored-invoice-link")).to_have_attribute("href", re.compile(r"local/file\?path=%2F"))
+
+    # The import reads the folder; the PDF saved above already has its expense, so it isn't offered.
+    page.goto(UI + f"local/import/{car}", wait_until="domcontentloaded")
+    expect(page.locator("#import-status-text")).to_have_text(re.compile(r"^(Read \d+ PDF|Every PDF)"), timeout=120000)
+    assert "418.27" not in page.content()
+    shot(page, "local-import")
 
 
 def remove_marked(page):
@@ -502,7 +654,7 @@ def test_desktop_look(page):
         shot(page, f"categories-desktop-{scheme}")
         page.goto(UI + "settings")
         shot(page, f"settings-desktop-{scheme}")
-        page.goto(UI + "onedrive")
+        page.goto(UI + "storage")
         shot(page, f"onedrive-desktop-{scheme}")
     page.emulate_media(color_scheme="light")
     remove_marked(page)
@@ -561,11 +713,13 @@ def test_onedrive_page(page):
     """The setup steps render on a phone, with the address to register. Only
     invalid details are submitted, so a real registration in the dev database
     is left alone."""
-    page.goto(UI + "onedrive")
-    expect(page.locator("h1")).to_have_text("OneDrive")
+    page.goto(UI + "storage")
+    expect(page.locator("h1")).to_have_text("Invoice storage")
+    expect(page.locator("#onedrive h2")).to_have_text("OneDrive")
+    expect(page.locator("#cars h2")).to_have_text("Folder per car")       # one page for every storage
     expect(page.locator("code.copy")).to_have_text(re.compile(re.escape(BASE) + r"/onedrive/callback$"))
     if not page.locator("details[open]").count():
-        page.click("summary")
+        page.click("#onedrive summary")
     page.fill("input[name=client_id]", "not-a-client-id")
     page.fill("input[name=client_secret]", "x")
     page.click("details button[type=submit]")
@@ -596,7 +750,7 @@ def test_connect_reaches_microsoft(page):
     """Real Chromium enforces the CSP, so this is where a blocked redirect shows.
     The request to Microsoft is answered locally and never sent. Runs only when
     the dev database has an app registration saved."""
-    page.goto(UI + "onedrive")
+    page.goto(UI + "storage")
     button = page.locator("button:has-text('Connect OneDrive')")
     if not button.count():
         if page.locator("button:has-text('Disconnect')").count():
@@ -618,10 +772,10 @@ def test_connect_reaches_microsoft(page):
 def test_folder_browser(page):
     """Read-only: when the dev stack is connected to a real OneDrive, open the
     folder browser for the first car. Creates nothing and changes no choice."""
-    page.goto(UI + "onedrive")
+    page.goto(UI + "storage")
     if not page.locator("button:has-text('Disconnect')").count():
         raise Skip("dev stack isn't connected to OneDrive")
-    page.locator("ul.folders a").first.click()
+    page.locator("ul.folders a[href*='onedrive/browse']").first.click()
     expect(page.locator("h1")).to_contain_text("Folder for")
     expect(page.locator("form.new-folder input[name=name]")).to_be_visible()
     expect(page.locator("button:has-text('Use ')")).to_be_visible()
@@ -688,6 +842,11 @@ def main():
         step("real upload to the OneDrive test folder", test_real_upload, page)
         step("OneDrive file picker on the Add form", test_onedrive_picker, page)
         step("import page shows progress", test_import_page_shows_progress, page)
+        # The built-in PDF viewer only exists in full Chromium, not the headless shell the rest uses.
+        viewer = p.chromium.launch(channel="chromium")
+        step("invoice folder: pick a folder, save a PDF, open it inline, pick it, import",
+             test_local_folder, page, viewer.new_page())
+        viewer.close()
         # Expected 400s from the deliberate bad submissions above aren't script errors.
         real = [t for t in problems if "400" not in t]
         step("no script or CSP errors", lambda: (_ for _ in ()).throw(AssertionError(real)) if real else None)

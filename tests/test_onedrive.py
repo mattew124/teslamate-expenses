@@ -218,7 +218,7 @@ def test_hidden_without_token_key(app_for, ms, admin):
     c = app_for(ms, key=None)
     assert b'name="invoice_file"' not in c.get("/new").data
     assert b"/onedrive" not in c.get("/").data
-    page = c.get("/onedrive").data.decode()
+    page = c.get("/storage").data.decode()
     assert "EXPENSES_ENCRYPTION_KEY" in page and "Connect OneDrive" not in page
     assert save_credentials(c).status_code == 404
     assert c.post("/onedrive/connect", headers=ORIGIN).status_code == 404
@@ -234,7 +234,7 @@ def test_bad_token_key_refuses_to_start(app_for, ms):
 # ---- setup ----------------------------------------------------------------------
 
 def test_setup_page_shows_the_redirect_uri_to_register(client):
-    page = client.get("/onedrive").data.decode()
+    page = client.get("/storage").data.decode()
     assert CALLBACK in page and 'name="client_secret"' in page
     assert "Connect OneDrive</button>" not in page   # nothing to connect with yet
 
@@ -242,7 +242,7 @@ def test_setup_page_shows_the_redirect_uri_to_register(client):
 def test_redirect_uri_follows_the_proxy(app_for, ms, monkeypatch):
     monkeypatch.setenv("BASE_PATH", "/expenses")
     c = app_for(ms)
-    page = c.get("/expenses/onedrive", headers={"X-Forwarded-Proto": "https",
+    page = c.get("/expenses/storage", headers={"X-Forwarded-Proto": "https",
                                                 "X-Forwarded-Host": "cars.example.org"}).data.decode()
     assert "https://cars.example.org/expenses/onedrive/callback" in page
 
@@ -258,15 +258,15 @@ def test_credentials_are_validated_and_secret_encrypted(client, admin):
     assert row["client_id"] == CLIENT_ID and row["secret_expires"] == date(2027, 6, 30)
     assert SECRET not in json.dumps(row, default=str)
     assert Fernet(KEY.encode()).decrypt(row["client_secret"].encode()).decode() == SECRET
-    page = client.get("/onedrive").data.decode()
+    page = client.get("/storage").data.decode()
     assert SECRET not in page and CLIENT_ID in page and "Connect OneDrive" in page
 
 
 def test_secret_expiry_warning(client):
     save_credentials(client, expires=(date.today() + timedelta(days=10)).isoformat())
-    assert b"secret expires" in client.get("/onedrive").data
+    assert b"secret expires" in client.get("/storage").data
     save_credentials(client, expires=(date.today() + timedelta(days=200)).isoformat())
-    assert b"secret expires" not in client.get("/onedrive").data
+    assert b"secret expires" not in client.get("/storage").data
 
 
 def test_new_credentials_drop_the_old_sign_in(client, ms, admin):
@@ -349,13 +349,13 @@ def test_browse_and_choose_folder(client, ms, admin):
     assert choose_folder(client).status_code == 303
     assert admin.execute("SELECT car_id, folder_id, folder_path FROM expenses.car_folder").fetchall() == [
         {"car_id": 1, "folder_id": "INV", "folder_path": "/Cars/Test car/Invoices"}]
-    assert "/Cars/Test car/Invoices" in client.get("/onedrive").data.decode()
+    assert "/Cars/Test car/Invoices" in client.get("/storage").data.decode()
 
 
 def test_browse_needs_sign_in_and_a_real_car(client, ms):
     save_credentials(client)
     resp = client.get("/onedrive/browse/1")
-    assert resp.status_code == 303 and resp.headers["Location"].endswith("/onedrive")
+    assert resp.status_code == 303 and resp.headers["Location"].endswith("/storage")
     sign_in(client, ms)
     assert client.get("/onedrive/browse/99").status_code == 404
     assert choose_folder(client, car_id=99).status_code == 404
@@ -535,7 +535,7 @@ def test_app_role_can_use_onedrive_tables_only(pg, admin):
 
 
 def test_setup_page_has_the_full_registration_walkthrough(client):
-    page = client.get("/onedrive").data.decode()
+    page = client.get("/storage").data.decode()
     for text in ("New registration", "Personal Microsoft accounts only", "Web",
                  "Allow public client flows", "AADSTS90023", "Files.ReadWrite",
                  "Secret ID", "24 months", "Application (client) ID"):
@@ -545,16 +545,16 @@ def test_setup_page_has_the_full_registration_walkthrough(client):
 
 def test_folder_note_shows_the_name_the_settings_produce(client, ms, admin):
     sign_in(client, ms)
-    assert "261107 Tyres - Tyre Shop.pdf" in client.get("/onedrive").data.decode()     # the defaults
+    assert "261107 Tyres - Tyre Shop.pdf" in client.get("/storage").data.decode()     # the defaults
     admin.execute("UPDATE expenses.setting SET invoice_name_format = '%date - %category', "
                   "invoice_date_format = 'yyyy-mm-dd'")
-    page = client.get("/onedrive").data.decode()
+    page = client.get("/storage").data.decode()
     assert "2026-11-07 - Tyres.pdf" in page and "Settings" in page
 
 
 def test_setup_page_warns_that_a_new_redirect_uri_takes_a_few_minutes(client):
     """A freshly added redirect URI can be refused ("invalid request") for a few minutes."""
-    page = client.get("/onedrive").data.decode()
+    page = client.get("/storage").data.decode()
     assert "few minutes" in page and "invalid request" in page.lower()
 
 
@@ -565,7 +565,7 @@ def test_connect_never_relies_on_a_form_redirect(client, ms):
     resp = client.post("/onedrive/connect", headers=ORIGIN)
     assert resp.status_code == 200 and "Location" not in resp.headers
     assert 'data-auto-follow' in resp.data.decode()
-    for r in (resp, client.get("/onedrive"), client.get("/new")):
+    for r in (resp, client.get("/storage"), client.get("/new")):
         form_action = next(d for d in r.headers["Content-Security-Policy"].split(";")
                            if d.strip().startswith("form-action"))
         assert form_action.strip() == "form-action 'self'"
@@ -887,11 +887,10 @@ ICON = re.compile(r'<img src="[^"]*/provider-icon/onedrive" alt="" class="provid
 
 
 @pytest.mark.parametrize("path, where", [
-    ("/", r"<nav>.*?</nav>"),
-    ("/onedrive", r"<h1>\s*<img[^>]*>\s*OneDrive</h1>"),
+    ("/storage", r"<h2>\s*<img[^>]*>\s*OneDrive</h2>"),
     ("/categories", r"<small>\s*<img[^>]*>\s*OneDrive folder</small>"),
     ("/onedrive/browse/1", r"<h1>\s*<img[^>]*>\s*Folder for"),
-    ("/new", r'<h2 id="onedrive-picker-title">\s*<img[^>]*>'),
+    ("/new", r'<h2 id="onedrive-picker-title">\s*<span[^>]*>\s*<img[^>]*>'),
 ])
 def test_the_logo_marks_each_place_onedrive_heads_or_labels_something(client, ms, path, where):
     sign_in(client, ms)
@@ -902,7 +901,7 @@ def test_the_logo_marks_each_place_onedrive_heads_or_labels_something(client, ms
 
 def test_the_connect_button_and_the_connecting_page_carry_it(client, ms):
     save_credentials(client)
-    assert re.search(r'<button[^>]*>\s*<img[^>]*provider-icon[^>]*>\s*Connect OneDrive', client.get("/onedrive").data.decode())
+    assert re.search(r'<button[^>]*>\s*<img[^>]*provider-icon[^>]*>\s*Connect OneDrive', client.get("/storage").data.decode())
     page = client.post("/onedrive/connect", headers=ORIGIN).data.decode()
     assert re.search(r"<h1>\s*<img[^>]*provider-icon[^>]*>\s*Connecting OneDrive", page)
 
@@ -915,22 +914,25 @@ def test_the_import_page_heading_carries_it(client, ms):
 
 def test_no_logo_when_there_is_no_storage_provider(app_for, ms):
     c = app_for(ms, key=None)
-    for path in ("/", "/onedrive", "/categories"):
+    for path in ("/", "/storage", "/categories"):
         assert "provider-icon/onedrive" not in c.get(path).data.decode()
 
 
 def test_the_logos_source_is_credited_on_the_onedrive_page(client, ms):
     sign_in(client, ms)
-    page = client.get("/onedrive").data.decode()
+    page = client.get("/storage").data.decode()
     assert re.search(r'<a href="https://selfh\.st/icons"[^>]*>selfh\.st/icons</a>', page)
     assert re.search(r'<a href="https://creativecommons\.org/licenses/by/4\.0/"[^>]*>CC BY 4\.0</a>', page)
 
 
 def test_no_credit_without_the_logo(app_for, ms):
-    assert "selfh.st" not in app_for(ms, key=None).get("/onedrive").data.decode()
+    assert "selfh.st" not in app_for(ms, key=None).get("/storage").data.decode()
 
 
-def test_the_nav_link_has_no_underlined_space_between_the_logo_and_its_name(client, ms):
+def test_the_header_has_one_link_for_every_storage_and_old_links_still_arrive(client, ms):
+    """One Invoice storage page for OneDrive and whatever else is set up, not a header link each."""
     sign_in(client, ms)
     nav = re.search(r"<nav>.*?</nav>", client.get("/").data.decode(), re.S).group(0)
-    assert re.search(r"<a [^>]*>\s*<img[^>]*provider-icon[^>]*>OneDrive</a>", nav)   # no text node of spaces to underline
+    assert '<a href="/storage">Invoice storage</a>' in nav and "OneDrive" not in nav
+    old = client.get("/onedrive")
+    assert old.status_code == 302 and old.headers["Location"].endswith("/storage")

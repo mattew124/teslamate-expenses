@@ -40,6 +40,6 @@ def test_the_readme_links_to_the_site():
 
 
 def test_the_app_points_at_the_site_not_the_readme():
-    for name in ("tmexpenses/onedrive.py", "tmexpenses/templates/onedrive.html"):
+    for name in ("tmexpenses/onedrive.py", "tmexpenses/templates/_storage_onedrive.html"):
         text = (ROOT / name).read_text()
         assert f"{SITE}onedrive/" in text and "README" not in text, name

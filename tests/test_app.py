@@ -580,7 +580,7 @@ def test_a_refund_is_marked_as_a_credit(client, admin):
 def test_no_page_uses_inline_styles(client, admin):
     """style-src 'self' in the CSP: an inline style or <style> block is silently dropped by the browser."""
     client.post("/new", data=form(admin), headers=ORIGIN)
-    for path in ("/", "/new", "/1/edit", "/categories", "/settings", "/onedrive", "/learned"):
+    for path in ("/", "/new", "/1/edit", "/categories", "/settings", "/storage", "/learned"):
         resp = client.get(path)
         assert resp.status_code == 200, path
         html = resp.data.decode()

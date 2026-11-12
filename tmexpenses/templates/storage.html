@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Invoice storage{% endblock %}
+{% block main_attrs %} class="narrow"{% endblock %}
+{% block content %}
+<h1>Invoice storage</h1>
+<p>Where invoice PDFs are kept. Set up one place or several, then choose a folder for each car: a car's
+  invoices go to one place. Without any, an expense can still carry a link you paste.</p>
+{% if notice %}<p class="notice bad">{{ notice }}</p>{% endif %}
+
+{# One card per place, from STORES: a new provider is a new _storage_<kind>.html. #}
+{% for p in providers %}{% include "_storage_" ~ p.kind ~ ".html" %}
+{% endfor %}
+
+{% set ready = providers|selectattr('ready')|list %}
+<section class="card stack" id="cars">
+  <h2>Folder per car</h2>
+  {% if not ready %}
+  <p><small>Set up a place above first{% if providers|selectattr('enabled')|list %}: it isn't ready to use yet{% endif %}.</small></p>
+  {% endif %}
+  {% if ready or folders %}
+  <ul class="plain folders">
+    {% for c in cars %}{% set f = folders.get(c.id) %}
+    {% set current = (providers|selectattr('kind', 'equalto', f.backend)|first) if f else none %}
+    <li>
+      <span><strong>{{ c.name or ('Car ' ~ c.id) }}</strong><br>
+        <small>{% if f %}{{ current.title }}: <code>{{ (local_shown if f.backend == 'local' else '') ~ f.folder_path }}</code>{% if not current.ready %}
+          (not available at the moment){% endif %}{% else %}No folder chosen{% endif %}</small></span>
+      <span class="actions">
+        {% for p in ready %}
+        <a href="{{ url_for(p.kind ~ '_browse', car_id=c.id) }}">{% if f and f.backend == p.kind %}Change{% elif f %}Move to a {{ p.short }}{% elif ready|length == 1 %}Choose folder{% else %}Choose a {{ p.short }}{% endif %}</a>
+        {% endfor %}
+        {% if f and current.ready %}<a href="{{ url_for(f.backend ~ '_import', car_id=c.id) }}">Import existing invoices</a>{% endif %}
+        {% if f and current.enabled %}<form method="post" action="{{ url_for(f.backend ~ '_clear_folder', car_id=c.id) }}">
+          <button type="submit" class="linklike">Clear</button></form>{% endif %}
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+  <small>Uploaded invoices are named from the template under <a href="{{ url_for('settings') }}">Settings</a>,
+    e.g. “{{ name_example }}”, and go into the <a href="{{ url_for('categories') }}">category's subfolder</a>.
+    A OneDrive folder can be renamed or moved in OneDrive later without breaking uploads.
+    Moving a car to another place leaves the invoices it already has where they are.</small>
+  {% endif %}
+</section>
+{% endblock %}
