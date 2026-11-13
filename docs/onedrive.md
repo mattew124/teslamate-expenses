@@ -30,8 +30,6 @@ account (OneDrive Personal). To keep the PDFs on your own server instead, see
     if it doesn't exist yet. Uploads go by the folder's ID, so renaming or moving it later
     doesn't break them.
 
-<!-- screenshot: storage-page-onedrive - The Invoice storage page with OneDrive connected and a folder chosen for a car -->
-
 ## Where files go
 
 Each invoice goes into a subfolder of the car's folder, set per category on the **Categories** page.
@@ -66,8 +64,6 @@ If the invoice is already in OneDrive, press **Choose from OneDrive** in the inv
 A window opens over the form, in the car's folder: open a folder to go into it, or **Up** to go above
 it, all the way to the top of your drive. Choosing a PDF makes its link the invoice link and fills in
 the form from what can be read in it, as an uploaded file does. Nothing is copied or moved.
-
-<!-- screenshot: form-onedrive-picker - The OneDrive window on the Add expense form, listing folders and PDFs -->
 
 ## Limits
 

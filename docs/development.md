@@ -99,7 +99,12 @@ A pull request that changes what a user or installer sees updates the pages it a
 visibly changed screen also needs a screenshot in the docs.
 
 **Screenshots must never show real data, so they can't come from the dev stack**, which copies your
-real cars and charging costs. They come from the demo stack instead, whose data is invented:
+real cars and charging costs. They come from the demo stack instead, whose data is invented.
+
+**They must not show the OneDrive logo either**: Microsoft's brand terms don't allow it in published
+material. The app shows the logo to its own users, so take care with the pages that carry it (the
+**Invoice storage** page's OneDrive card, the OneDrive button on the Add form), and leave those out or
+crop them. Grafana's logo, which Grafana licenses for this, may appear.
 
 ```bash
 scripts/dev.sh demo up
