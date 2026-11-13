@@ -44,6 +44,8 @@ First-time setup: `python3 -m venv .venv && .venv/bin/pip install -r requirement
 Run both test suites before calling a change done, and look at the screenshots
 after any UI or dashboard change.
 
+CodeQL is installed machine-wide (`codeql` on PATH, kept current automatically). If it is missing, run `~/homelab/scripts/install-codeql.sh`; never download another copy (homelab `architecture/dev-environments.md` §7).
+
 ## Working in a worktree
 
 Parallel sessions each get a git worktree under `.claude/worktrees/<name>/`, and
