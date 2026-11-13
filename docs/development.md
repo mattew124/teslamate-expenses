@@ -8,6 +8,18 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 The tests load TeslaMate's real table definitions (`db/teslamate-schema.sql`), start the app so
 it creates its own schema, and also cover the optional `scripts/provision-db.sh` role.
 
+## CodeQL before you push
+
+CI runs CodeQL on pull requests (`.github/workflows/codeql.yml`). To get the same answer locally:
+
+```bash
+scripts/codeql.sh setup   # once: downloads the CodeQL bundle (about 1 GB) to ~/.local/share/codeql
+scripts/codeql.sh         # analyses python and actions in about 30 seconds; exits 1 on findings
+```
+
+It needs the `gh` CLI and `zstd`. Databases and SARIF results go to `.dev/codeql`. Set
+`CODEQL_HOME` to install elsewhere, or `CODEQL_VERSION` (a `codeql-bundle-v…` tag) to pin a version.
+
 ## Dev stack
 
 `scripts/dev.sh` runs the UI and Grafana on their own test database, not on the TeslaMate
