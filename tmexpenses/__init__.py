@@ -21,7 +21,7 @@ from flask import Flask, abort, g, jsonify, make_response, redirect, render_temp
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from . import dashboard, db, docinfo, icons, invoices, logs, onedrive, storage, updates, validation
+from . import compat, dashboard, db, docinfo, icons, invoices, logs, onedrive, storage, updates, validation
 
 log = logging.getLogger("tmexpenses.app")
 
@@ -104,6 +104,8 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
             db.migrate()
         else:
             log.info("SKIP_MIGRATE=1: not touching the schema")
+        with db.connect() as conn:   # refuses to start on a TeslaMate newer than the tested one
+            compat.check(conn, allow_untested=os.environ.get("ALLOW_UNTESTED_TESLAMATE") == "1")
     dashboard_dir = os.environ.get("DASHBOARD_DIR")
 
     def refresh_dashboard():

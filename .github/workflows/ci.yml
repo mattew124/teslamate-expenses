@@ -49,3 +49,17 @@ jobs:
         run: coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY" || true
       - name: The image builds
         run: docker build -t teslamate-expenses:ci .
+
+  teslamate-recorded:
+    # The suite on the real schema of the TeslaMate release compat.py says this was tested with,
+    # migrated by that release's own image. A release can't claim a TeslaMate it hasn't passed on.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.15"
+      - run: python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+      - run: scripts/teslamate-compat.sh

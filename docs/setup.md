@@ -87,9 +87,10 @@
 
 There is nothing to run. On start the app creates its own `expenses` schema in the TeslaMate
 database (idempotent, so upgrades apply themselves), and only ever writes inside it. It reads
-`cars`, `positions` and `charging_processes`. This needs TeslaMate's database user, which
+`cars`, `positions` and `charging_processes`, and the version table `schema_migrations`, and stops on a
+TeslaMate newer than the one it was tested with (see [Reference](reference.md#teslamate-version)). This needs TeslaMate's database user, which
 owns the database; Grafana already reads it the same way.
 
 To give the app less than that, run `scripts/provision-db.sh` once. It creates a role that
-can write expenses and read only `cars` and `positions(car_id, date, odometer)`. Point
+can write expenses and read only `cars`, `schema_migrations` and `positions(car_id, date, odometer)`. Point
 `DATABASE_USER`/`DATABASE_PASS` at it and set `SKIP_MIGRATE=1`. Re-run the script on upgrades.

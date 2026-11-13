@@ -9,6 +9,12 @@ Each entry says what an installer must do to upgrade. Where nothing is said, pul
 
 ### Added
 
+- The app records the TeslaMate release it was tested with (4.4.0) and refuses to start if the
+  database is from a newer one, naming both. `ALLOW_UNTESTED_TESLAMATE=1` starts it anyway and logs an
+  error. It reads TeslaMate's `schema_migrations` table to tell: if you use `scripts/provision-db.sh`,
+  re-run it to grant that read.
+- `scripts/teslamate-compat.sh` tests this project against any TeslaMate release in a throwaway database,
+  and a weekly workflow does so for the latest release.
 - Invoices can be kept in a folder on the server (a NAS share mounted on the Docker host, say) instead
   of in OneDrive, and the app shows them itself: the list's PDF link opens the file in the browser,
   behind the same login as every page (#12). It is set up beside OneDrive on one
