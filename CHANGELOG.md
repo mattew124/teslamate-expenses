@@ -5,7 +5,7 @@ steps are in [RELEASING.md](RELEASING.md). Newest first.
 
 Each entry says what an installer must do to upgrade. Where nothing is said, pull the new image.
 
-## Unreleased
+## 0.3.0-rc1 - 2026-11-13
 
 ### Added
 
