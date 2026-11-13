@@ -43,10 +43,10 @@ def main():
         page.fill("[name=expenses_url]", "https://teslamate.example.com/expenses/")
         shot(page, "settings-page", full_page=True)
 
-        # Invoice storage. The OneDrive card's setup steps show this stack's own callback address:
-        # fold them away, as they are once OneDrive is set up.
+        # Invoice storage. Leave the OneDrive card out: it carries Microsoft's logo, which Microsoft's
+        # brand terms don't allow in published material (the card also shows this stack's callback address).
         page.goto(UI + "storage")
-        page.evaluate("document.querySelectorAll('details').forEach((d) => { d.open = false; })")
+        page.evaluate("document.querySelector('#onedrive').remove()")
         shot(page, "storage-page", full_page=True)
         car = re.search(r"local/import/(\d+)", page.locator("a[href*='local/import/']").first.get_attribute("href")).group(1)
         page.goto(UI + "new")
