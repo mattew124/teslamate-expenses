@@ -5,7 +5,8 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/python -m pytest -q     # starts a throwaway postgres:18 container
 ```
 
-The tests load TeslaMate's real table definitions (`db/teslamate-schema.sql`), start the app so
+The tests let the real TeslaMate image (the release in `garagebooks/compat.py`) create its tables in a
+throwaway database, so docker pulls `teslamate/teslamate` the first time. They then start the app so
 it creates its own schema, and also cover the optional `scripts/provision-db.sh` role.
 
 ## Testing against a TeslaMate release
@@ -16,12 +17,12 @@ start on a newer database. To try a new TeslaMate, with nothing but docker and t
 
 ```bash
 scripts/teslamate-compat.sh 4.5.0            # or `latest`; defaults to the recorded release
-scripts/teslamate-compat.sh 4.5.0 --record   # after it passes: update the schema snapshot and compat.py
+scripts/teslamate-compat.sh 4.5.0 --record   # after it passes: update compat.py
 ```
 
-It starts a throwaway Postgres, lets the real `teslamate/teslamate` image migrate it, compares the
-tables we read with `db/teslamate-schema.sql`, runs the whole suite on that schema, and compares the
-newest migration with the recorded one. Exit status 0 means tested, 1 means a failure or a changed table,
+It starts a throwaway Postgres, lets the real `teslamate/teslamate` image migrate it, runs the
+whole suite on that schema, and compares the
+newest migration with the recorded one. Exit status 0 means tested, 1 means a failure,
 2 means it passes but is newer than recorded. A weekly *TeslaMate compatibility* workflow runs it against
 the latest release and opens an issue when it doesn't exit 0. After `--record`, update the CHANGELOG
 (an upgrade note) and the README line naming the tested release.
@@ -53,7 +54,6 @@ scripts/dev.sh reset          # wipe the test database
 scripts/dev.sh demo up         # second stack of invented data, for screenshots (see below)
 scripts/dev.sh sample-expenses  # add made-up expenses to try the app with; `clear` removes them
 scripts/dev.sh sample-invoices  # write made-up invoice PDFs into the stack's invoice folder
-scripts/dev.sh schema         # regenerate db/teslamate-schema.sql after a TeslaMate upgrade
 scripts/dev.sh setup          # in a new worktree: create .venv
 scripts/dev.sh down           # stop the stack, keeping its data
 scripts/dev.sh logs           # follow the app's log

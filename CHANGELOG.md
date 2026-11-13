@@ -14,7 +14,8 @@ own name and says plainly that it is not affiliated with TeslaMate. Nothing abou
 **To upgrade:** the image is now `ghcr.io/<owner>/garagebooks` (the old `teslamate-expenses` image stops
 receiving releases), so change the `image:` line in your compose file. The dashboards volume is now
 `garagebooks-dashboards`: if you mount it by name for Grafana, change that too, or the dashboard stops updating.
-Your `expenses` schema, `EXPENSES_*` settings and invoice folders are untouched, and a folder already marked with
+The repository no longer holds a copy of TeslaMate's table definitions (they are AGPL-3.0, this project MIT):
+tests and the dev stack get them by running the real TeslaMate image. Your `expenses` schema, `EXPENSES_*` settings and invoice folders are untouched, and a folder already marked with
 `.teslamate-expenses` keeps working. The GitHub address, documentation address and update check follow the rename.
 
 ## 0.3.0-rc1 - 2026-11-13

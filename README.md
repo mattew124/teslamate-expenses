@@ -79,5 +79,5 @@ if the database is from a newer TeslaMate than that, rather than showing wrong n
 
 ## License
 
-MIT. `db/teslamate-schema.sql` is generated from [TeslaMate](https://github.com/teslamate-org/teslamate)'s
-table definitions (AGPL-3.0).
+MIT. No TeslaMate code or schema is included: the tests pull the real [TeslaMate](https://github.com/teslamate-org/teslamate)
+image (AGPL-3.0) to create its tables in a throwaway database.
