@@ -243,3 +243,40 @@ def test_a_release_publishes_github_release_notes_for_the_tag():
 def test_the_setting_is_documented():
     for name in ("docs/reference.md", ".env.example"):
         assert "UPDATE_CHECK" in (ROOT / name).read_text(), name
+
+
+# ---- release notes: the changelog entry first, then the pull requests in groups ----------------
+
+def test_release_notes_group_pull_requests_by_label():
+    config = (ROOT / ".github/release.yml").read_text()
+    for label in ("enhancement", "bug", "documentation", "dependencies", "internal"):
+        assert label in config, label
+    assert "changelog:" in config and "categories:" in config
+    assert '"*"' in config  # whatever is unlabelled still appears, under "Other changes"
+
+
+def test_the_changelog_entry_for_a_tag_opens_its_release_notes():
+    release = (ROOT / ".github/workflows/release.yml").read_text()
+    assert "scripts/changelog-entry.sh" in release and "--notes-file" in release
+    assert "--generate-notes" in release
+
+
+def test_changelog_entry_prints_one_section_without_its_heading():
+    import subprocess
+    out = subprocess.run([str(ROOT / "scripts/changelog-entry.sh"), "v0.2.0-rc5"], cwd=ROOT,
+                         check=True, capture_output=True, text=True).stdout
+    assert out.startswith("The fifth candidate for 0.2.0")
+    assert "## 0.2.0-rc5" not in out and "0.2.0-rc4 - " not in out
+
+
+def test_changelog_entry_is_empty_for_a_tag_without_one():
+    import subprocess
+    out = subprocess.run([str(ROOT / "scripts/changelog-entry.sh"), "v9.9.9"], cwd=ROOT,
+                         check=True, capture_output=True, text=True).stdout
+    assert out == ""
+
+
+def test_the_latest_changelog_entry_opens_with_what_it_means_for_the_reader():
+    text = (ROOT / "CHANGELOG.md").read_text()
+    first = text.split("\n## ")[1].split("\n", 1)[1].lstrip()
+    assert not first.startswith("###"), "start the entry with a paragraph saying why it matters"

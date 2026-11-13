@@ -24,8 +24,12 @@ Rules of thumb:
 
 ## Candidates and stable releases
 
-1. Merge the work to `main` (pull request, CI green). Add each change to "Unreleased" in
-   `CHANGELOG.md` as you go, and note any action installers must take.
+1. Merge the work to `main` (pull request, CI green). Label each pull request (`enhancement`, `bug`,
+   `documentation`, `dependencies`, `internal`, or `breaking`): the labels are the groups in the release
+   notes. Add each change to "Unreleased" in `CHANGELOG.md` as you go, and note any action installers must take.
+   Before tagging, rename "Unreleased" to `## X.Y.Z-rcN - date` in its own pull request, and open the entry
+   with a short paragraph saying what the release means for an installer and why it is worth having,
+   then a **To upgrade** line. That paragraph is the first thing people read in the release notes.
 2. Tag a **release candidate**: `git tag -a v0.3.0-rc1 -m "v0.3.0-rc1" && git push origin v0.3.0-rc1`.
    The Release workflow runs the tests, builds `ghcr.io/<owner>/teslamate-expenses:0.3.0-rc1` for
    amd64 and arm64, and prints the digest in the run summary. A pre-release tag never moves `:latest`.
@@ -62,12 +66,19 @@ to the installation's own update process. A release that adds tables or columns 
 
 ## Release notes
 
-The same workflow ends by creating a GitHub Release for the tag, with notes generated from the merged
-pull requests since the previous tag. A tag with a hyphen (`-rc1`) is marked a pre-release and never
-becomes "latest". These are the notes the app's footer links to, and the releases it compares with to
-say whether an installation is up to date. Write a clear pull request title: it is the line in the notes.
-Edit the release on GitHub afterwards if it needs more, such as an upgrade step: paste in the
-tag's entry from `CHANGELOG.md`, which is where action-needed items are written first.
+The same workflow ends by creating a GitHub Release for the tag. The notes have two parts, as
+TeslaMate's do:
+
+1. The tag's entry from `CHANGELOG.md` (`scripts/changelog-entry.sh <tag>`): the summary paragraph, the
+   upgrade steps, then Added / Changed / Fixed. Nothing is posted for a tag with no entry, so write it first.
+2. The merged pull requests since the previous tag, in groups chosen by their labels
+   (`.github/release.yml`): new features and improvements, fixes, documentation, dependencies, build and
+   internal, and "Other changes" for anything unlabelled. Write a clear pull request title: it is the line.
+
+A tag with a hyphen (`-rc1`) is marked a pre-release and never becomes "latest". These are the notes the
+app's footer links to, and the releases it compares with to say whether an installation is up to date.
+To fix a release's notes afterwards, edit the changelog entry on `main` and run
+`gh release edit <tag> --notes-file <file>` with that entry followed by the generated list.
 
 ## How the image is built
 
