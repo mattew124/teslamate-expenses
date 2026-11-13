@@ -38,7 +38,8 @@ copies your `dev.env` into new Claude Code worktrees.
 The invoice folder is on in the dev stack too: `.dev/invoices` in the checkout stands in for a mounted
 share (the app runs as you there, so its files are yours), and `destroy` removes it. Drop PDFs into it
 to try the import, or let `sample-invoices` write some made-up ones into `.dev/invoices/Sample invoices`;
-then choose that folder for a car on the Invoice storage page.
+then choose that folder for a car on the Invoice storage page. To try it on a real
+share instead, set `DEV_INVOICES_DIR` in `dev.env` to where the share is mounted (see `dev.env.example`).
 
 OneDrive is on in the dev stack with a throwaway token key in `.dev/env`. To sign in there,
 add the dev stack's callback address (shown in the OneDrive card of its Invoice storage page) as a second redirect URI on

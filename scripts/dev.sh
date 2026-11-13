@@ -66,13 +66,15 @@ DEMO=0
 if [ "${1:-}" = demo ]; then DEMO=1; shift; fi
 SHOTS=.dev/screenshots; [ "$DEMO" = 0 ] || SHOTS=.dev/demo-screenshots
 # The stack's invoice folder (INVOICES_DIR): a plain folder here, mounted into the app, which runs as
-# you so that what it writes there is yours. Put PDFs in it by hand to try the import.
+# you so that what it writes there is yours. Put PDFs in it by hand to try the import. DEV_INVOICES_DIR
+# in dev.env points it at another folder instead, such as a mounted NAS share, to try the app on one.
 INVOICES=.dev/invoices; [ "$DEMO" = 0 ] || INVOICES=.dev/demo-invoices
 DEV_UID="$(id -u)"; DEV_GID="$(id -g)"
-export DEV_UID DEV_GID DEV_INVOICES_DIR="$ROOT/$INVOICES"
+[ "$DEMO" = 0 ] && [ -n "${DEV_INVOICES_DIR:-}" ] || DEV_INVOICES_DIR="$ROOT/$INVOICES"
+export DEV_UID DEV_GID DEV_INVOICES_DIR
 # Shown on the app's Invoice storage page. The demo's screenshots are published, so it shows an
 # example path instead of this checkout's.
-export DEV_INVOICES_SHOWN="$ROOT/$INVOICES"
+export DEV_INVOICES_SHOWN="$DEV_INVOICES_DIR"
 [ "$DEMO" = 0 ] || export DEV_INVOICES_SHOWN=/mnt/nas/cars/invoices
 
 # ---- which dev stack this checkout owns ----------------------------------------
@@ -135,6 +137,8 @@ sync_local_notes() {
 ensure_env() {
     sync_local_notes
     mkdir -p "$SHOTS" "$INVOICES"
+    # Never made here: a folder that isn't there is a share that didn't mount, not one to create.
+    [ -d "$DEV_INVOICES_DIR" ] || { echo "dev: DEV_INVOICES_DIR $DEV_INVOICES_DIR isn't there (not mounted?)" >&2; exit 1; }
     if [ ! -f "$ENVF" ]; then
         ( umask 077
           printf 'DEV_ADMIN_DB_PASS=%s\nDEV_GRAFANA_PASS=%s\n' \
@@ -341,7 +345,7 @@ base_path=$DEV_BASE_PATH
 ui_port=$DEV_UI_PORT
 grafana_port=$DEV_GRAFANA_PORT
 image=${EXPENSES_IMAGE:-teslamate-expenses:$DEV_TAG}
-invoices=$ROOT/$INVOICES
+invoices=$DEV_INVOICES_DIR
 router_suffix=${DEV_ROUTER_SUFFIX:-none}
 ui_priority=$DEV_UI_PRIORITY
 grafana_priority=$DEV_GRAFANA_PRIORITY
@@ -505,7 +509,7 @@ case "${1:-}" in
             dev_psql -v "tz=$APP_TZ" < scripts/dev-sample-expenses.sql
             echo "dev: sample expenses added to the test database"
         fi ;;
-    sample-invoices) ensure_env; python3 scripts/dev-sample-invoices.py "$ROOT/$INVOICES" ;;
+    sample-invoices) ensure_env; python3 scripts/dev-sample-invoices.py "$DEV_INVOICES_DIR" ;;
     psql) ensure_env; shift; dev_psql "$@" ;;
     logs) ensure_env; compose logs -f expenses-dev ;;
     *) sed -n '3,34p' "$0" >&2; exit 2 ;;
