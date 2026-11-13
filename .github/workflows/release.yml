@@ -78,7 +78,7 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # The release notes the app links to. A tag with a hyphen (v0.3.0-rc1) is marked a pre-release, which
+  # The release notes the app links to: the tag's changelog entry, then the merged pull requests in groups. A tag with a hyphen (v0.3.0-rc1) is marked a pre-release, which
   # GitHub keeps out of "latest". Runs only once the image is published.
   notes:
     needs: image
@@ -86,6 +86,9 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -93,4 +96,8 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           case "$TAG" in *-*) flag=--prerelease ;; *) flag=--latest ;; esac
-          gh release create "$TAG" --verify-tag --generate-notes --title "$TAG" "$flag"
+          # The tag's CHANGELOG.md entry opens the notes (what changed and why it matters, and anything an
+          # installer must do); GitHub then appends the merged pull requests in groups (.github/release.yml).
+          scripts/changelog-entry.sh "$TAG" > "$RUNNER_TEMP/notes.md"
+          gh release create "$TAG" --verify-tag --notes-file "$RUNNER_TEMP/notes.md" --generate-notes \
+            --title "$TAG" "$flag"

@@ -7,33 +7,45 @@ Each entry says what an installer must do to upgrade. Where nothing is said, pul
 
 ## 0.3.0-rc1 - 2026-11-13
 
+Two changes make this release worth having. **Your invoices no longer have to live in OneDrive:** keep them
+in a folder on your own server (a NAS share, say) and the app saves them there, opens them from the
+expense list behind the same login as every other page, and can import the ones you already have. That
+makes the app usable without a Microsoft account, and keeps your records on hardware you control.
+**TeslaMate can change its database in any release, and this app reads that database directly,** so it now
+knows which TeslaMate it was tested against (4.4.0) and refuses to start on a newer one, instead of quietly
+showing wrong totals. Every release is also tested against TeslaMate's own schema, not a copy of it.
+
+**To upgrade:** pull the new image. The app adds two columns to its own tables on start. If you use the
+restricted database role (`SKIP_MIGRATE=1`), re-run `scripts/provision-db.sh` first: the app now reads
+TeslaMate's `schema_migrations` table to check the version. The server folder is off until you turn it on.
+
 ### Added
 
-- The app records the TeslaMate release it was tested with (4.4.0) and refuses to start if the
-  database is from a newer one, naming both. `ALLOW_UNTESTED_TESLAMATE=1` starts it anyway and logs an
-  error. It reads TeslaMate's `schema_migrations` table to tell: if you use `scripts/provision-db.sh`,
-  re-run it to grant that read.
+- **Invoices in a folder on the server**, as an alternative to OneDrive. Each car uses one or the other.
+  - Set up on one **Invoice storage** page (it replaces the OneDrive page; old links still arrive), always
+    in the header: the folder's path, then the folder each car uses, chosen with the same picker as OneDrive.
+  - Uploads go into the category's subfolder; the Add form can pick a PDF already in the folder; **Import
+    existing invoices** works there with the same preview and learning (#12).
+  - Safe by design: a file is never overwritten, nothing outside the mounted folder is read or written,
+    and a folder that has gone missing is an error, never recreated.
+  - The Grafana table links to stored invoices through **Settings → This app's URL**.
+  - With `docker-compose.invoices.yml` the app doesn't run without the folder (`INVOICES_REQUIRED=1`): an
+    unmounted share stops it with the reason in `docker compose logs`, and the container turns unhealthy
+    if the folder goes away later. `INVOICES_REQUIRED=0` keeps it running instead.
+  - To turn it on, set `INVOICES_HOST_DIR` in `.env` and add `docker-compose.invoices.yml`
+    (docs, "Invoice folder on the server").
+- **A TeslaMate version check.** The app records the TeslaMate release it was tested with and refuses to
+  start if the database is from a newer one, naming both. `ALLOW_UNTESTED_TESLAMATE=1` starts it anyway and
+  logs an error.
 - `scripts/teslamate-compat.sh` tests this project against any TeslaMate release in a throwaway database,
   and a weekly workflow does so for the latest release.
-- Invoices can be kept in a folder on the server (a NAS share mounted on the Docker host, say) instead
-  of in OneDrive, and the app shows them itself: the list's PDF link opens the file in the browser,
-  behind the same login as every page (#12). It is set up beside OneDrive on one
-  **Invoice storage** page, which replaces the OneDrive page (old links to it still arrive) and is
-  always in the header: a card for each place invoices can be kept, the server folder's path, and
-  below them the folder each car uses, chosen with the same picker as OneDrive; uploads go into the category's subfolder, the Add form can pick a
-  PDF already in the folder, and **Import existing invoices** works there with the same preview and
-  learning. Each car uses OneDrive or the folder. A file is never overwritten, nothing outside the
-  mounted folder is read or written, and a folder that has gone missing is an error, never recreated.
-  The Grafana table links to stored invoices through **Settings → This app's URL**.
-  With `docker-compose.invoices.yml` the app doesn't run without the folder (`INVOICES_REQUIRED=1`): a
-  share that isn't mounted stops it with the reason in `docker compose logs`, and the container turns
-  unhealthy if the folder goes away later. `INVOICES_REQUIRED=0` keeps it running instead.
-  Off unless you turn it on: set `INVOICES_HOST_DIR` in `.env` and add `docker-compose.invoices.yml`
-  (docs, "Invoice folder on the server"). To upgrade without it, pull the new image; the app adds two
-  columns to its own tables on start. With a least-privilege role (`SKIP_MIGRATE=1`), re-run
-  `scripts/provision-db.sh` as for any upgrade.
-- Docs and README: screenshots of the expense list, form, settings, Grafana dashboard, the Invoice
-  storage page, the invoice folder window and the import preview.
+- Docs and README: screenshots of the expense list, form, settings, Grafana dashboard, the Invoice storage
+  page, the invoice folder window and the import preview.
+
+### Changed
+
+- GitHub release notes now open with this changelog's entry and group the merged pull requests (new
+  features, fixes, documentation, dependencies, internal), like TeslaMate's own. Nothing to do to upgrade.
 
 ## 0.2.0-rc5 - 2026-11-11
 
