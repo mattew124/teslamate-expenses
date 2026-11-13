@@ -75,7 +75,7 @@ jobs:
       - name: Docs still build and pass their tests
         if: steps.guard.outputs.changed != ''
         run: |
-          pip install -r requirements-docs.txt pytest
+          pip install -r requirements-docs.txt -r requirements.txt pytest
           zensical build --clean --strict
           pytest -q tests/test_docs.py
       - name: Commit to the pull request branch
