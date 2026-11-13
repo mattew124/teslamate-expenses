@@ -20,7 +20,7 @@ import psycopg
 import pytest
 from psycopg.rows import dict_row
 
-from tmexpenses import compat
+from garagebooks import compat
 
 ROOT = Path(__file__).resolve().parent.parent
 IMAGE = os.environ.get("TEST_PG_IMAGE", "postgres:18-trixie")
@@ -66,7 +66,7 @@ class Pg:
 def pg():
     if not shutil.which("docker"):
         pytest.skip("docker not available")
-    name = f"tmexpenses-test-{secrets.token_hex(4)}"
+    name = f"garagebooks-test-{secrets.token_hex(4)}"
     admin_pass = secrets.token_hex(16)
     try:
         sh("docker", "run", "-d", "--rm", "--name", name, "-p", "127.0.0.1::5432",

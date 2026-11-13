@@ -25,7 +25,7 @@ RUN pip install -r requirements.txt \
  && pip uninstall -y pip
 
 COPY gunicorn.conf.py .
-COPY tmexpenses ./tmexpenses
+COPY garagebooks ./garagebooks
 COPY grafana/cost-of-ownership.json ./grafana/cost-of-ownership.json
 # Where the app writes its Grafana dashboard when DASHBOARD_DIR points here. World-writable
 # (sticky) so a new named volume mounted here is writable by whatever uid compose runs us as.
@@ -44,4 +44,4 @@ EXPOSE 8080
 # Root filesystem is read-only: heartbeat file goes to tmpfs, and the control
 # socket (unused, defaults to $HOME) is switched off.
 CMD ["gunicorn", "-c", "/srv/gunicorn.conf.py", "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "120", "--worker-tmp-dir", "/dev/shm", "--no-control-socket", \
-     "--access-logfile", "-", "tmexpenses:create_app()"]
+     "--access-logfile", "-", "garagebooks:create_app()"]

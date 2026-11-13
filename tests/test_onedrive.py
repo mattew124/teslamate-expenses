@@ -21,7 +21,7 @@ import pytest
 from cryptography.fernet import Fernet
 from psycopg.rows import dict_row
 
-from tmexpenses import create_app, onedrive
+from garagebooks import create_app, onedrive
 from tests.test_app import ORIGIN, form, rows
 from tests.test_validation import PDF
 
@@ -480,7 +480,7 @@ def test_upload_failure_saves_nothing(client, ms, admin):
 
 def test_onedrive_events_are_logged_without_secrets(client, ms, admin, caplog):
     import logging
-    caplog.set_level(logging.DEBUG, logger="tmexpenses")
+    caplog.set_level(logging.DEBUG, logger="garagebooks")
     sign_in(client, ms)
     choose_folder(client)
     client.post("/new", data=with_pdf(form(admin, invoice_url="")), headers=ORIGIN)
@@ -501,8 +501,8 @@ def test_old_variable_name_is_explained(monkeypatch, caplog):
     import logging
     monkeypatch.delenv("EXPENSES_ENCRYPTION_KEY", raising=False)
     monkeypatch.setenv("ONEDRIVE_TOKEN_KEY", Fernet.generate_key().decode())
-    caplog.set_level(logging.WARNING, logger="tmexpenses")
-    from tmexpenses import create_app
+    caplog.set_level(logging.WARNING, logger="garagebooks")
+    from garagebooks import create_app
     create_app(connect=lambda: None)
     assert any("ONEDRIVE_TOKEN_KEY" in m and "EXPENSES_ENCRYPTION_KEY" in m for m in caplog.messages)
 
@@ -518,7 +518,7 @@ def test_expired_sign_in_is_explained(client, ms, admin, monkeypatch):
 
 
 def test_huge_upload_is_refused(client, ms, admin):
-    from tmexpenses.validation import MAX_PDF_BYTES
+    from garagebooks.validation import MAX_PDF_BYTES
     sign_in(client, ms)
     resp = client.post("/new", data=with_pdf(form(admin), content=PDF + b"0" * (MAX_PDF_BYTES * 2)),
                        headers=ORIGIN)
@@ -857,7 +857,7 @@ def test_the_icon_comes_from_the_source_and_is_cached_by_browsers(app_for, ms, m
 
 def test_without_the_source_the_bundled_drawing_is_used(app_for, ms, monkeypatch):
     from tests.test_icons import Fetch
-    from tmexpenses import icons
+    from garagebooks import icons
     c = icon_app(app_for, ms, Fetch(error=icons.IconUnavailable("offline")), monkeypatch)
     resp = c.get("/provider-icon/onedrive")
     assert resp.status_code == 200 and resp.mimetype == "image/svg+xml" and b"<svg" in resp.data

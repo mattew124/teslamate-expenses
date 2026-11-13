@@ -1,10 +1,10 @@
 # The documentation site: Markdown in docs/, published to GitHub Pages by .github/workflows/docs.yml.
 [project]
-site_name = "teslamate-expenses"
-site_description = "Track what your Tesla costs to own, next to TeslaMate."
-site_url = "https://mattew124.github.io/teslamate-expenses/"
-repo_url = "https://github.com/mattew124/teslamate-expenses"
-repo_name = "mattew124/teslamate-expenses"
+site_name = "GarageBooks"
+site_description = "Track what your Tesla costs to own."
+site_url = "https://mattew124.github.io/garagebooks/"
+repo_url = "https://github.com/mattew124/garagebooks"
+repo_name = "mattew124/garagebooks"
 nav = [
   { "Home" = "index.md" },
   { "Setup" = "setup.md" },

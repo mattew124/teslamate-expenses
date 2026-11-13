@@ -40,7 +40,7 @@ jobs:
         run: |
           title="Latest TeslaMate release needs attention"
           if [ "$STATUS" = 2 ]; then
-              what="The tests pass on the latest TeslaMate, but it is newer than the one recorded in tmexpenses/compat.py, so the app refuses to run on it. Run \`scripts/teslamate-compat.sh latest --record\`, update the docs and CHANGELOG, and release."
+              what="The tests pass on the latest TeslaMate, but it is newer than the one recorded in garagebooks/compat.py, so the app refuses to run on it. Run \`scripts/teslamate-compat.sh latest --record\`, update the docs and CHANGELOG, and release."
           else
               what="The tests failed, or a table we read changed, on the latest TeslaMate. Reproduce with \`scripts/teslamate-compat.sh latest\`."
           fi

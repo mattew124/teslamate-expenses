@@ -25,7 +25,7 @@ def info(checkout, env=None):
 
 @pytest.fixture()
 def repo(tmp_path):
-    main = tmp_path / "teslamate-expenses"
+    main = tmp_path / "garagebooks"
     (main / "scripts").mkdir(parents=True)
     shutil.copy(ROOT / "scripts" / "dev.sh", main / "scripts" / "dev.sh")
     git(main, "init", "-q", "-b", "main")
@@ -42,17 +42,17 @@ def worktree(main, name):
 
 def test_main_checkout_keeps_the_standard_names(repo):
     i = info(repo)
-    assert i["project"] == "teslamate-expenses-dev"
+    assert i["project"] == "garagebooks-dev"
     assert i["base_path"] == "/expenses-dev"
     assert (i["ui_port"], i["grafana_port"]) == ("8089", "8090")
-    assert i["image"] == "teslamate-expenses:dev"
+    assert i["image"] == "garagebooks:dev"
 
 
 def test_worktrees_get_their_own_stack(repo):
     a, b = info(worktree(repo, "fix-odometer")), info(worktree(repo, "Feature_Two"))
-    assert a["project"] == "teslamate-expenses-dev-fix-odometer"
+    assert a["project"] == "garagebooks-dev-fix-odometer"
     assert a["base_path"] == "/expenses-dev/fix-odometer"
-    assert b["project"] == "teslamate-expenses-dev-feature-two"   # sanitised for docker
+    assert b["project"] == "garagebooks-dev-feature-two"   # sanitised for docker
     main = info(repo)
     for key in ("project", "base_path", "ui_port", "grafana_port", "image", "router_suffix"):
         assert len({main[key], a[key], b[key]}) == 3, key

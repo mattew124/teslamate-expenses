@@ -6,7 +6,7 @@ car in this stack at it, so tests never write anywhere else. Prints no secrets.
 import os
 import sys
 
-from tmexpenses import db, onedrive
+from garagebooks import db, onedrive
 
 FOLDER = "Expenses test"
 

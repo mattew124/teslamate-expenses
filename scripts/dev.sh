@@ -113,12 +113,12 @@ export DEV_INVOICES_SHOWN="$DEV_INVOICES_DIR"
 [ "$DEMO" = 0 ] || export DEV_INVOICES_SHOWN=/mnt/nas/cars/invoices
 
 if [ -z "$INSTANCE" ]; then
-    PROJECT=teslamate-expenses-dev
+    PROJECT=garagebooks-dev
     export DEV_BASE_PATH=/expenses-dev DEV_ROUTER_SUFFIX= DEV_TAG=dev
     export DEV_UI_PRIORITY=110 DEV_GRAFANA_PRIORITY=120
     export DEV_UI_PORT="${DEV_UI_PORT:-8089}" DEV_GRAFANA_PORT="${DEV_GRAFANA_PORT:-8090}"
 else
-    PROJECT="teslamate-expenses-dev-$INSTANCE"
+    PROJECT="garagebooks-dev-$INSTANCE"
     export DEV_BASE_PATH="/expenses-dev/$INSTANCE" DEV_ROUTER_SUFFIX="-$INSTANCE" DEV_TAG="dev-$INSTANCE"
     # Above the main stack's routes: /expenses-dev/ is a prefix of this path.
     export DEV_UI_PRIORITY=130 DEV_GRAFANA_PRIORITY=140
@@ -281,7 +281,7 @@ demo_data() {
     # Made-up invoices in the invoice folder, and each car pointed at them, for the import screenshots.
     python3 scripts/dev-sample-invoices.py "$ROOT/$INVOICES" >/dev/null
     # The car is pointed at it below, not through the app, so leave the marker choosing a folder would.
-    printf 'Demo invoice folder for teslamate-expenses.\n' > "$ROOT/$INVOICES/.teslamate-expenses"
+    printf 'Demo invoice folder for garagebooks.\n' > "$ROOT/$INVOICES/.garagebooks"
     dev_psql -c "INSERT INTO expenses.car_folder (car_id, folder_id, folder_path, backend)
                  SELECT id, '/Sample invoices', '/Sample invoices', 'local' FROM public.cars
                  ON CONFLICT (car_id) DO NOTHING"
@@ -363,7 +363,7 @@ instance=${INSTANCE:-main}
 base_path=$DEV_BASE_PATH
 ui_port=$DEV_UI_PORT
 grafana_port=$DEV_GRAFANA_PORT
-image=${EXPENSES_IMAGE:-teslamate-expenses:$DEV_TAG}
+image=${EXPENSES_IMAGE:-garagebooks:$DEV_TAG}
 invoices=$DEV_INVOICES_DIR
 router_suffix=${DEV_ROUTER_SUFFIX:-none}
 ui_priority=$DEV_UI_PRIORITY
@@ -386,23 +386,23 @@ setup() {
 test_browser() {
     local require_onedrive="${1:-0}"
     ensure_env
-    docker build -q -t teslamate-expenses:browser-tests tests/browser >/dev/null
+    docker build -q -t garagebooks:browser-tests tests/browser >/dev/null
     # Straight to the containers on the dev network, past the proxy's login.
     docker run --rm --network "${PROJECT}_dev" --user "$(id -u):$(id -g)" \
         -e HOME=/tmp -e OUT=/out -e "BASE_PATH=$DEV_BASE_PATH" -e "REQUIRE_ONEDRIVE=$require_onedrive" \
         -v "$ROOT/tests/browser:/tests:ro" -v "$ROOT/$SHOTS:/out" \
-        teslamate-expenses:browser-tests python3 /tests/run.py
+        garagebooks:browser-tests python3 /tests/run.py
 }
 
 # The pages the README and docs show, from the demo stack (invented data only).
 demo_screenshots() {
     [ "$DEMO" = 1 ] || { echo "dev: use 'scripts/dev.sh demo screenshots'" >&2; exit 2; }
     ensure_env
-    docker build -q -t teslamate-expenses:browser-tests tests/browser >/dev/null
+    docker build -q -t garagebooks:browser-tests tests/browser >/dev/null
     docker run --rm --network "${PROJECT}_dev" --user "$(id -u):$(id -g)" \
         -e HOME=/tmp -e OUT=/out -e "BASE_PATH=$DEV_BASE_PATH" \
         -v "$ROOT/tests/browser:/tests:ro" -v "$ROOT/$SHOTS:/out" \
-        teslamate-expenses:browser-tests python3 /tests/screenshots.py
+        garagebooks:browser-tests python3 /tests/screenshots.py
     echo "dev: screenshots in $SHOTS"
 }
 
@@ -411,7 +411,7 @@ demo_screenshots() {
 # One saved sign-in, in a file any worktree can load, so no other stack has to stay around.
 # It holds the encryption key beside what it encrypts, so it opens the real account: keep it
 # private (0600) and out of the repository.
-ONEDRIVE_DEV_FILE="${ONEDRIVE_DEV_FILE:-$HOME/.config/teslamate-expenses/onedrive-dev}"
+ONEDRIVE_DEV_FILE="${ONEDRIVE_DEV_FILE:-$HOME/.config/garagebooks/onedrive-dev}"
 
 onedrive_file_check() {
     local repo
@@ -499,14 +499,14 @@ case "${1:-}" in
         ensure_env
         compose down -v --remove-orphans
         if [ "$DEMO" = 1 ]; then rm -rf -- "$ROOT/$SHOTS" "$ROOT/$INVOICES"; echo "dev: removed $PROJECT"; exit 0; fi
-        docker image rm "teslamate-expenses:$DEV_TAG" >/dev/null 2>&1 || true
+        docker image rm "garagebooks:$DEV_TAG" >/dev/null 2>&1 || true
         # Last: `compose down` above needs the passwords in .dev/env. This also drops the screenshots.
         # The checkout itself (a worktree's own folder) stays; remove that with `git worktree remove`.
         rm -rf -- "$ROOT/.dev"
         echo "dev: removed $PROJECT"
         # Test PDFs on a share are left for you to delete: nothing here removes files from a NAS.
         [ -z "$INVOICES_SHARE" ] || echo "dev: left $DEV_INVOICES_DIR on the share (this stack's test PDFs); delete it when you no longer need them" ;;
-    list) docker compose ls -a --filter name=teslamate-expenses-dev ;;
+    list) docker compose ls -a --filter name=garagebooks-dev ;;
     setup) setup ;;
     info) info ;;
     screenshots) demo_screenshots ;;

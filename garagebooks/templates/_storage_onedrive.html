@@ -5,7 +5,7 @@
   <h2>{{ mark() }} OneDrive</h2>
   {% if not onedrive_enabled %}
   <p>Invoice PDFs can be uploaded straight to your OneDrive, into a folder you choose for each car.
-  To turn it on, set <code>EXPENSES_ENCRYPTION_KEY</code> for the app (see <a href="https://mattew124.github.io/teslamate-expenses/onedrive/">OneDrive uploads</a>
+  To turn it on, set <code>EXPENSES_ENCRYPTION_KEY</code> for the app (see <a href="https://mattew124.github.io/garagebooks/onedrive/">OneDrive uploads</a>
   in the documentation) and restart it. Everything else is set up here.</p>
   {% else %}
   <h3>App registration</h3>
@@ -25,7 +25,7 @@
     <ol class="steps">
       <li>Open the <a href="https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank" rel="noopener noreferrer">Microsoft Entra admin center</a>
         (<strong>Identity → Applications → App registrations</strong>) and choose <strong>New registration</strong>.</li>
-      <li><strong>Name:</strong> anything, e.g. <code>teslamate-expenses</code>.</li>
+      <li><strong>Name:</strong> anything, e.g. <code>garagebooks</code>.</li>
       <li><strong>Supported account types:</strong> <strong>Personal Microsoft accounts only</strong>
         (“any organizational directory and personal Microsoft accounts” also works).</li>
       <li><strong>Redirect URI:</strong> choose the platform <strong>Web</strong> and enter exactly this address, then <strong>Register</strong>:

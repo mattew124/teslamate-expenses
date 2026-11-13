@@ -4,7 +4,7 @@
   {% if not local_enabled %}
   <p>Invoice PDFs can be kept in a folder on this server (a NAS share, say) instead of in cloud storage, and
     opened from the expense list. To turn it on, mount the folder into the app's container and set
-    <code>INVOICES_DIR</code> to where it is mounted (see <a href="https://mattew124.github.io/teslamate-expenses/local-folder/">Invoice folder on the server</a>
+    <code>INVOICES_DIR</code> to where it is mounted (see <a href="https://mattew124.github.io/garagebooks/local-folder/">Invoice folder on the server</a>
     in the documentation), then restart the app.</p>
   {% elif available %}
   <p>Invoices are kept in <code>{{ local_shown }}</code> on this server{% if local_shown != root %}

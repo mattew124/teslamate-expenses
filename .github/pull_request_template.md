@@ -11,7 +11,7 @@
 - [ ] Linter findings fixed, or excused on one line with the reason (no project-wide ignores)
 - [ ] Labelled (`enhancement`, `bug`, `documentation`, `dependencies`, `internal` or `breaking`): the label is its group in the release notes
 - [ ] Added to **Unreleased** in `CHANGELOG.md`
-- [ ] Schema change: `tmexpenses/schema.sql` stays idempotent, `db/grants.sql` and `scripts/provision-db.sh` still work with `SKIP_MIGRATE=1`
+- [ ] Schema change: `garagebooks/schema.sql` stays idempotent, `db/grants.sql` and `scripts/provision-db.sh` still work with `SKIP_MIGRATE=1`
 - [ ] Nothing installation-specific (hostnames, IPs, personal data, real invoices) in code, docs, logs or screenshots
 
 ## Documentation

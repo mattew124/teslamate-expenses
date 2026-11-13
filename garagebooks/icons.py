@@ -21,7 +21,7 @@ import time
 import urllib.error
 import urllib.request
 
-log = logging.getLogger("tmexpenses.icons")
+log = logging.getLogger("garagebooks.icons")
 
 # Pinned to an exact commit, so the picture never changes underneath an installation. `colour` fills a
 # single-colour drawing; a logo that carries its own colours has None. selfh.st/icons is CC BY 4.0: the
@@ -88,7 +88,7 @@ class IconUnavailable(Exception):
 def fetch_url(url):
     if not url.startswith("https://"):
         raise IconUnavailable("not an https address")
-    req = urllib.request.Request(url, headers={"User-Agent": "teslamate-expenses (icon)"})
+    req = urllib.request.Request(url, headers={"User-Agent": "garagebooks (icon)"})
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:    # nosec B310 - https only, checked above
             return resp.read(MAX_BYTES + 1)

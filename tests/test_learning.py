@@ -2,7 +2,7 @@
 
 import pytest
 
-from tmexpenses import invoices
+from garagebooks import invoices
 from tests.test_app import ORIGIN, rows
 from tests.test_import import TEXT, app_for, client, cat, ms  # noqa: F401  (fixtures)
 

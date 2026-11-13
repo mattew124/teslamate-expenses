@@ -8,7 +8,7 @@
 # (the image's own entrypoint does that), then:
 #   1. compares the migrated tables with db/teslamate-schema.sql;
 #   2. runs the whole test suite against that database (TEST_TESLAMATE_IMAGE);
-#   3. compares TeslaMate's newest migration with tmexpenses/compat.py.
+#   3. compares TeslaMate's newest migration with garagebooks/compat.py.
 # Never touches a real TeslaMate database. Needs docker and .venv (scripts/dev.sh setup).
 #
 # Exit status: 0 = tested and nothing to change; 1 = the tests failed or the tables we read
@@ -25,8 +25,8 @@ for arg in "$@"; do
         *) version="$arg" ;;
     esac
 done
-tested="$(.venv/bin/python -c 'from tmexpenses import compat; print(compat.TESTED_TESLAMATE)')"
-recorded="$(.venv/bin/python -c 'from tmexpenses import compat; print(compat.TESTED_MIGRATION)')"
+tested="$(.venv/bin/python -c 'from garagebooks import compat; print(compat.TESTED_TESLAMATE)')"
+recorded="$(.venv/bin/python -c 'from garagebooks import compat; print(compat.TESTED_MIGRATION)')"
 version="${version:-$tested}"
 if [ "$version" = latest ]; then
     version="$(curl -fsSL https://api.github.com/repos/teslamate-org/teslamate/releases/latest \
@@ -35,7 +35,7 @@ fi
 image="teslamate/teslamate:$version"
 echo "compat: TeslaMate $version (this release was tested with $tested)"
 
-name="tmexpenses-compat-$$"
+name="garagebooks-compat-$$"
 trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
 pass="$(openssl rand -hex 16)"
 docker run -d --rm --name "$name" -e POSTGRES_USER=teslamate -e POSTGRES_DB=teslamate \
@@ -82,7 +82,7 @@ if [ "$status" = 0 ] && [ "$newest" -gt "$recorded" ]; then
 fi
 if [ "$record" = 1 ] && { [ "$status" = 0 ] || [ "$status" = 2 ]; }; then
     sed -i -E "s/^TESTED_TESLAMATE = .*/TESTED_TESLAMATE = \"$version\"/; s/^TESTED_MIGRATION = .*/TESTED_MIGRATION = $newest/" \
-        tmexpenses/compat.py
+        garagebooks/compat.py
     echo "compat: recorded TeslaMate $version (migration $newest). Review 'git diff', update the docs and CHANGELOG."
     status=0
 fi

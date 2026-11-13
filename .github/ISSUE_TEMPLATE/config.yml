@@ -1,5 +1,5 @@
 blank_issues_enabled: false
 contact_links:
   - name: Report a security vulnerability
-    url: https://github.com/mattew124/teslamate-expenses/security/advisories/new
+    url: https://github.com/mattew124/garagebooks/security/advisories/new
     about: Please report privately, not in a public issue. See SECURITY.md.

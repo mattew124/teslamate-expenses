@@ -141,7 +141,7 @@ def test_dashboard_expenses_link_comes_from_the_apps_own_settings():
 
 
 def test_seeded_grafana_link_points_at_this_dashboards_uid():
-    from tmexpenses import db
+    from garagebooks import db
     dash = json.loads((ROOT / "grafana" / "cost-of-ownership.json").read_text())
     assert dash["uid"] == db.DASHBOARD_UID
 

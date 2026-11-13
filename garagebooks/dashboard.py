@@ -12,7 +12,7 @@ import tempfile
 from pathlib import Path
 
 FILENAME = "cost-of-ownership.json"
-# /srv/tmexpenses/ beside /srv/grafana/ in the image; the repository layout is the same.
+# /srv/garagebooks/ beside /srv/grafana/ in the image; the repository layout is the same.
 SOURCE = Path(__file__).resolve().parent.parent / "grafana" / FILENAME
 _FALLBACK = "'/expenses/'"     # the dashboard's own placeholder for the app's address
 

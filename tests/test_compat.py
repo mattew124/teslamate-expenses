@@ -3,7 +3,7 @@
 import psycopg
 import pytest
 
-from tmexpenses import compat, create_app
+from garagebooks import compat, create_app
 
 
 def set_newest(url, version):

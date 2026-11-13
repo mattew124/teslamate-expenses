@@ -1,12 +1,12 @@
 # TeslaMate expenses — runs *beside* the TeslaMate stack, not inside it.
 # It joins TeslaMate's own compose network (external) to reach the `database`
 # service, using the same database user and password as TeslaMate. The app creates
-# its own `expenses` schema when it starts. See https://mattew124.github.io/teslamate-expenses/setup/
+# its own `expenses` schema when it starts. See https://mattew124.github.io/garagebooks/setup/
 services:
   expenses:
     build: .
-    # Pin a released version: EXPENSES_IMAGE=ghcr.io/mattew124/teslamate-expenses:0.1.0
-    image: ${EXPENSES_IMAGE:-teslamate-expenses:latest}
+    # Pin a released version: EXPENSES_IMAGE=ghcr.io/mattew124/garagebooks:0.1.0
+    image: ${EXPENSES_IMAGE:-garagebooks:latest}
     restart: unless-stopped
     read_only: true
     cap_drop: [ALL]
@@ -40,7 +40,7 @@ services:
 volumes:
   dashboards:
     # A fixed name, so TeslaMate's compose file can mount it into Grafana as an external volume.
-    name: teslamate-expenses-dashboards
+    name: garagebooks-dashboards
 
 networks:
   teslamate:

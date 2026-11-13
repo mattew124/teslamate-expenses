@@ -7,8 +7,8 @@ Find where docs/ and README.md no longer match the code, and fix the docs. Compa
 if given (a branch, tag or path); otherwise the whole repo against what the docs claim.
 
 1. Run `.venv/bin/python -m pytest -q tests/test_docs.py tests/test_docs_drift.py` for the mechanical drift.
-2. Read the pages in docs/ and check their claims against the code: settings in `tmexpenses/` and
-   `.env.example`, `scripts/dev.sh` commands, routes and screens in `tmexpenses/templates/`, the
+2. Read the pages in docs/ and check their claims against the code: settings in `garagebooks/` and
+   `.env.example`, `scripts/dev.sh` commands, routes and screens in `garagebooks/templates/`, the
    dashboard in `grafana/`, release steps in `RELEASING.md`, workflows in `.github/workflows/`.
 3. Edit Markdown only. Smallest edit, existing voice, Australian English, nothing specific to one
    installation. A new or changed screen gets a `<!-- screenshot: name - what it shows -->` marker, never an image.

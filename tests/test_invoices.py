@@ -3,7 +3,7 @@
 from datetime import date
 from decimal import Decimal
 
-from tmexpenses import invoices
+from garagebooks import invoices
 
 CATS = ["Initial purchase", "Insurance", "Registration", "Tyres", "Cabin air filter",
         "Air filter", "Wheel alignment", "Tyre rotation"]

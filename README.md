@@ -1,15 +1,15 @@
-<p align="center"><img src="tmexpenses/static/icon.svg" alt="" width="96" height="96"></p>
+<p align="center"><img src="garagebooks/static/icon.svg" alt="" width="96" height="96"></p>
 
-<h1 align="center">teslamate-expenses</h1>
+<h1 align="center">GarageBooks</h1>
 
-<p align="center">Track what your Tesla costs to own, next to <a href="https://github.com/teslamate-org/teslamate">TeslaMate</a>.</p>
+<p align="center">Track what your Tesla costs to own: expenses, invoices and total cost of ownership in Grafana.</p>
 
 <p align="center">
-  <a href="https://github.com/mattew124/teslamate-expenses/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/mattew124/teslamate-expenses/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="https://github.com/mattew124/teslamate-expenses/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/mattew124/teslamate-expenses?include_prereleases&sort=semver"></a>
-  <a href="https://github.com/mattew124/teslamate-expenses/pkgs/container/teslamate-expenses"><img alt="Container image" src="https://img.shields.io/badge/ghcr.io-teslamate--expenses-blue?logo=docker&logoColor=white"></a>
-  <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/github/license/mattew124/teslamate-expenses"></a>
-  <a href="https://mattew124.github.io/teslamate-expenses/"><img alt="Documentation" src="https://img.shields.io/badge/docs-website-blue"></a>
+  <a href="https://github.com/mattew124/garagebooks/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/mattew124/garagebooks/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/mattew124/garagebooks/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/mattew124/garagebooks?include_prereleases&sort=semver"></a>
+  <a href="https://github.com/mattew124/garagebooks/pkgs/container/garagebooks"><img alt="Container image" src="https://img.shields.io/badge/ghcr.io-garagebooks-blue?logo=docker&logoColor=white"></a>
+  <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/github/license/mattew124/garagebooks"></a>
+  <a href="https://mattew124.github.io/garagebooks/"><img alt="Documentation" src="https://img.shields.io/badge/docs-website-blue"></a>
   <img alt="Vibe coded" src="https://img.shields.io/badge/vibe-coded-ff69b4">
 </p>
 
@@ -19,7 +19,7 @@
 > would any young, unreviewed software: back up your TeslaMate database before first use, and
 > read the code before you trust it with anything you care about.
 >
-> Not affiliated with TeslaMate or Tesla. It's an unofficial add-on that reads TeslaMate's data.
+> This project is an unofficial community tool and is not affiliated with, endorsed by, or supported by the official TeslaMate project. It reads data from a [TeslaMate](https://github.com/teslamate-org/teslamate) database. Not affiliated with Tesla, Inc.
 >
 > OneDrive is a trademark of Microsoft Corporation and Grafana is a trademark of Grafana Labs. This project is not affiliated with or endorsed by either. The OneDrive and Grafana logos are fetched at runtime from [selfh.st/icons](https://selfh.st/icons) ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)); they are not part of this repository.
 
@@ -50,7 +50,7 @@
 
 ## Documentation
 
-**[https://mattew124.github.io/teslamate-expenses/](https://mattew124.github.io/teslamate-expenses/)** covers setup, OneDrive uploads, importing invoices, what the dashboard counts,
+**[https://mattew124.github.io/garagebooks/](https://mattew124.github.io/garagebooks/)** covers setup, OneDrive uploads, importing invoices, what the dashboard counts,
 and development.
 
 ## Quick start
@@ -69,7 +69,7 @@ docker compose up -d    # localhost:8088/expenses/
 ```
 
 Then add the dashboard to TeslaMate's Grafana, and optionally turn on OneDrive uploads:
-see [Setup](https://mattew124.github.io/teslamate-expenses/setup/).
+see [Setup](https://mattew124.github.io/garagebooks/setup/).
 
 ## TeslaMate version
 

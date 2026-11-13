@@ -5,7 +5,7 @@ from decimal import Decimal
 
 import pytest
 
-from tmexpenses import db
+from garagebooks import db
 from tests.test_app import ORIGIN, category_id, form, rows
 from tests.test_onedrive import choose_folder, client, ms, sign_in, with_pdf, app_for  # noqa: F401  (fixtures)
 

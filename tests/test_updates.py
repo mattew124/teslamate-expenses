@@ -12,9 +12,9 @@ import pytest
 from psycopg.rows import dict_row
 
 from tests.test_dev_stack import ROOT
-from tmexpenses import create_app, updates
+from garagebooks import create_app, updates
 
-RELEASES = "https://github.com/mattew124/teslamate-expenses/releases"
+RELEASES = "https://github.com/mattew124/garagebooks/releases"
 
 
 def check(installed, tags, **kw):
@@ -156,8 +156,8 @@ def test_it_asks_one_fixed_address_with_a_timeout_and_names_itself(monkeypatch):
         return Reply(json.dumps([{"tag_name": "v0.4.0"}, {"tag_name": "v0.5.0", "draft": True}]).encode())
     monkeypatch.setattr(urllib.request, "urlopen", urlopen)
     assert updates.fetch_tags("0.3.0") == ["v0.4.0"]            # a draft is never a release
-    assert seen["url"].startswith("https://api.github.com/repos/mattew124/teslamate-expenses/releases")
-    assert seen["ua"] == "teslamate-expenses/0.3.0" and seen["data"] is None and 0 < seen["timeout"] <= 10
+    assert seen["url"].startswith("https://api.github.com/repos/mattew124/garagebooks/releases")
+    assert seen["ua"] == "garagebooks/0.3.0" and seen["data"] is None and 0 < seen["timeout"] <= 10
 
 
 @pytest.mark.parametrize("body", [b"not json", b'{"message": "rate limited"}', b'[{"tag_name": 5}]',
@@ -194,7 +194,7 @@ def page(pg, admin, monkeypatch):
 
 def test_every_page_links_to_the_docs(page):
     html = page()
-    assert 'href="https://mattew124.github.io/teslamate-expenses/"' in html
+    assert 'href="https://mattew124.github.io/garagebooks/"' in html
 
 
 def test_the_footer_shows_the_version_and_offers_the_update_with_its_notes(page):

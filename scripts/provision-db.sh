@@ -43,7 +43,7 @@ SELECT format('CREATE ROLE %I LOGIN PASSWORD %L CONNECTION LIMIT 10', :'app_role
  WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'app_role') \gexec
 SELECT format('ALTER ROLE %I LOGIN PASSWORD %L', :'app_role', :'pw') \gexec
 SQL
-    cat "$ROOT/tmexpenses/schema.sql" "$ROOT/db/grants.sql"
+    cat "$ROOT/garagebooks/schema.sql" "$ROOT/db/grants.sql"
 } | docker exec -i "$DB_CONTAINER" \
         psql -X -q -1 -v ON_ERROR_STOP=1 -v "app_role=$APP_ROLE" -U "$DB_USER" -d "$DB_NAME" >/dev/null
 

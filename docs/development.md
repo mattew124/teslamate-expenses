@@ -11,7 +11,7 @@ it creates its own schema, and also cover the optional `scripts/provision-db.sh`
 ## Testing against a TeslaMate release
 
 TeslaMate can change its tables in any release, so each release of this app records the one it was
-tested with (`TESTED_TESLAMATE` and `TESTED_MIGRATION` in `tmexpenses/compat.py`) and refuses to
+tested with (`TESTED_TESLAMATE` and `TESTED_MIGRATION` in `garagebooks/compat.py`) and refuses to
 start on a newer database. To try a new TeslaMate, with nothing but docker and the `.venv`:
 
 ```bash
@@ -26,22 +26,6 @@ newest migration with the recorded one. Exit status 0 means tested, 1 means a fa
 the latest release and opens an issue when it doesn't exit 0. After `--record`, update the CHANGELOG
 (an upgrade note) and the README line naming the tested release.
 
-## The TeslaMate project listing
-
-TeslaMate's "Projects using TeslaMate" page describes this app. The text we want there is
-`.github/teslamate-listing.md`, and its first line records a hash of the README's feature list
-that it was written against. A pull request that changes a feature bullet in the README fails
-`tests/test_listing.py` until you have checked the listing still describes the app (a new storage
-option, say), edited it if not, and set the hash the failure message gives.
-
-```bash
-scripts/teslamate-listing.sh check     # how TeslaMate's page differs from our entry (read-only)
-scripts/teslamate-listing.sh propose   # open or refresh the pull request on teslamate-org/teslamate
-```
-
-Proposing the change to TeslaMate is a step of the release process (RELEASING.md, step 7), run by
-hand after a stable release, not by CI: it publishes under your GitHub account. `propose` updates the
-same branch and pull request each time.
 
 ## CodeQL before you push
 
@@ -106,12 +90,12 @@ dashboards, which won't work there because the test database only has these thre
 ## Releasing
 
 Pushing a `v*` tag runs the tests and publishes a multi-arch image to
-`ghcr.io/mattew124/teslamate-expenses`. Pre-release tags such as `v0.2.0-rc1` don't move `:latest`.
+`ghcr.io/mattew124/garagebooks`. Pre-release tags such as `v0.2.0-rc1` don't move `:latest`.
 The run summary shows the digest, so what you test is what you deploy:
 
 ```bash
 git tag v0.2.0-rc1 && git push origin v0.2.0-rc1
-scripts/dev.sh up --image ghcr.io/mattew124/teslamate-expenses@sha256:...
+scripts/dev.sh up --image ghcr.io/mattew124/garagebooks@sha256:...
 scripts/dev.sh test-browser
 ```
 
@@ -163,7 +147,7 @@ git grep -n '^<!-- screenshot:' -- docs
 ```
 
 Version numbering and the candidate-to-stable steps are in
-[RELEASING.md](https://github.com/mattew124/teslamate-expenses/blob/main/RELEASING.md).
+[RELEASING.md](https://github.com/mattew124/garagebooks/blob/main/RELEASING.md).
 
 ### Keeping the docs in step with the code
 

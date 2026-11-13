@@ -1,5 +1,5 @@
 # Optional override: keep invoice PDFs in a folder on this server (a NAS share, say) instead of in
-# cloud storage, and let the app show them. See https://mattew124.github.io/teslamate-expenses/local-folder/
+# cloud storage, and let the app show them. See https://mattew124.github.io/garagebooks/local-folder/
 #   docker compose -f docker-compose.yml -f docker-compose.invoices.yml up -d
 # Set INVOICES_HOST_DIR in .env to the folder on the server.
 services:
@@ -22,5 +22,5 @@ services:
         bind:
           # A folder that isn't there stops the app from starting, instead of Docker making an empty one and
           # the invoices landing on the wrong disk. A share that didn't mount usually leaves its empty mount
-          # point, though: the app tells that apart by the .teslamate-expenses file at the top of the folder.
+          # point, though: the app tells that apart by the .garagebooks file at the top of the folder.
           create_host_path: false

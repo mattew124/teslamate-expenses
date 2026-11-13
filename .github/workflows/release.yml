@@ -34,14 +34,14 @@ jobs:
           platforms: linux/amd64
           load: true
           push: false
-          tags: teslamate-expenses:scan
+          tags: garagebooks:scan
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Scan the image (Trivy)
         run: >
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock
           ghcr.io/aquasecurity/trivy:0.76.2 image
-          --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --quiet teslamate-expenses:scan
+          --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --quiet garagebooks:scan
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io

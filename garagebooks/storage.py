@@ -30,12 +30,13 @@ from pathlib import Path
 
 from . import docinfo
 
-log = logging.getLogger("tmexpenses.storage")
+log = logging.getLogger("garagebooks.storage")
 
 MAX_DEPTH = 4    # subfolders below a car's folder that are searched for PDFs
 MAX_PDF_BYTES = 20 * 1024 * 1024
-MARKER = ".teslamate-expenses"   # at the top of the invoice folder once a car uses it (see above)
-MARKER_TEXT = ("This folder holds invoices for teslamate-expenses. The app looks for this file to tell the\n"
+MARKER = ".garagebooks"   # at the top of the invoice folder once a car uses it (see above)
+LEGACY_MARKER = ".teslamate-expenses"   # on folders claimed before the project was renamed: still accepted
+MARKER_TEXT = ("This folder holds invoices for garagebooks. The app looks for this file to tell the\n"
                "share from an empty mount point when the share isn't mounted: leave it here.\n")
 MAX_SUFFIX = 1000   # "name (999).pdf": far more clashes than one name will ever see
 # New invoice files: the folder's owner and group may write them, everyone else only read. The umask can
@@ -121,7 +122,7 @@ class LocalFolder:
         if root is None or not root.is_dir():
             raise StorageError("The invoice folder (INVOICES_DIR) isn't there: is it mounted into the "
                                "container, and is the share it's on connected? Nothing was changed.")
-        if not (root / MARKER).is_file() and self.in_use():
+        if not ((root / MARKER).is_file() or (root / LEGACY_MARKER).is_file()) and self.in_use():
             raise StorageError("The invoice folder (INVOICES_DIR) doesn't look like the one your cars use: it "
                                f"has no {MARKER} file, as when the share isn't mounted and its empty mount point "
                                "is all that's there. Mount the share, then reload. Nothing was changed.")

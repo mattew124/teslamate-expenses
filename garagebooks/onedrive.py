@@ -31,7 +31,7 @@ from cryptography.fernet import Fernet, InvalidToken
 
 from .storage import StorageError
 
-log = logging.getLogger("tmexpenses.onedrive")
+log = logging.getLogger("garagebooks.onedrive")
 
 AUTHORITY = "https://login.microsoftonline.com/consumers/oauth2/v2.0"
 GRAPH = "https://graph.microsoft.com/v1.0"
@@ -80,7 +80,7 @@ def token_box(key):
     except (ValueError, TypeError, AttributeError):
         raise ValueError(
             "EXPENSES_ENCRYPTION_KEY must be 32 random bytes, url-safe base64 encoded "
-            "(see https://mattew124.github.io/teslamate-expenses/onedrive/)") from None
+            "(see https://mattew124.github.io/garagebooks/onedrive/)") from None
 
 
 def graph_error(status, body):

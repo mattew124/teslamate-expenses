@@ -87,7 +87,7 @@ sign in as the account whose OneDrive gets the invoices.
 
 1. In the [Microsoft Entra admin center](https://entra.microsoft.com), go to **Identity** →
     **Applications** → **App registrations** → **New registration**.
-2. **Name:** anything, e.g. `teslamate-expenses`.
+2. **Name:** anything, e.g. `garagebooks`.
 3. **Supported account types:** **Personal Microsoft accounts only**. "Accounts in any
     organizational directory and personal Microsoft accounts" also works.
 4. **Redirect URI:** platform **Web**, and the address shown in the OneDrive card of the app's Invoice storage page,

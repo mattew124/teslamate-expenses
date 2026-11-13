@@ -1,6 +1,6 @@
 """Logging setup. LOG_LEVEL is debug, info (default), warning or error.
 
-The app logs under the "tmexpenses" logger, which is also Flask's own app.logger, so a
+The app logs under the "garagebooks" logger, which is also Flask's own app.logger, so a
 crash's traceback goes to the same place. Under gunicorn it shares gunicorn's handlers (and so
 its format); gunicorn's own level comes from the same LOG_LEVEL via gunicorn.conf.py.
 

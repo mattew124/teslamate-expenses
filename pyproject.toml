@@ -18,7 +18,7 @@ ignore = [
 "tests/*" = ["F401", "F811", "E401", "E702", "E731", "E741"]
 
 [tool.coverage.run]
-source = ["tmexpenses"]
+source = ["garagebooks"]
 
 [tool.coverage.report]
 fail_under = 85

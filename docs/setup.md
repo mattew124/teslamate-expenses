@@ -18,7 +18,7 @@
     nothing else, but take a backup first, as for any upgrade that touches the database.
 
 3. **Run it.** Set `EXPENSES_IMAGE` to a released image, or leave it unset to build locally. Follow
-    a release channel with `:rc` or `:latest`, or pin one version (see [RELEASING.md](https://github.com/mattew124/teslamate-expenses/blob/main/RELEASING.md)).
+    a release channel with `:rc` or `:latest`, or pin one version (see [RELEASING.md](https://github.com/mattew124/garagebooks/blob/main/RELEASING.md)).
 
     ```bash
     docker compose up -d                                                     # localhost:8088/expenses/
@@ -43,7 +43,7 @@
     link you paste.
 
 6. **Grafana.** Each time it starts, the app writes its own dashboard to the
-    `teslamate-expenses-dashboards` volume, so the dashboard always matches the version you run. Its
+    `garagebooks-dashboards` volume, so the dashboard always matches the version you run. Its
     timezone is your `APP_TZ` (there's no timezone box on the dashboard; it's set in the compose file,
     as in TeslaMate). Give TeslaMate's Grafana that volume and `grafana/provider.yml`, in TeslaMate's
     compose file:
@@ -52,10 +52,10 @@
     services:
       grafana:
         volumes:
-          - teslamate-expenses-dashboards:/dashboards-expenses:ro
-          - /path/to/teslamate-expenses/grafana/provider.yml:/etc/grafana/provisioning/dashboards/expenses.yml:ro
+          - garagebooks-dashboards:/dashboards-expenses:ro
+          - /path/to/garagebooks/grafana/provider.yml:/etc/grafana/provisioning/dashboards/expenses.yml:ro
     volumes:
-      teslamate-expenses-dashboards:
+      garagebooks-dashboards:
         external: true      # created when you start this app's compose file
     ```
 

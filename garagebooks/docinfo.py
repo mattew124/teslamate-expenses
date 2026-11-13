@@ -1,6 +1,6 @@
 """Describing a document in a log line, without revealing what is in it.
 
-The log level and handlers are set up once for the "tmexpenses" logger (which is Flask's app
+The log level and handlers are set up once for the "garagebooks" logger (which is Flask's app
 logger); the loggers used here are its children and inherit both. A line names the file, its size,
 a short hash, how its text was read and which fields were found: never the text, amounts or dates.
 """
