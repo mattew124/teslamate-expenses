@@ -10,3 +10,5 @@ __pycache__/
 .coverage
 site/
 .compat-schema.sql
+.compat-have.sql
+.compat-new.sql

@@ -55,7 +55,12 @@ echo "compat: TeslaMate $version's newest migration is $newest (recorded: $recor
 
 status=0
 scripts/dump-teslamate-schema.sh "$name" > .compat-schema.sql
-if ! diff -u db/teslamate-schema.sql .compat-schema.sql; then
+# pg_dump may order independent statements differently from one run or machine to the next, so
+# compare the statements (blank-line separated blocks) sorted, not the file byte for byte.
+canon() { python3 -I -c 'import sys; print("\n\n".join(sorted(b.strip() for b in sys.stdin.read().split("\n\n") if b.strip())))' < "$1"; }
+canon db/teslamate-schema.sql > .compat-have.sql
+canon .compat-schema.sql > .compat-new.sql
+if ! diff -u --label db/teslamate-schema.sql --label "TeslaMate $version" .compat-have.sql .compat-new.sql; then
     echo "compat: the tables we read differ from db/teslamate-schema.sql (diff above)" >&2
     if [ "$record" = 1 ]; then
         # Some tests build their database from this file, so it is replaced before the suite runs.
@@ -81,5 +86,5 @@ if [ "$record" = 1 ] && { [ "$status" = 0 ] || [ "$status" = 2 ]; }; then
     echo "compat: recorded TeslaMate $version (migration $newest). Review 'git diff', update the docs and CHANGELOG."
     status=0
 fi
-rm -f .compat-schema.sql
+rm -f .compat-schema.sql .compat-have.sql .compat-new.sql
 exit "$status"
