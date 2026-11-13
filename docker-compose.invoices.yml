@@ -11,6 +11,10 @@ services:
       INVOICES_DIR: /invoices
       # Only shown on the Invoice storage page, so it names the folder as you know it on the server.
       INVOICES_HOST_DIR: ${INVOICES_HOST_DIR:-}
+      # 1: don't run without the folder. If the share isn't mounted, the app logs why and stops, and the
+      # restart policy starts it again until the share is there; if it goes away later, the container turns
+      # unhealthy. 0: keep running without it (expenses can still be entered, invoices can't be saved).
+      INVOICES_REQUIRED: ${INVOICES_REQUIRED:-1}
     volumes:
       - type: bind
         source: ${INVOICES_HOST_DIR:?set INVOICES_HOST_DIR to the folder on this server that holds the invoices}

@@ -103,11 +103,15 @@ class LocalFolder:
     # ---- paths ----------------------------------------------------------------
 
     def available(self):
+        return self.problem() is None
+
+    def problem(self):
+        """Why the folder can't be used right now (not mounted, say), for the log; None when it can."""
         try:
             self._root()
-        except StorageError:
-            return False
-        return True
+        except StorageError as exc:
+            return exc.user_message
+        return None
 
     def _root(self):
         try:

@@ -136,6 +136,9 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
     # say) mounted into the container. The app serves those PDFs itself, at /invoice/<id>.
     local = None
     invoices_dir = os.environ.get("INVOICES_DIR", "").strip()
+    # INVOICES_REQUIRED=1: don't run without the folder. The app won't start when it can't be used, and
+    # /healthz fails if it stops being usable, so a share that didn't mount is seen, not worked around.
+    invoices_required = os.environ.get("INVOICES_REQUIRED", "0").strip() == "1"
     if invoices_dir:
         def local_in_use():
             """Does any car keep its invoices in the folder? Then the folder must carry its marker."""
@@ -146,13 +149,19 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
         # Only for showing: where that folder is on the server itself, which the container can't see.
         local_shown = (os.environ.get("INVOICES_HOST_DIR", "").strip() or invoices_dir).rstrip("/")
         try:
-            usable = local.available()
+            problem = local.problem()
         except Exception as exc:   # noqa: BLE001 - the database isn't up yet; the folder is checked again on every use
-            log.info("invoice folder not checked at start: %s", exc)
-            usable = True
-        if not usable:
-            log.warning("INVOICES_DIR %s isn't there or isn't the folder your cars use (not mounted?): invoices "
-                        "can't be saved or shown until it is", invoices_dir)
+            log.info("invoice folder not fully checked at start: %s", exc)
+            problem = None
+        if problem and invoices_required:
+            # Stopping here makes gunicorn exit, so the container stops; with a restart policy it tries again,
+            # and starts once the share is mounted.
+            log.error("INVOICES_DIR %s can't be used, and INVOICES_REQUIRED=1, so the app won't start: %s",
+                      invoices_dir, problem)
+            raise RuntimeError(f"INVOICES_REQUIRED=1 and the invoice folder can't be used: {problem}")
+        if problem:
+            log.warning("INVOICES_DIR %s can't be used; the app runs without it until it can (INVOICES_REQUIRED=1 "
+                        "would stop it instead): %s", invoices_dir, problem)
     # The image is built with its release version in APP_VERSION; anything else is a development build.
     version = os.environ.get("APP_VERSION", "")
     update_check = updates.UpdateCheck(version, fetch=release_fetch,
@@ -434,6 +443,18 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
 
     @app.get("/healthz")
     def healthz():
+        """The container's health check. With INVOICES_REQUIRED=1, an invoice folder that can't be used
+        (the NAS went away, say) makes the container unhealthy, with the reason."""
+        if local is not None and invoices_required:
+            try:
+                problem = local.problem()
+            except Exception:      # noqa: BLE001 - the database is down: nothing to say about the folder
+                problem = None
+            if problem:
+                log.warning("health check: invoice folder can't be used: %s", problem)
+                resp = make_response(f"invoice folder can't be used: {problem}\n", 503)
+                resp.mimetype = "text/plain"
+                return resp
         return "ok\n"
 
     def list_view():

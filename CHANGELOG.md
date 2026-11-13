@@ -19,6 +19,9 @@ Each entry says what an installer must do to upgrade. Where nothing is said, pul
   learning. Each car uses OneDrive or the folder. A file is never overwritten, nothing outside the
   mounted folder is read or written, and a folder that has gone missing is an error, never recreated.
   The Grafana table links to stored invoices through **Settings → This app's URL**.
+  With `docker-compose.invoices.yml` the app doesn't run without the folder (`INVOICES_REQUIRED=1`): a
+  share that isn't mounted stops it with the reason in `docker compose logs`, and the container turns
+  unhealthy if the folder goes away later. `INVOICES_REQUIRED=0` keeps it running instead.
   Off unless you turn it on: set `INVOICES_HOST_DIR` in `.env` and add `docker-compose.invoices.yml`
   (docs, "Invoice folder on the server"). To upgrade without it, pull the new image; the app adds two
   columns to its own tables on start. With a least-privilege role (`SKIP_MIGRATE=1`), re-run

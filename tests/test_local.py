@@ -14,6 +14,7 @@ from tmexpenses import create_app, invoices, storage
 from tests.test_app import ORIGIN, category_id, form, rows
 from tests.test_import import TEXT, TYRES_TEXT
 from tests.test_onedrive import KEY, choose_folder, ms, sign_in, with_pdf  # noqa: F401  (ms is a fixture)
+from tests.test_dev_stack import ROOT
 from tests.test_validation import PDF
 
 
@@ -148,6 +149,70 @@ def test_the_app_starts_while_the_database_is_still_down(monkeypatch, root):
     def down():
         raise psycopg.OperationalError("connection refused")
     assert create_app(connect=down) is not None
+
+
+# ---- INVOICES_REQUIRED: stop rather than run without the folder ------------------------
+
+def app_with(pg, monkeypatch, folder, required, connect=None):
+    monkeypatch.setenv("INVOICES_DIR", str(folder))
+    monkeypatch.setenv("INVOICES_REQUIRED", required)
+    monkeypatch.delenv("EXPENSES_ENCRYPTION_KEY", raising=False)
+    app = create_app(connect=connect or (lambda: psycopg.connect(pg.app_url, row_factory=dict_row)))
+    app.testing = True
+    return app.test_client()
+
+
+def test_required_and_missing_the_app_refuses_to_start_and_says_why(pg, admin, monkeypatch, tmp_path, caplog):
+    with pytest.raises(RuntimeError, match="INVOICES_REQUIRED"):
+        app_with(pg, monkeypatch, tmp_path / "not-mounted", "1")
+    assert any(r.levelname == "ERROR" and "isn't there" in r.getMessage() for r in caplog.records)
+    assert not (tmp_path / "not-mounted").exists()
+
+
+def test_required_and_only_the_empty_mount_point_the_app_refuses_to_start(pg, admin, monkeypatch, tmp_path, caplog):
+    bare = tmp_path / "mount-point"
+    bare.mkdir()
+    admin.execute("INSERT INTO expenses.car_folder (car_id, folder_id, folder_path, backend) "
+                  "VALUES (1, '/Cars', '/Cars', 'local')")
+    with pytest.raises(RuntimeError, match="INVOICES_REQUIRED"):
+        app_with(pg, monkeypatch, bare, "1")
+    assert any(r.levelname == "ERROR" and storage.MARKER in r.getMessage() for r in caplog.records)
+    assert list(bare.iterdir()) == []
+
+
+def test_required_and_there_the_app_starts_and_is_healthy(pg, admin, monkeypatch, root):
+    c = app_with(pg, monkeypatch, root, "1")
+    assert c.get("/healthz").status_code == 200
+
+
+def test_required_the_health_check_fails_once_the_folder_goes_away(pg, admin, monkeypatch, tmp_path):
+    folder = tmp_path / "share"
+    folder.mkdir()
+    c = app_with(pg, monkeypatch, folder, "1")
+    folder.rmdir()                                      # the NAS went away while the app runs
+    resp = c.get("/healthz")
+    assert resp.status_code == 503 and b"INVOICES_DIR" in resp.data
+
+
+def test_not_required_the_app_starts_anyway_and_stays_healthy(pg, admin, monkeypatch, tmp_path, caplog):
+    c = app_with(pg, monkeypatch, tmp_path / "not-mounted", "0")
+    assert c.get("/healthz").status_code == 200
+    assert any(r.levelname == "WARNING" and "isn't there" in r.getMessage() for r in caplog.records)
+
+
+def test_required_but_the_database_is_down_at_start_it_still_starts(monkeypatch, root):
+    """Whether a car uses the folder can't be told yet; the folder itself is there, so start."""
+    def down():
+        raise psycopg.OperationalError("connection refused")
+    monkeypatch.setenv("INVOICES_DIR", str(root))
+    monkeypatch.setenv("INVOICES_REQUIRED", "1")
+    monkeypatch.delenv("EXPENSES_ENCRYPTION_KEY", raising=False)
+    assert create_app(connect=down) is not None
+
+
+def test_the_compose_file_turns_it_on_by_default():
+    compose = (ROOT / "docker-compose.invoices.yml").read_text()
+    assert "INVOICES_REQUIRED: ${INVOICES_REQUIRED:-1}" in compose
 
 
 def test_choosing_a_cars_folder_marks_the_invoice_folder_as_the_apps(client, root):

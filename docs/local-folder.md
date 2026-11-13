@@ -71,8 +71,34 @@ a folder without that file is treated as not mounted:
 - invoices in the list can't be opened until the share is back,
 - nothing is written anywhere, so the server's own disk stays untouched.
 
-Mount the share and reload the page; nothing in the app needs changing. The start-up log also warns
-(`INVOICES_DIR ... isn't there or isn't the folder your cars use`).
+Mount the share and reload the page; nothing in the app needs changing.
+
+### Stopping instead of running without it
+
+By default `docker-compose.invoices.yml` doesn't let the app run without its folder
+(`INVOICES_REQUIRED=1`). If the folder is missing, or is only the empty mount point, when the app
+starts, it logs why and stops:
+
+```bash
+docker compose logs expenses
+```
+
+```text
+[ERROR] INVOICES_DIR /invoices can't be used, and INVOICES_REQUIRED=1, so the app won't start: The invoice folder (INVOICES_DIR) doesn't look like the one your cars use: it has no .teslamate-expenses file, ...
+```
+
+The container's restart policy (`restart: unless-stopped`) starts it again and again, so it comes up
+by itself once the share is mounted; `docker compose ps` shows it as *Restarting* until then. If the
+folder goes away while the app runs (the NAS restarts, say), its health check fails and
+`docker compose ps` shows it as *unhealthy*, with the reason in the log.
+
+To keep the app running while the share is down, so expenses can still be entered without their
+invoices, set this in `.env` and start the app again. It then only warns, in the log and on the
+Invoice storage page:
+
+```bash
+INVOICES_REQUIRED=0
+```
 
 Leave `.teslamate-expenses` where it is, and copy it along if you move the invoices to a new share. If
 the app reports a folder you know is the right one (you deleted the file, say), either clear each car's

@@ -37,6 +37,8 @@ services:
       # share, so test PDFs can be dropped straight into it. INVOICES_HOST_DIR is only shown on the page.
       INVOICES_DIR: /invoices
       INVOICES_HOST_DIR: ${DEV_INVOICES_SHOWN:-}
+      # As docker-compose.invoices.yml: stop rather than run without the invoice folder.
+      INVOICES_REQUIRED: "1"
     volumes:
       - dev-dashboards:/dashboards
       - type: bind
@@ -50,7 +52,8 @@ services:
       dev-dashboards-owner:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz')"]
+      # A failing check prints the app's reason (the invoice folder isn't mounted, say), for docker inspect.
+      test: ["CMD", "python3", "-c", "import sys, urllib.request as u, urllib.error as e\ntry: u.urlopen('http://127.0.0.1:8080/healthz')\nexcept e.HTTPError as x: sys.exit(x.read().decode())"]
       interval: 30s
       timeout: 5s
       retries: 3
