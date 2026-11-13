@@ -42,7 +42,7 @@ The app connects as `DATABASE_USER` with `DATABASE_PASS` to `DATABASE_NAME` on `
 
 ## TeslaMate version
 
-Each release is tested against one TeslaMate release (shown in the footer's release notes and in `tmexpenses/compat.py`). TeslaMate has no stable database schema, so on start the app compares the newest migration in TeslaMate's `schema_migrations` table with the one it was tested against. If the database is **newer**, the app stops with a message saying so; upgrade teslamate-expenses to a release that lists a newer TeslaMate. `ALLOW_UNTESTED_TESLAMATE=1` (in `.env`, restart to apply) starts it anyway and logs an error on every start; use it only for a short while, since a changed table can make pages or the dashboard wrong or fail. An older TeslaMate is not refused. If the role cannot read `schema_migrations`, the app warns and carries on.
+Each release is tested against one TeslaMate release (named in the README and in `tmexpenses/compat.py`). TeslaMate has no stable database schema, so on start the app compares the newest migration in TeslaMate's `schema_migrations` table with the one it was tested against. If the database is **newer**, the app stops with a message saying so; upgrade teslamate-expenses to a release that lists a newer TeslaMate. `ALLOW_UNTESTED_TESLAMATE=1` (in `.env`, restart to apply) starts it anyway and logs an error on every start; use it only for a short while, since a changed table can make pages or the dashboard wrong or fail. An older TeslaMate is not refused. If the role cannot read `schema_migrations`, the app warns and carries on.
 
 ## Logs
 
