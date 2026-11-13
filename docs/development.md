@@ -51,7 +51,13 @@ The invoice folder is on in the dev stack too: `.dev/invoices` in the checkout s
 share (the app runs as you there, so its files are yours), and `destroy` removes it. Drop PDFs into it
 to try the import, or let `sample-invoices` write some made-up ones into `.dev/invoices/Sample invoices`;
 then choose that folder for a car on the Invoice storage page. To try it on a real
-share instead, set `DEV_INVOICES_DIR` in `dev.env` to where the share is mounted (see `dev.env.example`).
+network share instead, mount the share on the dev machine and set `DEV_INVOICES_SHARE` in `dev.env`
+to where it is mounted (see `dev.env.example`). Each stack then keeps its own folder in the share, named
+after the stack (`<share>/<worktree name>`, `main` for the main checkout), so worktrees never mix
+their test PDFs, and the app writes there as you. `up` makes that folder, but never the share itself:
+a share that isn't mounted, only its empty mount point, is refused. `destroy` leaves the folder on
+the share, so delete it yourself when you no longer need the test PDFs. `DEV_INVOICES_DIR` names exactly one
+folder instead, for every stack. The demo stack never uses either.
 
 OneDrive is on in the dev stack with a throwaway token key in `.dev/env`. To sign in there,
 add the dev stack's callback address (shown in the OneDrive card of its Invoice storage page) as a second redirect URI on
