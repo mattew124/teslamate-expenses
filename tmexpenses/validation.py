@@ -79,6 +79,23 @@ def parse_invoice_url(raw):
     return url
 
 
+MAX_PATH_LEN = 1024
+
+
+def parse_invoice_path(raw):
+    """Optional: an invoice kept in the folder on the server, as its path below that folder
+    ('/Model 3/Tyres/261107 Tyres.pdf'). Only the shape is checked here; that it stays inside the
+    folder is checked, symlinks and all, whenever the file is opened (storage.LocalFolder)."""
+    path = raw or ""
+    if not path.strip():
+        return None
+    parts = path[1:].split("/")
+    if (not path.startswith("/") or len(path) > MAX_PATH_LEN or any(ord(ch) < 32 for ch in path)
+            or any(part in ("", ".", "..") for part in parts) or not path.lower().endswith(".pdf")):
+        raise ValueError("That isn't a PDF in the invoice folder.")
+    return path
+
+
 def parse_invoice_pdf(filename, data):
     """Optional upload. -> the bytes, or None when no file was chosen. Checks the
     content, not just the name: a PDF has its %PDF- header in the first 1 KiB."""
@@ -315,6 +332,7 @@ def parse_expense_form(form, tz, valid_car_ids, valid_category_ids):
     attempt("amount", parse_amount, form.get("amount"))
     attempt("odometer_km", parse_odometer, form.get("odometer_km"))
     attempt("invoice_url", parse_invoice_url, form.get("invoice_url"))
+    attempt("invoice_path", parse_invoice_path, form.get("invoice_path"))
     attempt("vendor", _text, form.get("vendor"), MAX_TEXT_LEN, "Vendor")
     attempt("notes", _text, form.get("notes"), MAX_NOTES_LEN, "Notes")
 

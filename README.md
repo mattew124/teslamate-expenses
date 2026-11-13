@@ -28,6 +28,8 @@
   TeslaMate's own position data for the chosen date and time.
 - **Optional OneDrive upload**: choose the invoice PDF in the form and it goes into that car's
   OneDrive folder, with the link filled in for you.
+- **Or keep invoices on your own server**: mount a folder (a NAS share, say) and the app saves the
+  PDFs there, per car and category, and shows them itself behind your login.
 - **Postgres schema** `expenses` inside the TeslaMate database, so Grafana joins it to
   TeslaMate's charging costs and odometer with no second datasource.
 - **Grafana dashboard** "Cost of Ownership": total cost of ownership, purchase vs running

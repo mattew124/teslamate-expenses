@@ -138,7 +138,7 @@ def set_upload_folder(conn, category_id, folder):
 _SELECT = """
     SELECT e.id, e.car_id, c.name AS car_name, e.category_id, cat.name AS category,
            cat.kind, e.occurred_at, e.amount, e.odometer_km, e.vendor, e.notes,
-           e.invoice_url
+           e.invoice_url, e.invoice_path
     FROM expenses.expense e
     JOIN public.cars c ON c.id = e.car_id
     JOIN expenses.category cat ON cat.id = e.category_id
@@ -189,14 +189,14 @@ def get_expense(conn, expense_id):
 
 
 _FIELDS = ("car_id", "category_id", "occurred_at", "amount", "odometer_km",
-           "vendor", "notes", "invoice_url")
+           "vendor", "notes", "invoice_url", "invoice_path")
 
 
 def insert_expense(conn, v):
     return conn.execute(
         f"INSERT INTO expenses.expense ({', '.join(_FIELDS)}) "
         f"VALUES ({', '.join('%(' + f + ')s' for f in _FIELDS)}) RETURNING id",
-        v,
+        {"invoice_path": None, **v},
     ).fetchone()["id"]
 
 
@@ -260,13 +260,15 @@ def find_duplicates(conn, car_id, occurred_at, amount, window_days=DUPLICATE_WIN
         {"car": car_id, "amount": amount, "when": occurred_at, "days": window_days, "skip": exclude_id}).fetchall()
 
 
-def known_invoice_urls(conn, urls):
-    """Which of these invoice links an expense already has."""
-    if not urls:
+def known_invoices(conn, refs):
+    """Which of these invoices an expense already has: links, or paths in the folder on the server
+    (a path starts with '/', a link with https://, so one can't be taken for the other)."""
+    if not refs:
         return set()
-    rows = conn.execute("SELECT DISTINCT invoice_url FROM expenses.expense WHERE invoice_url = ANY(%s)",
-                        (list(urls),)).fetchall()
-    return {r["invoice_url"] for r in rows}
+    rows = conn.execute("SELECT invoice_url AS ref FROM expenses.expense WHERE invoice_url = ANY(%(refs)s) "
+                        "UNION SELECT invoice_path FROM expenses.expense WHERE invoice_path = ANY(%(refs)s)",
+                        {"refs": list(refs)}).fetchall()
+    return {r["ref"] for r in rows}
 
 
 def skipped_import_urls(conn, car_id):
@@ -287,7 +289,7 @@ def update_expense(conn, expense_id, v):
     sets = ", ".join(f"{f} = %({f})s" for f in _FIELDS)
     cur = conn.execute(
         f"UPDATE expenses.expense SET {sets}, updated_at = now() WHERE id = %(id)s",
-        {**v, "id": expense_id},
+        {"invoice_path": None, **v, "id": expense_id},
     )
     return cur.rowcount == 1
 
@@ -312,24 +314,25 @@ def odometer_at(conn, car_id, when):
     return None if row is None else round(row["odometer"], 1)
 
 
-# ---- OneDrive ------------------------------------------------------------------
+# ---- invoice storage -----------------------------------------------------------
 
 def car_folders(conn):
-    """-> {car_id: {folder_id, folder_path}}"""
+    """-> {car_id: {folder_id, folder_path, backend}}. backend is 'onedrive' or 'local'."""
     return {r["car_id"]: r for r in
-            conn.execute("SELECT car_id, folder_id, folder_path FROM expenses.car_folder")}
+            conn.execute("SELECT car_id, folder_id, folder_path, backend FROM expenses.car_folder")}
 
 
-def set_car_folder(conn, car_id, folder_id, folder_path):
+def set_car_folder(conn, car_id, folder_id, folder_path, backend="onedrive"):
+    """A car has one folder: choosing one in the other storage replaces it."""
     conn.execute(
-        "INSERT INTO expenses.car_folder (car_id, folder_id, folder_path) VALUES (%s, %s, %s) "
+        "INSERT INTO expenses.car_folder (car_id, folder_id, folder_path, backend) VALUES (%s, %s, %s, %s) "
         "ON CONFLICT (car_id) DO UPDATE SET folder_id = EXCLUDED.folder_id, "
-        "folder_path = EXCLUDED.folder_path",
-        (car_id, folder_id, folder_path))
+        "folder_path = EXCLUDED.folder_path, backend = EXCLUDED.backend",
+        (car_id, folder_id, folder_path, backend))
 
 
-def clear_car_folder(conn, car_id):
-    conn.execute("DELETE FROM expenses.car_folder WHERE car_id = %s", (car_id,))
+def clear_car_folder(conn, car_id, backend):
+    conn.execute("DELETE FROM expenses.car_folder WHERE car_id = %s AND backend = %s", (car_id, backend))
 
 
 def onedrive_account(conn, lock=False):

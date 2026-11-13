@@ -21,7 +21,7 @@
         <a href="{{ url_for('index') }}"{{ at(endpoint == 'index') }}>All</a>
         <a href="{{ url_for('categories') }}"{{ at(endpoint == 'categories') }}>Categories</a>
         {% if grafana_url %}<a href="{{ grafana_url }}" target="_blank" rel="noopener noreferrer"><img src="{{ url_for('provider_icon', name='grafana') }}" alt="" class="nav-icon">Dashboards</a>{% endif %}
-        {% if onedrive_enabled %}<a href="{{ url_for('onedrive_page') }}"{{ at(endpoint.startswith('onedrive') or endpoint.startswith('learned')) }}>{{ mark() }}OneDrive</a>{% endif %}
+        <a href="{{ url_for('storage_page') }}"{{ at(endpoint.startswith(('storage', 'onedrive', 'local', 'learned'))) }}>Invoice storage</a>
         <a href="{{ url_for('settings') }}"{{ at(endpoint == 'settings') }}>Settings</a>
       </nav>
       <a class="button add" href="{{ url_for('new') }}">+ Add</a>

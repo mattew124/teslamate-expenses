@@ -1,0 +1,26 @@
+# Optional override: keep invoice PDFs in a folder on this server (a NAS share, say) instead of in
+# cloud storage, and let the app show them. See https://mattew124.github.io/teslamate-expenses/local-folder/
+#   docker compose -f docker-compose.yml -f docker-compose.invoices.yml up -d
+# Set INVOICES_HOST_DIR in .env to the folder on the server.
+services:
+  expenses:
+    # Files are written as this user, so it must be able to write to the folder. Leave it unless the
+    # folder belongs to someone else and can't be given to 10001 (see the page above).
+    user: "${EXPENSES_UID:-10001}:${EXPENSES_GID:-10001}"
+    environment:
+      INVOICES_DIR: /invoices
+      # Only shown on the Invoice storage page, so it names the folder as you know it on the server.
+      INVOICES_HOST_DIR: ${INVOICES_HOST_DIR:-}
+      # 1: don't run without the folder. If the share isn't mounted, the app logs why and stops, and the
+      # restart policy starts it again until the share is there; if it goes away later, the container turns
+      # unhealthy. 0: keep running without it (expenses can still be entered, invoices can't be saved).
+      INVOICES_REQUIRED: ${INVOICES_REQUIRED:-1}
+    volumes:
+      - type: bind
+        source: ${INVOICES_HOST_DIR:?set INVOICES_HOST_DIR to the folder on this server that holds the invoices}
+        target: /invoices
+        bind:
+          # A folder that isn't there stops the app from starting, instead of Docker making an empty one and
+          # the invoices landing on the wrong disk. A share that didn't mount usually leaves its empty mount
+          # point, though: the app tells that apart by the .teslamate-expenses file at the top of the folder.
+          create_host_path: false

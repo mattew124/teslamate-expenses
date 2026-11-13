@@ -25,17 +25,21 @@
   <label>Car
     <select name="car_id" required>
       {% if cars|length != 1 %}<option value="">Choose…</option>{% endif %}
-      {% for c in cars %}<option value="{{ c.id }}" {{ 'selected' if values.car_id|string == c.id|string }}>{{ c.name or ('Car ' ~ c.id) }}</option>{% endfor %}
+      {% for c in cars %}<option value="{{ c.id }}" data-storage="{{ car_storage.get(c.id, '') }}" {{ 'selected' if values.car_id|string == c.id|string }}>{{ c.name or ('Car ' ~ c.id) }}</option>{% endfor %}
     </select>{{ err('car_id') }}
   </label>
 {% endmacro %}
 <form method="post" class="cards" id="expense-form" enctype="multipart/form-data"
       {% if onedrive_connected %}data-onedrive-browse-url="{{ url_for('api_onedrive_browse', car_id=0) }}"{% endif %}
+      {% if local_enabled %}data-local-browse-url="{{ url_for('api_local_browse', car_id=0) }}"{% endif %}
+      data-default-storage="{{ default_storage }}"
       data-odometer-url="{{ url_for('api_odometer') }}" {% if not expense_id %}data-prefill-url="{{ url_for('api_prefill') }}" data-duplicates-url="{{ url_for('api_duplicates') }}"{% endif %}>
   <input type="hidden" name="confirm_duplicate" value="{{ '1' if duplicates }}">
   {% for name, value in view.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
 
-  {% if onedrive_enabled %}
+  {% if uploads_enabled %}
+  {# Where the chosen car's invoices go decides what the button offers; app.js follows the car. #}
+  {% set picked = car_storage.get(values.car_id|int(0)) or default_storage %}
   <section class="card stack">
   <h2 class="card-title">Invoice</h2>
   {{ car_field() }}
@@ -44,16 +48,21 @@
     <div class="drop" id="invoice-drop">
       <input type="file" id="invoice-file" name="invoice_file" accept="application/pdf,.pdf">
       <span class="or-pick"><span>or</span>
-        <button type="button" id="onedrive-pick" class="secondary">{{ mark() }} Choose from {{ storage.name }}</button></span>
+        <button type="button" id="onedrive-pick" class="secondary">
+          {% if onedrive_enabled %}<span data-storage-label="onedrive"{{ ' hidden' if picked != 'onedrive' }}>{{ mark() }} Choose from {{ storage.name }}</span>{% endif %}
+          {% if local_enabled %}<span data-storage-label="local"{{ ' hidden' if picked != 'local' }}>Choose from the invoice folder</span>{% endif %}
+        </button></span>
       <small id="invoice-drop-hint" hidden>You can also drop the PDF onto this box.</small>
     </div>
     {{ err('invoice_file') }}
-    <small id="onedrive-pick-hint">Already in {{ storage.name }}? Pick it there instead of uploading it again.</small>
+    <small id="onedrive-pick-hint">Already in {{ 'the car\'s folder' if local_enabled else storage.name }}? Pick it there instead of uploading it again.</small>
     {% if not expense_id %}<small id="prefill-hint">Choose the PDF next: the fields below are filled in from what can be read in it. Check them before saving.</small>{% endif %}
-    {% if onedrive_connected %}
-    <small>It's uploaded to the car's OneDrive folder when you save, and the invoice link is filled in for you.{% if values.invoice_url %} Replaces the current link; the old file stays in OneDrive.{% endif %}</small>
+    {% if local_enabled %}
+    <small>It's saved to the car's folder when you save{% if onedrive_enabled %}: in OneDrive or in the invoice folder on the server, whichever the car uses{% else %}, in the invoice folder on the server{% endif %}.{% if values.invoice_url or values.invoice_path %} Replaces the current invoice; the old file stays where it is.{% endif %}</small>
+    {% elif onedrive_connected %}
+    <small>It's uploaded to the car's OneDrive folder when you save, and the invoice link is filled in for you.{% if values.invoice_url %} <strong>Choosing a new PDF replaces the invoice link above with the new file's link.</strong> The previous file is not deleted: it stays in OneDrive.{% endif %}</small>
     {% else %}
-    <small><a href="{{ url_for('onedrive_page') }}">Connect OneDrive</a> to upload invoices from here.</small>
+    <small><a href="{{ url_for('storage_page') }}">Connect OneDrive</a> to upload invoices from here. You can still save the expense without it.</small>
     {% endif %}
   </div>
   </section>
@@ -61,7 +70,7 @@
 
   <section class="card stack">
   <h2 class="card-title">Details</h2>
-  {% if not onedrive_enabled %}{{ car_field() }}{% endif %}
+  {% if not uploads_enabled %}{{ car_field() }}{% endif %}
   <label>Category
     <select name="category_id" required>
       <option value="">Choose…</option>
@@ -106,8 +115,23 @@
   <h2 class="card-title">Link and notes</h2>
   <label>Invoice link
     <input type="url" name="invoice_url" placeholder="https://…" value="{{ values.invoice_url }}">{{ err('invoice_url') }}
-    <small>{% if onedrive_enabled %}Or paste{% else %}A{% endif %} a share link to the PDF, e.g. from OneDrive or Google Drive.</small>
+    <small>{% if uploads_enabled %}Or paste{% else %}A{% endif %} a share link to the PDF, e.g. from OneDrive or Google Drive.</small>
   </label>
+  {# An invoice kept in the folder on the server. The path is sent back with the form so it is kept. #}
+  <input type="hidden" name="invoice_path" value="{{ values.invoice_path }}">
+  {% if values.invoice_path or local_enabled %}
+  <div class="field" id="stored-invoice"{{ ' hidden' if not values.invoice_path }}{% if local_enabled %} data-file-url="{{ url_for('local_file') }}"{% endif %}>
+    <span><strong>Invoice in the folder on the server</strong></span>
+    {% if local_enabled %}
+    <span><a id="stored-invoice-link" href="{{ url_for('local_file', path=values.invoice_path) if values.invoice_path else '#' }}" target="_blank" rel="noopener noreferrer">{{ values.invoice_path.rsplit('/', 1)[-1] if values.invoice_path }}</a>
+      {% if values.invoice_path %}· <a href="{{ url_for('local_file', path=values.invoice_path, download=1) }}">Download</a>{% endif %}</span>
+    {% else %}
+    <span><code>{{ values.invoice_path }}</code> <small>can't be shown: <code>INVOICES_DIR</code> isn't set.</small></span>
+    {% endif %}
+    <label class="inline"><input type="checkbox" name="remove_invoice" value="1">
+      <small>Remove it from this expense (the file stays in the folder)</small></label>
+  </div>
+  {% endif %}
 
   <label>Notes <textarea name="notes" rows="3" maxlength="2000">{{ values.notes }}</textarea>{{ err('notes') }}</label>
   </section>
@@ -124,9 +148,12 @@
   <button type="submit" class="danger">Delete expense</button>
 </form>
 {% endif %}
-{% if onedrive_connected %}
+{% if onedrive_connected or local_enabled %}
 <dialog id="onedrive-picker" aria-labelledby="onedrive-picker-title" class="picker">
-  <h2 id="onedrive-picker-title">{{ mark() }} Choose an invoice from {{ storage.name }}</h2>
+  <h2 id="onedrive-picker-title">
+    {% if onedrive_connected %}<span data-storage-label="onedrive"{{ ' hidden' if picked != 'onedrive' }}>{{ mark() }} Choose an invoice from {{ storage.name }}</span>{% endif %}
+    {% if local_enabled %}<span data-storage-label="local"{{ ' hidden' if picked != 'local' }}>Choose an invoice from the invoice folder</span>{% endif %}
+  </h2>
   <p class="here"><code id="onedrive-picker-path"></code></p>
   <p id="onedrive-picker-status" role="status"></p>
   <ul class="plain folder-list" id="onedrive-picker-list"></ul>

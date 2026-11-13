@@ -1,19 +1,14 @@
-{% extends "base.html" %}
+{# The OneDrive card of the Invoice storage page: the installer's app registration, then the sign-in. #}
 {% from "_provider.html" import mark with context %}
-{% block title %}OneDrive{% endblock %}
 {% macro err(field) %}{% if errors.get(field) %}<span class="error">{{ errors[field] }}</span>{% endif %}{% endmacro %}
-{% block main_attrs %} class="narrow"{% endblock %}
-{% block content %}
-<h1>{{ mark() }} OneDrive</h1>
-{% if not onedrive_enabled %}
-<p>Invoice PDFs can be uploaded straight to your OneDrive, into a folder you choose for each car.
+<section class="card stack" id="onedrive">
+  <h2>{{ mark() }} OneDrive</h2>
+  {% if not onedrive_enabled %}
+  <p>Invoice PDFs can be uploaded straight to your OneDrive, into a folder you choose for each car.
   To turn it on, set <code>EXPENSES_ENCRYPTION_KEY</code> for the app (see <a href="https://mattew124.github.io/teslamate-expenses/onedrive/">OneDrive uploads</a>
-  in the documentation) and restart it. Everything else is set up on this page.</p>
-{% else %}
-{% if notice %}<p class="notice bad">{{ notice }}</p>{% endif %}
-
-<section class="card stack">
-  <h2>1. App registration</h2>
+  in the documentation) and restart it. Everything else is set up here.</p>
+  {% else %}
+  <h3>App registration</h3>
   {% if account and account.client_id %}
   <p>Client ID <code>{{ account.client_id }}</code>{% if account.secret_expires %}, secret valid until {{ account.secret_expires.strftime('%d %b %Y') }}{% endif %}.</p>
   {% if secret_days_left is not none and secret_days_left <= 30 %}
@@ -63,11 +58,8 @@
       <button type="submit" class="button">Save</button>
     </form>
   </details>
-</section>
-
-{% if account and account.client_id %}
-<section class="card stack">
-  <h2>2. Account</h2>
+  {% if account and account.client_id %}
+  <h3>Account</h3>
   {% if connected %}
   <p>Connected as <strong>{{ account.account }}</strong>.</p>
   <form method="post" action="{{ url_for('onedrive_disconnect') }}" data-confirm="Disconnect OneDrive? Uploaded invoices stay where they are.">
@@ -81,35 +73,9 @@
     files in your OneDrive; it only ever writes invoice PDFs into the folders you choose below, and reads PDFs from those
     folders only when you ask to import existing invoices.</small>
   {% endif %}
-</section>
-{% endif %}
-
-{% if connected %}
-<section class="card stack">
-  <h2>3. Folder per car</h2>
-  <ul class="plain folders">
-    {% for c in cars %}{% set f = folders.get(c.id) %}
-    <li>
-      <span><strong>{{ c.name or ('Car ' ~ c.id) }}</strong><br>
-        <small>{{ f.folder_path if f else 'No folder chosen' }}</small></span>
-      <span class="actions">
-        <a href="{{ url_for('onedrive_browse', car_id=c.id) }}">{{ 'Change' if f else 'Choose folder' }}</a>
-        {% if f %}<a href="{{ url_for('onedrive_import', car_id=c.id) }}">Import existing invoices</a>
-        <form method="post" action="{{ url_for('onedrive_clear_folder', car_id=c.id) }}">
-          <button type="submit" class="linklike">Clear</button></form>{% endif %}
-      </span>
-    </li>
-    {% endfor %}
-  </ul>
-  <small>Uploaded invoices are named from the template under <a href="{{ url_for('settings') }}">Settings</a>,
-    e.g. “{{ name_example }}”.
-    The folder can be renamed or moved in OneDrive later without breaking uploads.</small>
-</section>
-{% endif %}
-{% endif %}
-{% if storage %}
-<p><small>OneDrive logo: <a href="{{ storage.credit.url }}" target="_blank" rel="noopener noreferrer">{{ storage.credit.text }}</a>,
+  {% endif %}
+  <p><small>OneDrive logo: <a href="{{ storage.credit.url }}" target="_blank" rel="noopener noreferrer">{{ storage.credit.text }}</a>,
   <a href="{{ storage.credit.licence_url }}" target="_blank" rel="noopener noreferrer">{{ storage.credit.licence }}</a>.
   OneDrive is a trademark of Microsoft Corporation.</small></p>
-{% endif %}
-{% endblock %}
+  {% endif %}
+</section>

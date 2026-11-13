@@ -27,15 +27,6 @@ CREATE TABLE public.cars (
     marketing_name character varying(255)
 );
 
-CREATE SEQUENCE public.cars_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-ALTER SEQUENCE public.cars_id_seq OWNED BY public.cars.id;
-
 CREATE TABLE public.charging_processes (
     id integer NOT NULL,
     start_date timestamp without time zone NOT NULL,
@@ -56,15 +47,6 @@ CREATE TABLE public.charging_processes (
     charge_energy_used numeric(8,2),
     cost numeric(14,2)
 );
-
-CREATE SEQUENCE public.charging_processes_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-ALTER SEQUENCE public.charging_processes_id_seq OWNED BY public.charging_processes.id;
 
 CREATE TABLE public.positions (
     id integer NOT NULL,
@@ -98,6 +80,24 @@ CREATE TABLE public.positions (
     tpms_pressure_rl numeric(4,1),
     tpms_pressure_rr numeric(4,1)
 );
+
+CREATE SEQUENCE public.cars_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.cars_id_seq OWNED BY public.cars.id;
+
+CREATE SEQUENCE public.charging_processes_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.charging_processes_id_seq OWNED BY public.charging_processes.id;
 
 CREATE SEQUENCE public.positions_id_seq
     START WITH 1

@@ -43,6 +43,18 @@ Proposing the change to TeslaMate is a step of the release process (RELEASING.md
 hand after a stable release, not by CI: it publishes under your GitHub account. `propose` updates the
 same branch and pull request each time.
 
+## CodeQL before you push
+
+CI runs CodeQL on pull requests (`.github/workflows/codeql.yml`). To get the same answer locally:
+
+```bash
+scripts/codeql.sh setup   # once: downloads the CodeQL bundle (about 1 GB) to ~/.local/share/codeql
+scripts/codeql.sh         # analyses python and actions in about 30 seconds; exits 1 on findings
+```
+
+It needs the `gh` CLI and `zstd`. Databases and SARIF results go to `.dev/codeql`. Set
+`CODEQL_HOME` to install elsewhere, or `CODEQL_VERSION` (a `codeql-bundle-v…` tag) to pin a version.
+
 ## Dev stack
 
 `scripts/dev.sh` runs the UI and Grafana on their own test database, not on the TeslaMate
@@ -56,6 +68,7 @@ scripts/dev.sh refresh        # re-copy TeslaMate data, keeping your test expens
 scripts/dev.sh reset          # wipe the test database
 scripts/dev.sh demo up         # second stack of invented data, for screenshots (see below)
 scripts/dev.sh sample-expenses  # add made-up expenses to try the app with; `clear` removes them
+scripts/dev.sh sample-invoices  # write made-up invoice PDFs into the stack's invoice folder
 scripts/dev.sh schema         # regenerate db/teslamate-schema.sql after a TeslaMate upgrade
 scripts/dev.sh setup          # in a new worktree: create .venv
 scripts/dev.sh down           # stop the stack, keeping its data
@@ -69,8 +82,20 @@ parallel branches never share running code. `scripts/dev.sh info` shows a checko
 ports, `list` shows every running dev stack, and `destroy` removes one (its containers, test database, image and `.dev` folder). `.worktreeinclude`
 copies your `dev.env` into new Claude Code worktrees.
 
+The invoice folder is on in the dev stack too: `.dev/invoices` in the checkout stands in for a mounted
+share (the app runs as you there, so its files are yours), and `destroy` removes it. Drop PDFs into it
+to try the import, or let `sample-invoices` write some made-up ones into `.dev/invoices/Sample invoices`;
+then choose that folder for a car on the Invoice storage page. To try it on a real
+network share instead, mount the share on the dev machine and set `DEV_INVOICES_SHARE` in `dev.env`
+to where it is mounted (see `dev.env.example`). Each stack then keeps its own folder in the share, named
+after the stack (`<share>/<worktree name>`, `main` for the main checkout), so worktrees never mix
+their test PDFs, and the app writes there as you. `up` makes that folder, but never the share itself:
+a share that isn't mounted, only its empty mount point, is refused. `destroy` leaves the folder on
+the share, so delete it yourself when you no longer need the test PDFs. `DEV_INVOICES_DIR` names exactly one
+folder instead, for every stack. The demo stack never uses either.
+
 OneDrive is on in the dev stack with a throwaway token key in `.dev/env`. To sign in there,
-add the dev stack's callback address (shown on its OneDrive page) as a second redirect URI on
+add the dev stack's callback address (shown in the OneDrive card of its Invoice storage page) as a second redirect URI on
 your app registration. A sign-in writes to your real OneDrive, so give each car a test folder.
 
 The seed only reads from TeslaMate. It copies all of `cars` and `charging_processes`, and one

@@ -29,7 +29,8 @@ services:
       # Loopback only; docker-compose.traefik.yml publishes it behind forward-auth.
       - "127.0.0.1:${HOST_PORT:-8088}:8080"
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz')"]
+      # A failing check prints the app's reason (the invoice folder isn't mounted, say), for docker inspect.
+      test: ["CMD", "python3", "-c", "import sys, urllib.request as u, urllib.error as e\ntry: u.urlopen('http://127.0.0.1:8080/healthz')\nexcept e.HTTPError as x: sys.exit(x.read().decode())"]
       interval: 30s
       timeout: 5s
       retries: 3
