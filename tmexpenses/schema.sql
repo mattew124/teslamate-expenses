@@ -62,8 +62,9 @@ CREATE TABLE IF NOT EXISTS expenses.learned_vendor (
     PRIMARY KEY (vendor, category_id)
 );
 
--- PDFs in a car's OneDrive folder the owner marked "skip" on the import page, so they stop
--- being offered. Keyed by the file's link, the same thing an imported expense stores.
+-- PDFs in a car's folder the owner marked "skip" on the import page, so they stop being
+-- offered. Keyed by the file's link (or its path, in the folder on the server), the same thing
+-- an imported expense stores.
 CREATE TABLE IF NOT EXISTS expenses.import_skip (
     car_id smallint NOT NULL REFERENCES public.cars (id) ON DELETE CASCADE,
     url    text NOT NULL CHECK (url <> ''),
@@ -111,17 +112,27 @@ CREATE TABLE IF NOT EXISTS expenses.expense (
     updated_at   timestamptz NOT NULL DEFAULT now()
 );
 
+-- An invoice kept in the folder on the server (INVOICES_DIR) rather than behind a link: its path
+-- below that folder, always starting with '/', so remounting the folder elsewhere breaks nothing.
+-- The app serves it at /invoice/<id>.
+ALTER TABLE expenses.expense ADD COLUMN IF NOT EXISTS invoice_path text
+    CHECK (invoice_path IS NULL OR (invoice_path LIKE '/_%' AND length(invoice_path) <= 1024));
+
 CREATE INDEX IF NOT EXISTS expense_car_time_idx ON expenses.expense (car_id, occurred_at);
 CREATE INDEX IF NOT EXISTS expense_category_idx ON expenses.expense (category_id);
 
--- OneDrive folder each car's invoice PDFs go to, chosen on the app's OneDrive
--- page. Uploads go by folder_id, so renaming or moving the folder in OneDrive
+-- The folder each car's invoice PDFs go to, chosen on the app's OneDrive or Invoice
+-- folder page. OneDrive uploads go by folder_id, so renaming or moving the folder in OneDrive
 -- doesn't break them; folder_path is only for showing where that is.
 CREATE TABLE IF NOT EXISTS expenses.car_folder (
     car_id      smallint PRIMARY KEY REFERENCES public.cars (id) ON DELETE CASCADE,
     folder_id   text NOT NULL CHECK (folder_id <> ''),
     folder_path text NOT NULL
 );
+-- Where that folder is: OneDrive (the only choice when the table first shipped) or the folder on
+-- the server, in which case folder_id is its path below INVOICES_DIR. One or the other per car.
+ALTER TABLE expenses.car_folder ADD COLUMN IF NOT EXISTS backend text NOT NULL DEFAULT 'onedrive'
+    CHECK (backend IN ('onedrive', 'local'));
 
 -- The OneDrive connection: at most one row. client_id/client_secret are the
 -- installer's own Entra app registration, entered on the OneDrive page.

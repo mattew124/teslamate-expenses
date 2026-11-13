@@ -124,3 +124,11 @@ def test_category_colours_are_fixed_and_clearly_different():
         for b in colours[i + 1:]:
             gap = sum((x - y) ** 2 for x, y in zip(_lab(a), _lab(b), strict=True)) ** 0.5
             assert gap > 30, f"{a} and {b} are too alike"
+
+
+def test_the_invoice_column_links_a_stored_invoice_to_the_app():
+    """An invoice kept in the folder on the server has no link of its own: the app serves it at
+    /invoice/<id>, under the address the dashboard already knows the app by."""
+    sql = next(t["rawSql"] for p in SOURCE["panels"] for t in p.get("targets", []) if '"Invoice"' in t.get("rawSql", ""))
+    assert "e.invoice_path IS NOT NULL" in sql and "${expenses_url:sqlstring}" in sql
+    assert "'/invoice/' || e.id" in sql and "ELSE e.invoice_url END" in sql

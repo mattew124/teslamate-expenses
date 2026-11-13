@@ -13,6 +13,8 @@
 #   scripts/dev.sh sample-expenses [clear]
 #                                    add made-up expenses to the test DB to try the app with
 #                                    (re-run to refresh them; `clear` removes only those)
+#   scripts/dev.sh sample-invoices   write made-up invoice PDFs into the stack's invoice folder
+#                                    (.dev/invoices/Sample invoices), to try the import with
 #   scripts/dev.sh demo <command>    a second stack of invented data, for screenshots. Same commands
 #                                    as above (up, reset, down, destroy, psql, logs, info), plus
 #                                    `demo screenshots`. TeslaMate's tables come from a fresh
@@ -63,6 +65,17 @@ ENVF=.dev/env
 DEMO=0
 if [ "${1:-}" = demo ]; then DEMO=1; shift; fi
 SHOTS=.dev/screenshots; [ "$DEMO" = 0 ] || SHOTS=.dev/demo-screenshots
+# The stack's invoice folder (INVOICES_DIR): a plain folder here, mounted into the app, which runs as
+# you so that what it writes there is yours. Put PDFs in it by hand to try the import. DEV_INVOICES_DIR
+# in dev.env points it at another folder instead, such as a mounted NAS share, to try the app on one.
+INVOICES=.dev/invoices; [ "$DEMO" = 0 ] || INVOICES=.dev/demo-invoices
+DEV_UID="$(id -u)"; DEV_GID="$(id -g)"
+[ "$DEMO" = 0 ] && [ -n "${DEV_INVOICES_DIR:-}" ] || DEV_INVOICES_DIR="$ROOT/$INVOICES"
+export DEV_UID DEV_GID DEV_INVOICES_DIR
+# Shown on the app's Invoice storage page. The demo's screenshots are published, so it shows an
+# example path instead of this checkout's.
+export DEV_INVOICES_SHOWN="$DEV_INVOICES_DIR"
+[ "$DEMO" = 0 ] || export DEV_INVOICES_SHOWN=/mnt/nas/cars/invoices
 
 # ---- which dev stack this checkout owns ----------------------------------------
 
@@ -123,7 +136,9 @@ sync_local_notes() {
 
 ensure_env() {
     sync_local_notes
-    mkdir -p "$SHOTS"
+    mkdir -p "$SHOTS" "$INVOICES"
+    # Never made here: a folder that isn't there is a share that didn't mount, not one to create.
+    [ -d "$DEV_INVOICES_DIR" ] || { echo "dev: DEV_INVOICES_DIR $DEV_INVOICES_DIR isn't there (not mounted?)" >&2; exit 1; }
     if [ ! -f "$ENVF" ]; then
         ( umask 077
           printf 'DEV_ADMIN_DB_PASS=%s\nDEV_GRAFANA_PASS=%s\n' \
@@ -247,6 +262,13 @@ SQL
 demo_data() {
     dev_psql < scripts/demo-seed.sql
     dev_psql -v "tz=$APP_TZ" < scripts/dev-sample-expenses.sql
+    # Made-up invoices in the invoice folder, and each car pointed at them, for the import screenshots.
+    python3 scripts/dev-sample-invoices.py "$ROOT/$INVOICES" >/dev/null
+    # The car is pointed at it below, not through the app, so leave the marker choosing a folder would.
+    printf 'Demo invoice folder for teslamate-expenses.\n' > "$ROOT/$INVOICES/.teslamate-expenses"
+    dev_psql -c "INSERT INTO expenses.car_folder (car_id, folder_id, folder_path, backend)
+                 SELECT id, '/Sample invoices', '/Sample invoices', 'local' FROM public.cars
+                 ON CONFLICT (car_id) DO NOTHING"
     # The app works out the dashboard's time range from the data at start-up, and started with none.
     compose restart expenses-dev >/dev/null
     compose up -d --wait >/dev/null
@@ -325,6 +347,7 @@ base_path=$DEV_BASE_PATH
 ui_port=$DEV_UI_PORT
 grafana_port=$DEV_GRAFANA_PORT
 image=${EXPENSES_IMAGE:-teslamate-expenses:$DEV_TAG}
+invoices=$DEV_INVOICES_DIR
 router_suffix=${DEV_ROUTER_SUFFIX:-none}
 ui_priority=$DEV_UI_PRIORITY
 grafana_priority=$DEV_GRAFANA_PRIORITY
@@ -458,7 +481,7 @@ case "${1:-}" in
     destroy)
         ensure_env
         compose down -v --remove-orphans
-        if [ "$DEMO" = 1 ]; then rm -rf -- "$ROOT/$SHOTS"; echo "dev: removed $PROJECT"; exit 0; fi
+        if [ "$DEMO" = 1 ]; then rm -rf -- "$ROOT/$SHOTS" "$ROOT/$INVOICES"; echo "dev: removed $PROJECT"; exit 0; fi
         docker image rm "teslamate-expenses:$DEV_TAG" >/dev/null 2>&1 || true
         # Last: `compose down` above needs the passwords in .dev/env. This also drops the screenshots.
         # The checkout itself (a worktree's own folder) stays; remove that with `git worktree remove`.
@@ -488,7 +511,8 @@ case "${1:-}" in
             dev_psql -v "tz=$APP_TZ" < scripts/dev-sample-expenses.sql
             echo "dev: sample expenses added to the test database"
         fi ;;
+    sample-invoices) ensure_env; python3 scripts/dev-sample-invoices.py "$DEV_INVOICES_DIR" ;;
     psql) ensure_env; shift; dev_psql "$@" ;;
     logs) ensure_env; compose logs -f expenses-dev ;;
-    *) sed -n '3,32p' "$0" >&2; exit 2 ;;
+    *) sed -n '3,34p' "$0" >&2; exit 2 ;;
 esac

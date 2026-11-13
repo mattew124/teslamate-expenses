@@ -5,7 +5,7 @@ Connect sends the browser to Microsoft, which sends it back to /onedrive/callbac
 with a code the app swaps for tokens. Microsoft only redirects to addresses
 registered on the app, and every installation has its own address, so each
 installer registers their own Entra app and enters its client ID and secret on
-the OneDrive page. Personal Microsoft accounts can't use app-only (client
+the Invoice storage page. Personal Microsoft accounts can't use app-only (client
 credentials) access to OneDrive, so a delegated sign-in is the only way in.
 
 The refresh token is the key to the whole drive (Files.ReadWrite), so it and the
@@ -29,6 +29,8 @@ from urllib.parse import quote, urlencode
 
 from cryptography.fernet import Fernet, InvalidToken
 
+from .storage import StorageError
+
 log = logging.getLogger("tmexpenses.onedrive")
 
 AUTHORITY = "https://login.microsoftonline.com/consumers/oauth2/v2.0"
@@ -41,7 +43,7 @@ MAX_DEPTH = 4    # subfolders below a car's folder that are searched for PDFs
 MAX_PDF_BYTES = 20 * 1024 * 1024
 
 
-class OneDriveError(Exception):
+class OneDriveError(StorageError):
     """Carries a message fit to show the user."""
 
 
@@ -51,7 +53,7 @@ class SignInExpired(OneDriveError):
 
 class NotConnected(OneDriveError):
     def __init__(self):
-        super().__init__("Connect OneDrive first (OneDrive page), then try again.")
+        super().__init__("Connect OneDrive first (Invoice storage page), then try again.")
 
 
 def http(method, url, data=None, headers=None, timeout=60, raw=False):
@@ -125,7 +127,7 @@ class OneDrive:
         except InvalidToken:
             raise SignInExpired(
                 "The saved OneDrive details can't be read (was EXPENSES_ENCRYPTION_KEY changed?). "
-                "Enter the client secret and connect again on the OneDrive page.") from None
+                "Enter the client secret and connect again on the Invoice storage page.") from None
 
     # ---- sign-in --------------------------------------------------------------
 
@@ -162,10 +164,10 @@ class OneDrive:
         if status == 200 and "access_token" in body:
             return body
         if body.get("error") in ("invalid_grant", "interaction_required"):
-            raise SignInExpired("The OneDrive sign-in has expired: sign in again on the OneDrive page.")
+            raise SignInExpired("The OneDrive sign-in has expired: sign in again on the Invoice storage page.")
         if body.get("error") in ("invalid_client", "unauthorized_client"):
             raise SignInExpired("Microsoft refused the client secret (expired?): enter a new one "
-                                "on the OneDrive page.")
+                                "on the Invoice storage page.")
         raise OneDriveError("Couldn't refresh the OneDrive sign-in: "
                             + (body.get("error_description") or f"HTTP {status}"))
 

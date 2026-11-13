@@ -9,7 +9,25 @@ Each entry says what an installer must do to upgrade. Where nothing is said, pul
 
 ### Added
 
-- Docs and README: screenshots of the expense list, form, settings and Grafana dashboard.
+- Invoices can be kept in a folder on the server (a NAS share mounted on the Docker host, say) instead
+  of in OneDrive, and the app shows them itself: the list's PDF link opens the file in the browser,
+  behind the same login as every page (#12). It is set up beside OneDrive on one
+  **Invoice storage** page, which replaces the OneDrive page (old links to it still arrive) and is
+  always in the header: a card for each place invoices can be kept, the server folder's path, and
+  below them the folder each car uses, chosen with the same picker as OneDrive; uploads go into the category's subfolder, the Add form can pick a
+  PDF already in the folder, and **Import existing invoices** works there with the same preview and
+  learning. Each car uses OneDrive or the folder. A file is never overwritten, nothing outside the
+  mounted folder is read or written, and a folder that has gone missing is an error, never recreated.
+  The Grafana table links to stored invoices through **Settings → This app's URL**.
+  With `docker-compose.invoices.yml` the app doesn't run without the folder (`INVOICES_REQUIRED=1`): a
+  share that isn't mounted stops it with the reason in `docker compose logs`, and the container turns
+  unhealthy if the folder goes away later. `INVOICES_REQUIRED=0` keeps it running instead.
+  Off unless you turn it on: set `INVOICES_HOST_DIR` in `.env` and add `docker-compose.invoices.yml`
+  (docs, "Invoice folder on the server"). To upgrade without it, pull the new image; the app adds two
+  columns to its own tables on start. With a least-privilege role (`SKIP_MIGRATE=1`), re-run
+  `scripts/provision-db.sh` as for any upgrade.
+- Docs and README: screenshots of the expense list, form, settings, Grafana dashboard, the Invoice
+  storage page, the invoice folder window and the import preview.
 
 ## 0.2.0-rc5 - 2026-11-11
 

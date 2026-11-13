@@ -24,5 +24,5 @@ except onedrive.OneDriveError as exc:
 with db.connect() as conn:
     cars = db.cars(conn)
     for car in cars:
-        db.set_car_folder(conn, car["id"], folder["id"], folder["path"])
+        db.set_car_folder(conn, car["id"], folder["id"], folder["path"], "onedrive")
 print(f"dev: linked to OneDrive as {account['account']}; {len(cars)} car(s) use {folder['path']}")

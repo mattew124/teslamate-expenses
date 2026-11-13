@@ -15,6 +15,9 @@ services:
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     tmpfs: ["/dev/shm"]
+    # As you (scripts/dev.sh sets these), so what the app writes into the invoice folder below is yours
+    # to look at and delete.
+    user: "${DEV_UID:-10001}:${DEV_GID:-10001}"
     environment:
       DATABASE_HOST: dev-db
       DATABASE_NAME: teslamate
@@ -30,19 +33,43 @@ services:
       TZ: ${APP_TZ:-UTC}
       # The app writes its Grafana dashboard here, exactly as in production.
       DASHBOARD_DIR: /dashboards
+      # The invoice folder is on in dev too: .dev/invoices in this checkout stands in for a mounted
+      # share, so test PDFs can be dropped straight into it. INVOICES_HOST_DIR is only shown on the page.
+      INVOICES_DIR: /invoices
+      INVOICES_HOST_DIR: ${DEV_INVOICES_SHOWN:-}
+      # As docker-compose.invoices.yml: stop rather than run without the invoice folder.
+      INVOICES_REQUIRED: "1"
     volumes:
       - dev-dashboards:/dashboards
+      - type: bind
+        source: ${DEV_INVOICES_DIR:-./.dev/invoices}
+        target: /invoices
+        bind:
+          create_host_path: false   # as in production: scripts/dev.sh makes it, Docker never does
     depends_on:
       dev-db:
         condition: service_healthy
+      dev-dashboards-owner:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz')"]
+      # A failing check prints the app's reason (the invoice folder isn't mounted, say), for docker inspect.
+      test: ["CMD", "python3", "-c", "import sys, urllib.request as u, urllib.error as e\ntry: u.urlopen('http://127.0.0.1:8080/healthz')\nexcept e.HTTPError as x: sys.exit(x.read().decode())"]
       interval: 30s
       timeout: 5s
       retries: 3
     ports:
       - "127.0.0.1:${DEV_UI_PORT:-8089}:8080"
     networks: [dev]
+
+  # The dashboard volume belongs to whoever wrote it first (root when new, 10001 from an earlier
+  # run), and the app replaces its dashboard file there on every start: hand it to the app's user.
+  dev-dashboards-owner:
+    image: postgres:18-trixie   # already pulled for dev-db; only its chown is used
+    user: root
+    network_mode: none
+    entrypoint: ["chown", "-R", "${DEV_UID:-10001}:${DEV_GID:-10001}", "/dashboards"]
+    volumes:
+      - dev-dashboards:/dashboards
 
   dev-db:
     image: postgres:18-trixie   # same major version as TeslaMate's documented image

@@ -150,7 +150,7 @@ def test_works_in_batches(client, admin, monkeypatch):
 def test_needs_a_chosen_folder(client, admin):
     client.post("/onedrive/folders/1/clear", headers=ORIGIN)
     resp = client.get("/onedrive/import/1")
-    assert resp.status_code == 303 and resp.headers["Location"].endswith("/onedrive")
+    assert resp.status_code == 303 and resp.headers["Location"].endswith("/storage")
 
 
 def test_post_needs_same_origin(client, admin):

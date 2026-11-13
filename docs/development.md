@@ -21,6 +21,7 @@ scripts/dev.sh refresh        # re-copy TeslaMate data, keeping your test expens
 scripts/dev.sh reset          # wipe the test database
 scripts/dev.sh demo up         # second stack of invented data, for screenshots (see below)
 scripts/dev.sh sample-expenses  # add made-up expenses to try the app with; `clear` removes them
+scripts/dev.sh sample-invoices  # write made-up invoice PDFs into the stack's invoice folder
 scripts/dev.sh schema         # regenerate db/teslamate-schema.sql after a TeslaMate upgrade
 scripts/dev.sh setup          # in a new worktree: create .venv
 scripts/dev.sh down           # stop the stack, keeping its data
@@ -34,8 +35,14 @@ parallel branches never share running code. `scripts/dev.sh info` shows a checko
 ports, `list` shows every running dev stack, and `destroy` removes one (its containers, test database, image and `.dev` folder). `.worktreeinclude`
 copies your `dev.env` into new Claude Code worktrees.
 
+The invoice folder is on in the dev stack too: `.dev/invoices` in the checkout stands in for a mounted
+share (the app runs as you there, so its files are yours), and `destroy` removes it. Drop PDFs into it
+to try the import, or let `sample-invoices` write some made-up ones into `.dev/invoices/Sample invoices`;
+then choose that folder for a car on the Invoice storage page. To try it on a real
+share instead, set `DEV_INVOICES_DIR` in `dev.env` to where the share is mounted (see `dev.env.example`).
+
 OneDrive is on in the dev stack with a throwaway token key in `.dev/env`. To sign in there,
-add the dev stack's callback address (shown on its OneDrive page) as a second redirect URI on
+add the dev stack's callback address (shown in the OneDrive card of its Invoice storage page) as a second redirect URI on
 your app registration. A sign-in writes to your real OneDrive, so give each car a test folder.
 
 The seed only reads from TeslaMate. It copies all of `cars` and `charging_processes`, and one

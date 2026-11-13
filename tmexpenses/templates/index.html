@@ -54,7 +54,9 @@
     <td class="vendor" data-label="Vendor" title="{{ e.vendor or '' }}">{{ e.vendor or '–' }}</td>
     <td class="num amount{{ ' credit' if e.amount < 0 }}" data-label="Amount">{{ e.amount|money }}</td>
     <td class="num odo" data-label="Odometer">{{ e.odometer_km|km }}</td>
-    <td class="inv{{ '' if e.invoice_url else ' none' }}" data-label="Invoice">{% if e.invoice_url %}<a href="{{ e.invoice_url }}" target="_blank" rel="noopener noreferrer">PDF ↗</a>{% else %}–{% endif %}</td>
+    {# A stored invoice is served by the app; anything else is the link that was pasted or uploaded. #}
+    {% set inv = url_for('invoice', expense_id=e.id) if e.invoice_path else e.invoice_url %}
+    <td class="inv{{ '' if inv else ' none' }}" data-label="Invoice">{% if inv %}<a href="{{ inv }}" target="_blank" rel="noopener noreferrer">PDF ↗</a>{% else %}–{% endif %}</td>
     <td class="actions"><a href="{{ url_for('edit', expense_id=e.id, **view) }}">Edit</a></td>
   </tr>
   {% endfor %}

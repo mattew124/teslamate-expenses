@@ -50,7 +50,9 @@ looking at.
 
 Choosing the invoice PDF fills in what can be read from it. With
 [OneDrive uploads](onedrive.md) on, the PDF goes into that car's OneDrive folder (choose it, or drop
-it onto the invoice box) and the link is filled in for you. Invoices already in OneDrive can be
+it onto the invoice box) and the link is filled in for you. Or keep them on your own
+server: with an [invoice folder](local-folder.md) mounted (a NAS share, say), the app saves the PDFs
+there, per car and category, and shows them itself behind your login. Invoices already in either can be
 [imported](importing.md) in bulk.
 
 Starter categories: Initial purchase, Insurance, Registration, Tyres, Cabin air filter,

@@ -1,7 +1,8 @@
 # Importing invoices
 
-Invoices already in a car's OneDrive folder (and its subfolders) can be turned into expenses in
-bulk: on the **OneDrive** page, press **Import existing invoices** beside the car.
+Invoices already in a car's folder (and its subfolders) can be turned into expenses in bulk, whether
+that folder is in OneDrive or is the [invoice folder on the server](local-folder.md): on the
+**Invoice storage** page, press **Import existing invoices** beside the car.
 
 The page opens at once and shows its progress (looking in the folder, then "Reading 3 of 10" with the
 file's name) while it reads every PDF that isn't yet linked to an expense. It guesses each one's date,
@@ -11,7 +12,7 @@ importing (a brochure, say) and they stop being offered; **Offer them again** at
 brings them back. When you press Import with some files left unticked, the page asks whether to
 skip those too; choose Cancel to leave them for next time.
 
-<!-- screenshot: import-preview - The import table, with its guesses to check, correct and untick -->
+![The import table, with its guesses to check, correct and untick](images/import-preview.png)
 
 ## How it guesses
 
@@ -28,7 +29,7 @@ rows missing a date, category or amount start unticked. The image includes `popp
 `tesseract-ocr` for this; without them the app still runs and simply proposes less.
 
 A blank odometer is filled from TeslaMate's last position before the invoice date. Each row can also
-be **renamed in OneDrive** to the [file name template](onedrive.md#file-names), built from the values
+be **renamed** where it is (in OneDrive, or in the folder on the server) to the [file name template](onedrive.md#file-names), built from the values
 you confirm; a name already taken leaves the file as it is, and the expense is still imported.
 
 The same reading works on a single invoice: on **+ Add**, choosing the invoice PDF fills in the date,
@@ -39,7 +40,7 @@ without touching anything you've already typed.
 
 Possible duplicates are flagged. Saving a new expense (the Add form) that has the same car and exactly
 the same amount as one within 14 days either side asks first: it lists the match with a link to open it, and
-**Save anyway** saves the new one regardless. The question comes before anything is uploaded to OneDrive, and the
+**Save anyway** saves the new one regardless. The question comes before anything is uploaded or saved, and the
 server asks again if the page's own check was skipped. The import preview does the same per file, leaving a
 likely duplicate unticked with a link to the expense it resembles.
 

@@ -77,11 +77,14 @@ button:disabled { opacity: .6; cursor: progress; }
 .stack { display: grid; gap: 1rem; max-width: 30rem; }
 .card.stack, .cards .stack { max-width: none; }
 .card.stack, section.stack { margin-bottom: 1rem; }
-.stack > p, .stack > h2 { margin: 0; }
+.stack > p, .stack > h2, .stack > h3 { margin: 0; }
+.stack > h3 { font-size: 1rem; }
 .stack > button, .stack > .button { justify-self: start; }
 .cards { display: grid; gap: 1rem; }
 .cards > .card { margin: 0; }
 label, .field { display: grid; align-content: start; gap: .3rem; }
+/* display: grid above would otherwise show a field that is marked hidden. */
+.field[hidden] { display: none; }
 label, .field > label { font-weight: 600; font-size: .95rem; }
 label small, small { font-weight: 400; color: var(--muted); font-size: .85rem; }
 input, select, textarea { font: inherit; padding: .5rem .7rem; border: 1px solid var(--line);
@@ -282,3 +285,5 @@ form.import { display: grid; gap: 1rem; }
 .import-table label.inline { display: flex; align-items: flex-start; gap: .4rem; margin-top: .25rem; }
 .import-table label.inline small { display: inline; }
 .import-table label.inline input[type=checkbox] { flex: none; width: auto; padding: 0; margin: .15rem 0 0; }
+/* A long folder path wraps inside its card instead of running past the edge on a phone. */
+.card code { overflow-wrap: anywhere; }

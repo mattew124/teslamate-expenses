@@ -25,7 +25,7 @@ log = logging.getLogger("tmexpenses.icons")
 
 # Pinned to an exact commit, so the picture never changes underneath an installation. `colour` fills a
 # single-colour drawing; a logo that carries its own colours has None. selfh.st/icons is CC BY 4.0: the
-# credit is in the docs and on the OneDrive page (see CREDIT).
+# credit is in the docs and on the Invoice storage page (see CREDIT).
 SOURCES = {
     # `storage`: the storage provider's logo, served only when uploads are set up.
     "onedrive": {
