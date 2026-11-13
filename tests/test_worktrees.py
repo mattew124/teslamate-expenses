@@ -110,3 +110,63 @@ def test_destroy_works_when_the_stack_was_never_started(repo, tmp_path):
     assert not (wt / ".dev").exists()
     run_destroy(wt, tmp_path)
     assert not (wt / ".dev").exists()
+
+
+# ---- the dev stack's invoice folder on a mounted share (DEV_INVOICES_SHARE) -----------
+
+def test_a_share_gives_each_stack_its_own_folder_in_it(repo, tmp_path):
+    share = tmp_path / "share"
+    env = {"DEV_INVOICES_SHARE": f"{share}/"}                 # a trailing slash makes no difference
+    main, a, b = info(repo, env), info(worktree(repo, "fix-odometer"), env), info(worktree(repo, "Feature_Two"), env)
+    assert main["invoices"] == f"{share}/main"
+    assert a["invoices"] == f"{share}/fix-odometer" and b["invoices"] == f"{share}/feature-two"
+    assert len({main["invoices"], a["invoices"], b["invoices"]}) == 3, "stacks must not share a folder"
+
+
+def test_without_a_share_the_folder_is_the_checkouts_own(repo):
+    assert info(repo)["invoices"] == f"{repo}/.dev/invoices"
+
+
+def test_an_explicit_folder_beats_the_share(repo, tmp_path):
+    env = {"DEV_INVOICES_SHARE": str(tmp_path / "share"), "DEV_INVOICES_DIR": str(tmp_path / "chosen")}
+    assert info(repo, env)["invoices"] == str(tmp_path / "chosen")
+
+
+def test_the_demo_stack_never_uses_the_share(repo, tmp_path):
+    out = subprocess.run([str(repo / "scripts" / "dev.sh"), "demo", "info"], cwd=repo, check=True, capture_output=True,
+                         text=True, env={"PATH": "/usr/bin:/bin", "HOME": str(repo),
+                                         "DEV_INVOICES_SHARE": str(tmp_path / "share")}).stdout
+    assert f"invoices={repo}/.dev/demo-invoices" in out
+
+
+def test_a_share_that_is_not_mounted_is_refused_and_nothing_is_made_in_it(repo, tmp_path):
+    """The folder is only an empty mount point on the server's own disk: don't fill it."""
+    share = tmp_path / "mount-point"
+    share.mkdir()
+    r = subprocess.run([str(repo / "scripts" / "dev.sh"), "sample-invoices"], cwd=repo, capture_output=True, text=True,
+                       env={"PATH": "/usr/bin:/bin", "HOME": str(repo), "DEV_INVOICES_SHARE": str(share)})
+    assert r.returncode != 0 and "isn't mounted" in r.stderr and str(share) in r.stderr
+    assert list(share.iterdir()) == []
+
+
+def test_a_share_that_is_not_there_is_refused_and_never_created(repo, tmp_path):
+    share = tmp_path / "gone"
+    r = subprocess.run([str(repo / "scripts" / "dev.sh"), "sample-invoices"], cwd=repo, capture_output=True, text=True,
+                       env={"PATH": "/usr/bin:/bin", "HOME": str(repo), "DEV_INVOICES_SHARE": str(share)})
+    assert r.returncode != 0 and not share.exists()
+
+
+def test_destroy_does_not_need_the_share_and_leaves_its_files(repo, tmp_path):
+    """Taking a stack down must work with the NAS off, and never deletes what is on the share."""
+    wt = worktree(repo, "old-branch")
+    share = tmp_path / "share"
+    (share / "old-branch").mkdir(parents=True)
+    (share / "old-branch" / "kept.pdf").write_text("pdf")
+    fake = tmp_path / "bin" / "docker"
+    fake.parent.mkdir()
+    fake.write_text("#!/bin/sh\nexit 0\n")
+    fake.chmod(0o755)
+    out = subprocess.run([str(wt / "scripts" / "dev.sh"), "destroy"], cwd=wt, check=True, capture_output=True, text=True,
+                         env={"PATH": f"{fake.parent}:/usr/bin:/bin", "HOME": str(wt), "DEV_INVOICES_SHARE": str(share)})
+    assert (share / "old-branch" / "kept.pdf").read_text() == "pdf"
+    assert "left" in out.stdout and str(share / "old-branch") in out.stdout

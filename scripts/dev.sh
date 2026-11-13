@@ -33,7 +33,9 @@
 #   scripts/dev.sh psql [args]       psql on the test database
 #   scripts/dev.sh logs              follow the app's logs
 #
-# Settings come from ./dev.env (gitignored; see dev.env.example).
+# Settings come from ./dev.env (gitignored; see dev.env.example). That includes where the stack's invoice
+# folder is: .dev/invoices here, a folder of its own on a mounted share (DEV_INVOICES_SHARE) or one folder
+# of your choosing (DEV_INVOICES_DIR).
 #
 # Each git worktree gets its own stack, test DB and URL path
 # (/expenses-dev/<worktree>/), so parallel sessions can't replace each other's
@@ -65,17 +67,8 @@ ENVF=.dev/env
 DEMO=0
 if [ "${1:-}" = demo ]; then DEMO=1; shift; fi
 SHOTS=.dev/screenshots; [ "$DEMO" = 0 ] || SHOTS=.dev/demo-screenshots
-# The stack's invoice folder (INVOICES_DIR): a plain folder here, mounted into the app, which runs as
-# you so that what it writes there is yours. Put PDFs in it by hand to try the import. DEV_INVOICES_DIR
-# in dev.env points it at another folder instead, such as a mounted NAS share, to try the app on one.
 INVOICES=.dev/invoices; [ "$DEMO" = 0 ] || INVOICES=.dev/demo-invoices
 DEV_UID="$(id -u)"; DEV_GID="$(id -g)"
-[ "$DEMO" = 0 ] && [ -n "${DEV_INVOICES_DIR:-}" ] || DEV_INVOICES_DIR="$ROOT/$INVOICES"
-export DEV_UID DEV_GID DEV_INVOICES_DIR
-# Shown on the app's Invoice storage page. The demo's screenshots are published, so it shows an
-# example path instead of this checkout's.
-export DEV_INVOICES_SHOWN="$DEV_INVOICES_DIR"
-[ "$DEMO" = 0 ] || export DEV_INVOICES_SHOWN=/mnt/nas/cars/invoices
 
 # ---- which dev stack this checkout owns ----------------------------------------
 
@@ -97,6 +90,28 @@ if [ -n "$(instance_name)" ] && [ "$DEMO" = 0 ] && { [ -z "$INSTANCE" ] || [ "$I
     echo "dev: can't derive a usable stack name from '$(instance_name)'; set DEV_INSTANCE" >&2
     exit 2
 fi
+# The stack's invoice folder (INVOICES_DIR): mounted into the app, which runs as you so that what it
+# writes there is yours. Put PDFs in it by hand to try the import. In order of preference:
+#   DEV_INVOICES_DIR    (dev.env) exactly this folder, e.g. one on a mounted NAS share
+#   DEV_INVOICES_SHARE  (dev.env) a mounted share: each stack gets its own folder in it, named after the
+#                       stack, so branches never mix their test PDFs
+#   otherwise           .dev/invoices in this checkout
+# The demo stack always uses its own folder: its screenshots are published.
+INVOICES_SHARE=""
+if [ "$DEMO" = 0 ] && [ -n "${DEV_INVOICES_DIR:-}" ]; then
+    :
+elif [ "$DEMO" = 0 ] && [ -n "${DEV_INVOICES_SHARE:-}" ]; then
+    INVOICES_SHARE="${DEV_INVOICES_SHARE%/}"
+    DEV_INVOICES_DIR="$INVOICES_SHARE/${INSTANCE:-main}"
+else
+    DEV_INVOICES_DIR="$ROOT/$INVOICES"
+fi
+export DEV_UID DEV_GID DEV_INVOICES_DIR
+# Shown on the app's Invoice storage page. The demo's screenshots are published, so it shows an
+# example path instead of this checkout's.
+export DEV_INVOICES_SHOWN="$DEV_INVOICES_DIR"
+[ "$DEMO" = 0 ] || export DEV_INVOICES_SHOWN=/mnt/nas/cars/invoices
+
 if [ -z "$INSTANCE" ]; then
     PROJECT=teslamate-expenses-dev
     export DEV_BASE_PATH=/expenses-dev DEV_ROUTER_SUFFIX= DEV_TAG=dev
@@ -134,11 +149,26 @@ sync_local_notes() {
     fi
 }
 
+# The commands that use the invoice folder call this first (taking a stack down or removing it doesn't:
+# that must work with the NAS off). A folder that isn't there is a share that didn't mount, not one to
+# create. With DEV_INVOICES_SHARE the share itself must be a real mount, and only this stack's folder in
+# it is made: an empty mount point on this machine's own disk must not quietly fill up.
+require_invoices() {
+    if [ -n "$INVOICES_SHARE" ]; then
+        ls "$INVOICES_SHARE" >/dev/null 2>&1   # touches an automount, which mounts on first use
+        mountpoint -q "$INVOICES_SHARE" || {
+            echo "dev: DEV_INVOICES_SHARE $INVOICES_SHARE isn't mounted (is the share up?); nothing was changed" >&2
+            exit 1
+        }
+        [ -d "$DEV_INVOICES_DIR" ] || mkdir "$DEV_INVOICES_DIR"
+        echo "dev: invoice folder $DEV_INVOICES_DIR (on the share, for this stack only)"
+    fi
+    [ -d "$DEV_INVOICES_DIR" ] || { echo "dev: DEV_INVOICES_DIR $DEV_INVOICES_DIR isn't there (not mounted?)" >&2; exit 1; }
+}
+
 ensure_env() {
     sync_local_notes
     mkdir -p "$SHOTS" "$INVOICES"
-    # Never made here: a folder that isn't there is a share that didn't mount, not one to create.
-    [ -d "$DEV_INVOICES_DIR" ] || { echo "dev: DEV_INVOICES_DIR $DEV_INVOICES_DIR isn't there (not mounted?)" >&2; exit 1; }
     if [ ! -f "$ENVF" ]; then
         ( umask 077
           printf 'DEV_ADMIN_DB_PASS=%s\nDEV_GRAFANA_PASS=%s\n' \
@@ -318,6 +348,7 @@ SQL
 start() {
     local image="${1:-}"
     ensure_env
+    require_invoices
     prepare_database
     if [ -n "$image" ]; then
         export EXPENSES_IMAGE="$image"
@@ -486,7 +517,9 @@ case "${1:-}" in
         # Last: `compose down` above needs the passwords in .dev/env. This also drops the screenshots.
         # The checkout itself (a worktree's own folder) stays; remove that with `git worktree remove`.
         rm -rf -- "$ROOT/.dev"
-        echo "dev: removed $PROJECT" ;;
+        echo "dev: removed $PROJECT"
+        # Test PDFs on a share are left for you to delete: nothing here removes files from a NAS.
+        [ -z "$INVOICES_SHARE" ] || echo "dev: left $DEV_INVOICES_DIR on the share (this stack's test PDFs); delete it when you no longer need them" ;;
     list) docker compose ls -a --filter name=teslamate-expenses-dev ;;
     setup) setup ;;
     info) info ;;
@@ -511,7 +544,7 @@ case "${1:-}" in
             dev_psql -v "tz=$APP_TZ" < scripts/dev-sample-expenses.sql
             echo "dev: sample expenses added to the test database"
         fi ;;
-    sample-invoices) ensure_env; python3 scripts/dev-sample-invoices.py "$DEV_INVOICES_DIR" ;;
+    sample-invoices) ensure_env; require_invoices; python3 scripts/dev-sample-invoices.py "$DEV_INVOICES_DIR" ;;
     psql) ensure_env; shift; dev_psql "$@" ;;
     logs) ensure_env; compose logs -f expenses-dev ;;
     *) sed -n '3,34p' "$0" >&2; exit 2 ;;
