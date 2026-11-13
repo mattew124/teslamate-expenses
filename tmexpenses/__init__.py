@@ -137,12 +137,22 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
     local = None
     invoices_dir = os.environ.get("INVOICES_DIR", "").strip()
     if invoices_dir:
-        local = storage.LocalFolder(invoices_dir, link=lambda ref: url_for("local_file", path=ref))
+        def local_in_use():
+            """Does any car keep its invoices in the folder? Then the folder must carry its marker."""
+            with connect() as conn:
+                return any(f["backend"] == "local" for f in db.car_folders(conn).values())
+        local = storage.LocalFolder(invoices_dir, link=lambda ref: url_for("local_file", path=ref),
+                                    in_use=local_in_use)
         # Only for showing: where that folder is on the server itself, which the container can't see.
         local_shown = (os.environ.get("INVOICES_HOST_DIR", "").strip() or invoices_dir).rstrip("/")
-        if not local.available():
-            log.warning("INVOICES_DIR %s isn't there (not mounted?): invoices can't be saved or shown until it is",
-                        invoices_dir)
+        try:
+            usable = local.available()
+        except Exception as exc:   # noqa: BLE001 - the database isn't up yet; the folder is checked again on every use
+            log.info("invoice folder not checked at start: %s", exc)
+            usable = True
+        if not usable:
+            log.warning("INVOICES_DIR %s isn't there or isn't the folder your cars use (not mounted?): invoices "
+                        "can't be saved or shown until it is", invoices_dir)
     # The image is built with its release version in APP_VERSION; anything else is a development build.
     version = os.environ.get("APP_VERSION", "")
     update_check = updates.UpdateCheck(version, fetch=release_fetch,
@@ -951,6 +961,8 @@ def create_app(connect=None, onedrive_transport=None, release_fetch=None, icon_f
             car_or_404(car_id)
             try:
                 chosen = store.folder(request.form.get("folder_id") or None)
+                if kind == "local":
+                    local.claim()          # from now on, the folder must carry its marker (storage.py)
             except storage.StorageError as exc:
                 log.warning("%s folder choice failed: %s", kind, exc)
                 return render_storage(status=400, notice=f"Couldn't use that folder: {exc}")

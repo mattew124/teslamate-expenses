@@ -15,6 +15,11 @@ In the server folder an id is the path below INVOICES_DIR, always starting with 
 root itself). Nothing outside the root is ever read or written: every id is resolved, symlinks
 included, and refused unless it lands inside. The root is never created: if it is missing (a share
 that didn't mount), that is an error to show, not a folder to quietly fill on the wrong disk.
+
+A share that didn't mount usually leaves its mount point behind, though: an empty folder on the
+server's own disk, which looks just like an empty share. So choosing a car's folder leaves a hidden
+MARKER file at the top of the root, and while any car uses the folder, a root without it is treated
+as not mounted: nothing is read from it or written to it.
 """
 
 import errno
@@ -29,6 +34,9 @@ log = logging.getLogger("tmexpenses.storage")
 
 MAX_DEPTH = 4    # subfolders below a car's folder that are searched for PDFs
 MAX_PDF_BYTES = 20 * 1024 * 1024
+MARKER = ".teslamate-expenses"   # at the top of the invoice folder once a car uses it (see above)
+MARKER_TEXT = ("This folder holds invoices for teslamate-expenses. The app looks for this file to tell the\n"
+               "share from an empty mount point when the share isn't mounted: leave it here.\n")
 MAX_SUFFIX = 1000   # "name (999).pdf": far more clashes than one name will ever see
 # New invoice files: the folder's owner and group may write them, everyone else only read. The umask can
 # narrow this further; nothing the app saves is ever writable by everyone.
@@ -85,10 +93,12 @@ class LocalFolder:
     name = "the invoice folder"
     ref_field = "invoice_path"
 
-    def __init__(self, root, link=None):
-        """`link(ref)` gives the address the app serves a file at."""
+    def __init__(self, root, link=None, in_use=None):
+        """`link(ref)` gives the address the app serves a file at. `in_use()` says whether any car's
+        folder is in here: then the root must carry MARKER, or it is treated as not mounted."""
         self.root = Path(root)
         self.link = link or (lambda ref: ref)
+        self.in_use = in_use or (lambda: False)
 
     # ---- paths ----------------------------------------------------------------
 
@@ -107,7 +117,22 @@ class LocalFolder:
         if root is None or not root.is_dir():
             raise StorageError("The invoice folder (INVOICES_DIR) isn't there: is it mounted into the "
                                "container, and is the share it's on connected? Nothing was changed.")
+        if not (root / MARKER).is_file() and self.in_use():
+            raise StorageError("The invoice folder (INVOICES_DIR) doesn't look like the one your cars use: it "
+                               f"has no {MARKER} file, as when the share isn't mounted and its empty mount point "
+                               "is all that's there. Mount the share, then reload. Nothing was changed.")
         return root
+
+    def claim(self):
+        """Mark the root as the app's invoice folder (MARKER), before a car's folder is chosen in it."""
+        root = self._root()
+        with _os_errors("write"):
+            try:
+                with open(os.open(root / MARKER, os.O_WRONLY | os.O_CREAT | os.O_EXCL, FILE_MODE), "w") as handle:
+                    handle.write(MARKER_TEXT)
+            except FileExistsError:
+                return
+        log.info("invoice folder marked as the app's (%s)", MARKER)
 
     def _resolve(self, item_id):
         """-> (root, the real path of `item_id`), which is inside the root or the root itself."""

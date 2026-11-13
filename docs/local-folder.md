@@ -48,13 +48,50 @@ then chosen inside it, in the app.
 5. **Choose a folder for each car** on the app's **Invoice storage** page, under **Folder per car**:
     browse into the folder, creating one with **New folder** if it doesn't exist yet, and press **Use**.
     The page's **Folder on this server** card shows the folder it is using, by the path you gave in
-    `INVOICES_HOST_DIR`, and each car's folder is shown in full below it.
+    `INVOICES_HOST_DIR`, and each car's folder is shown in full below it. Check that path is the share,
+    not an empty folder on the server's own disk: see [If the share isn't mounted](#if-the-share-isnt-mounted).
+    Choosing the first car's folder leaves a hidden file, `.teslamate-expenses`, at the top of the folder.
 
-If the folder on the server is missing when the app starts, a share that didn't mount for example,
-Docker refuses to start the container (`create_host_path: false` in the compose file) rather than
-making an empty folder and letting invoices land on the wrong disk. If it goes away while the app is
-running, the Invoice storage page and the expense form say so, and nothing is saved until it is back.
-The app never creates the folder itself.
+## If the share isn't mounted
+
+Two things keep invoices from landing on the wrong disk when the share isn't there.
+
+**The folder is missing.** If `INVOICES_HOST_DIR` doesn't exist at all, Docker refuses to start the
+app (`create_host_path: false` in `docker-compose.invoices.yml`) instead of making an empty folder.
+
+**Only the mount point is there.** This is the usual case: the share didn't mount, but the folder it
+mounts on, `/mnt/nas/cars/invoices`, still exists on the server's own disk, empty. To the app that
+looks just like an empty share, so it uses the hidden `.teslamate-expenses` file instead. It writes the
+file when you choose a car's folder, and from then on, while any car keeps its invoices in this folder,
+a folder without that file is treated as not mounted:
+
+- the Invoice storage page says the folder isn't there and asks whether the share is mounted,
+- saving an expense with a PDF says the same and saves nothing,
+- browsing, choosing a folder, **New folder**, the file window and importing are refused,
+- invoices in the list can't be opened until the share is back,
+- nothing is written anywhere, so the server's own disk stays untouched.
+
+Mount the share and reload the page; nothing in the app needs changing. The start-up log also warns
+(`INVOICES_DIR ... isn't there or isn't the folder your cars use`).
+
+Leave `.teslamate-expenses` where it is, and copy it along if you move the invoices to a new share. If
+the app reports a folder you know is the right one (you deleted the file, say), either clear each car's
+folder on the Invoice storage page and choose it again, which writes the file afresh, or create it
+yourself:
+
+```bash
+touch /mnt/nas/cars/invoices/.teslamate-expenses
+```
+
+Before the first car's folder is chosen there is nothing to compare with, so check the path the page
+shows then. Two habits make an unmounted share harder to miss:
+
+- **Mount the share before Docker starts.** With systemd, `x-systemd.automount` in `/etc/fstab` mounts
+  it the first time anything looks, and a share that can't be reached then gives an error rather than
+  an empty folder. `nofail` keeps the server booting if the NAS is off.
+- **Keep the bare mount point closed.** Leave the empty folder the share mounts on owned by root, as
+  `mkdir` makes it (`sudo mkdir /mnt/nas/cars/invoices`), and don't give it to the app's user: then
+  even before the first car is set up, nothing can be written there unless the share is mounted over it.
 
 If you run the app some other way, the two things that matter are the mount and `INVOICES_DIR`, the
 path of the folder inside the container. The container can't see where the folder is on the server,
@@ -72,11 +109,27 @@ to read and write the folder.
     ```
 
 - **An SMB (CIFS) share.** Ownership comes from the mount, not the files, so `chown` does nothing.
-  Add these to the share's mount options on the Docker host (`/etc/fstab`):
+  Either mount it for the app's user, or run the app as the user it is already mounted for (below).
+  A line in `/etc/fstab` on the Docker host that mounts a share for the app's default user, with the
+  options above:
 
     ```text
-    uid=10001,gid=10001,file_mode=0660,dir_mode=0770
+    //nas.example.lan/invoices /mnt/nas/cars/invoices cifs credentials=/etc/samba/creds-nas,uid=10001,gid=10001,file_mode=0660,dir_mode=0770,_netdev,nofail,x-systemd.automount,x-systemd.mount-timeout=30 0 0
     ```
+
+    Then make the mount point, have systemd pick up the new line, and mount it:
+
+    ```bash
+    sudo mkdir /mnt/nas/cars/invoices
+    ```
+
+    ```bash
+    sudo systemctl daemon-reload && sudo mount /mnt/nas/cars/invoices
+    ```
+
+    A share already mounted for your own user (`uid=1000,gid=1000`, say) works just as well with
+    `EXPENSES_UID=1000` and `EXPENSES_GID=1000`. If the two don't match, saving an invoice says *The app
+    has no permission to write in the invoice folder* and writes nothing.
 
 - **An NFS share.** Ownership is the numeric user and group on the NFS server. Either give the
   exported folder to `10001:10001` there, or run the app as the user that already owns it (below). An
@@ -150,6 +203,6 @@ folder and the folders below it that have no expense yet. See [Importing invoice
   to 20 MB, checked by content when uploaded). Files and folders whose names start with a dot, such
   as a NAS's recycle bin, are left out.
 - **Backups.** The PDFs are not in the TeslaMate database, only their paths are. Back the folder up
-  with whatever backs up the share.
+  with whatever backs up the share, `.teslamate-expenses` included.
 - **Turning it off.** Remove the compose file from the command and start the app again. The files stay
   where they are; expenses that point at them show no working link until it is back on.

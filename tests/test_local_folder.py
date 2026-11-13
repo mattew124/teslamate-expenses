@@ -225,6 +225,59 @@ def test_only_pdfs_can_be_read_and_not_ones_over_the_limit(local, root, monkeypa
 
 # ---- the folder itself going away -------------------------------------------------
 
+def test_claiming_the_folder_leaves_a_hidden_marker(root):
+    local = storage.LocalFolder(root)
+    local.claim()
+    local.claim()                                       # again: nothing changes
+    marker = root / storage.MARKER
+    assert marker.is_file() and "teslamate-expenses" in marker.read_text()
+    here, folders, files = local.contents(None)
+    assert storage.MARKER not in [f["name"] for f in folders + files]
+
+
+def test_a_folder_in_use_without_its_marker_is_treated_as_not_mounted(tmp_path):
+    """A share that didn't mount leaves its mount point: an empty folder on the server's own disk."""
+    bare = tmp_path / "mount-point"
+    bare.mkdir()
+    local = storage.LocalFolder(bare, in_use=lambda: True)
+    assert local.available() is False
+    for call in (lambda: local.folder(None), lambda: local.contents(None), lambda: local.pdfs("/"),
+                 lambda: local.create_folder("/", "Model Y"), lambda: local.upload("/", "a.pdf", PDF),
+                 lambda: local.ensure_subfolder("/", "Tyres"), lambda: local.download("/a.pdf")):
+        with pytest.raises(storage.StorageError, match="mounted"):
+            call()
+    assert list(bare.iterdir()) == []                   # nothing written, marker included
+
+
+def test_a_folder_in_use_with_its_marker_works(root):
+    storage.LocalFolder(root).claim()
+    local = storage.LocalFolder(root, in_use=lambda: True)
+    assert local.available() and local.upload("/Model 3", "a.pdf", PDF) == "/Model 3/a.pdf"
+
+
+def test_before_any_car_uses_it_no_marker_is_needed_and_reading_writes_none(root):
+    local = storage.LocalFolder(root, in_use=lambda: False)
+    assert local.available() and local.folder(None)["is_root"]
+    local.create_folder("/", "Model Y")
+    assert not (root / storage.MARKER).exists()
+
+
+def test_claim_refuses_a_missing_folder_and_never_makes_it(tmp_path):
+    with pytest.raises(storage.StorageError, match="INVOICES_DIR"):
+        storage.LocalFolder(tmp_path / "gone").claim()
+    assert not (tmp_path / "gone").exists()
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root can write anywhere")
+def test_claim_on_a_folder_the_app_cannot_write_says_so(root):
+    root.chmod(0o555)
+    try:
+        with pytest.raises(storage.StorageError, match="permission"):
+            storage.LocalFolder(root).claim()
+    finally:
+        root.chmod(0o755)
+
+
 def test_a_missing_root_is_an_error_and_is_never_recreated(tmp_path):
     gone = storage.LocalFolder(tmp_path / "not-mounted")
     assert gone.available() is False

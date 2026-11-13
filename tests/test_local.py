@@ -57,7 +57,8 @@ def upload(client, admin, content=PDF, **over):
 
 
 def files(root):
-    return sorted(p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file())
+    """Invoices in the folder: the app's hidden marker isn't one."""
+    return sorted(p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file() and p.name != storage.MARKER)
 
 
 # ---- off unless INVOICES_DIR is set ------------------------------------------------
@@ -137,6 +138,41 @@ def test_a_folder_outside_the_mount_or_missing_cant_be_browsed_or_chosen(client,
     resp = choose(client, bad)
     assert resp.status_code == 400 and b"Couldn&#39;t use that folder" in resp.data
     assert admin.execute("SELECT count(*) AS n FROM expenses.car_folder").fetchone()["n"] == 0
+
+
+def test_the_app_starts_while_the_database_is_still_down(monkeypatch, root):
+    """Checking the folder at start asks the database whether a car uses it: that must not stop the start."""
+    monkeypatch.setenv("INVOICES_DIR", str(root))
+    monkeypatch.delenv("EXPENSES_ENCRYPTION_KEY", raising=False)
+
+    def down():
+        raise psycopg.OperationalError("connection refused")
+    assert create_app(connect=down) is not None
+
+
+def test_choosing_a_cars_folder_marks_the_invoice_folder_as_the_apps(client, root):
+    assert not (root / storage.MARKER).exists()
+    assert choose(client).status_code == 303
+    assert (root / storage.MARKER).is_file()
+
+
+def test_a_share_that_did_not_mount_is_reported_and_nothing_lands_on_the_servers_disk(app_for, admin, tmp_path):
+    """The mount point is there but empty, as when the NAS share isn't mounted: a car already uses it."""
+    bare = tmp_path / "mount-point"
+    bare.mkdir()
+    c = app_for(folder=bare)
+    admin.execute("INSERT INTO expenses.car_folder (car_id, folder_id, folder_path, backend) "
+                  "VALUES (1, '/Cars/Test car', '/Cars/Test car', 'local')")
+    page = c.get("/storage").data.decode()
+    assert "isn't there" in page and "mounted" in page
+    resp = upload(c, admin)
+    assert resp.status_code == 400 and b"mounted" in resp.data and rows(admin) == []
+    assert c.get("/local/browse/1").status_code == 502
+    made = c.post("/local/browse/1/new-folder", data={"parent_id": "", "name": "Model Y"}, headers=ORIGIN)
+    assert made.status_code in (400, 502)
+    assert choose(c, "/").status_code == 400            # can't be chosen again while it looks unmounted
+    assert c.get("/local/import/1/scan").status_code == 502
+    assert list(bare.iterdir()) == []
 
 
 def test_clear_forgets_the_folder_and_keeps_the_files(client, admin, root):

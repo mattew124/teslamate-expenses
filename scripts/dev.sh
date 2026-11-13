@@ -264,6 +264,8 @@ demo_data() {
     dev_psql -v "tz=$APP_TZ" < scripts/dev-sample-expenses.sql
     # Made-up invoices in the invoice folder, and each car pointed at them, for the import screenshots.
     python3 scripts/dev-sample-invoices.py "$ROOT/$INVOICES" >/dev/null
+    # The car is pointed at it below, not through the app, so leave the marker choosing a folder would.
+    printf 'Demo invoice folder for teslamate-expenses.\n' > "$ROOT/$INVOICES/.teslamate-expenses"
     dev_psql -c "INSERT INTO expenses.car_folder (car_id, folder_id, folder_path, backend)
                  SELECT id, '/Sample invoices', '/Sample invoices', 'local' FROM public.cars
                  ON CONFLICT (car_id) DO NOTHING"
