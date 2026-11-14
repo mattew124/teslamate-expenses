@@ -47,7 +47,7 @@ def default_urls(env=os.environ):
 
 
 SCHEMA_SQL = Path(__file__).with_name("schema.sql")
-log = logging.getLogger(__name__)   # tmexpenses.db: inherits the app's level and handlers
+log = logging.getLogger(__name__)   # garagebooks.db: inherits the app's level and handlers
 MIGRATE_LOCK = 7_265_171   # arbitrary; stops two workers starting at once from racing
 
 

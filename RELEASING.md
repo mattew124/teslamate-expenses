@@ -31,7 +31,7 @@ Rules of thumb:
    with a short paragraph saying what the release means for an installer and why it is worth having,
    then a **To upgrade** line. That paragraph is the first thing people read in the release notes.
 2. Tag a **release candidate**: `git tag -a v0.3.0-rc1 -m "v0.3.0-rc1" && git push origin v0.3.0-rc1`.
-   The Release workflow runs the tests, builds `ghcr.io/<owner>/teslamate-expenses:0.3.0-rc1` for
+   The Release workflow runs the tests, builds `ghcr.io/<owner>/garagebooks:0.3.0-rc1` for
    amd64 and arm64, and prints the digest in the run summary. A pre-release tag never moves `:latest`.
 3. Test that digest from a worktree: `scripts/dev.sh up --image <ref>@<digest>`, `scripts/dev.sh onedrive-link`,
    then `scripts/dev.sh test-browser --onedrive` (it fails if the real OneDrive checks can't run), then
@@ -44,12 +44,6 @@ Rules of thumb:
 6. Pin production to the digest of the stable build (the run summary shows it), not to `:latest`.
    The stable tag is a fresh build, so its digest differs from the candidate's: give it the same
    quick check before pinning.
-7. After a **stable** release (not a candidate), update TeslaMate's project page if the app's
-   features changed: `scripts/teslamate-listing.sh check` shows how the page differs from
-   `.github/teslamate-listing.md`, and `scripts/teslamate-listing.sh propose` opens or refreshes the
-   pull request on `teslamate-org/teslamate`. It publishes under your GitHub account, so it is
-   run by hand, never from CI. Nothing to do if `check` says the page matches. While TeslaMate's
-   maintainers have the pull request open, later releases refresh the same one.
 
 ## Following a channel
 

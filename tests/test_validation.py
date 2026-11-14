@@ -3,7 +3,7 @@ from decimal import Decimal
 
 import pytest
 
-from tmexpenses import validation as v
+from garagebooks import validation as v
 
 
 @pytest.mark.parametrize("raw,expected", [

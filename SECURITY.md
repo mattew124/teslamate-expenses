@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Please report it privately, not in a public issue: open
-[a private security advisory](https://github.com/mattew124/teslamate-expenses/security/advisories/new)
+[a private security advisory](https://github.com/mattew124/garagebooks/security/advisories/new)
 on this repository. Say what you found, how to reproduce it, and what it could expose.
 
 This is a small project maintained in spare time. Expect an acknowledgement within a few days and a

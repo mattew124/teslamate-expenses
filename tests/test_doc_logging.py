@@ -1,7 +1,7 @@
 """Debug logging per document: enough to see what happened to a file, never its contents.
 
 The level and handlers belong to the logging setup (LOG_LEVEL); here the records are read straight
-from the "tmexpenses" logger and its children.
+from the "garagebooks" logger and its children.
 """
 
 import io
@@ -9,7 +9,7 @@ import logging
 
 import pytest
 
-from tmexpenses import invoices
+from garagebooks import invoices
 from tests.test_app import ORIGIN
 from tests.test_import import TEXT, app_for, client, cat, ms, post_rows  # noqa: F401  (fixtures)
 from tests.test_onedrive import choose_folder, sign_in, with_pdf  # noqa: F401
@@ -19,11 +19,11 @@ from tests.test_app import form
 @pytest.fixture(autouse=True)
 def debug_level(caplog, monkeypatch):
     monkeypatch.setenv("LOG_LEVEL", "debug")   # create_app sets the logger's level from this
-    caplog.set_level(logging.DEBUG, logger="tmexpenses")
+    caplog.set_level(logging.DEBUG, logger="garagebooks")
 
 
 def lines(caplog, contains=""):
-    return [r.getMessage() for r in caplog.records if r.name.startswith("tmexpenses") and contains in r.getMessage()]
+    return [r.getMessage() for r in caplog.records if r.name.startswith("garagebooks") and contains in r.getMessage()]
 
 
 def test_prefill_logs_the_document_and_what_was_found(client, caplog):

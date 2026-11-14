@@ -22,7 +22,7 @@ jobs:
       - name: Ruff (lint)
         run: ruff check .
       - name: Bandit (Python security lint)
-        run: bandit -q -c pyproject.toml -r tmexpenses
+        run: bandit -q -c pyproject.toml -r garagebooks
       - name: Hadolint (Dockerfile)
         uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
         with:
@@ -48,7 +48,7 @@ jobs:
         if: always()
         run: coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY" || true
       - name: The image builds
-        run: docker build -t teslamate-expenses:ci .
+        run: docker build -t garagebooks:ci .
 
   teslamate-recorded:
     # The suite on the real schema of the TeslaMate release compat.py says this was tested with,

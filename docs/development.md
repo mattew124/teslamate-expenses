@@ -5,43 +5,28 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/python -m pytest -q     # starts a throwaway postgres:18 container
 ```
 
-The tests load TeslaMate's real table definitions (`db/teslamate-schema.sql`), start the app so
+The tests let the real TeslaMate image (the release in `garagebooks/compat.py`) create its tables in a
+throwaway database, so docker pulls `teslamate/teslamate` the first time. They then start the app so
 it creates its own schema, and also cover the optional `scripts/provision-db.sh` role.
 
 ## Testing against a TeslaMate release
 
 TeslaMate can change its tables in any release, so each release of this app records the one it was
-tested with (`TESTED_TESLAMATE` and `TESTED_MIGRATION` in `tmexpenses/compat.py`) and refuses to
+tested with (`TESTED_TESLAMATE` and `TESTED_MIGRATION` in `garagebooks/compat.py`) and refuses to
 start on a newer database. To try a new TeslaMate, with nothing but docker and the `.venv`:
 
 ```bash
 scripts/teslamate-compat.sh 4.5.0            # or `latest`; defaults to the recorded release
-scripts/teslamate-compat.sh 4.5.0 --record   # after it passes: update the schema snapshot and compat.py
+scripts/teslamate-compat.sh 4.5.0 --record   # after it passes: update compat.py
 ```
 
-It starts a throwaway Postgres, lets the real `teslamate/teslamate` image migrate it, compares the
-tables we read with `db/teslamate-schema.sql`, runs the whole suite on that schema, and compares the
-newest migration with the recorded one. Exit status 0 means tested, 1 means a failure or a changed table,
+It starts a throwaway Postgres, lets the real `teslamate/teslamate` image migrate it, runs the
+whole suite on that schema, and compares the
+newest migration with the recorded one. Exit status 0 means tested, 1 means a failure,
 2 means it passes but is newer than recorded. A weekly *TeslaMate compatibility* workflow runs it against
 the latest release and opens an issue when it doesn't exit 0. After `--record`, update the CHANGELOG
 (an upgrade note) and the README line naming the tested release.
 
-## The TeslaMate project listing
-
-TeslaMate's "Projects using TeslaMate" page describes this app. The text we want there is
-`.github/teslamate-listing.md`, and its first line records a hash of the README's feature list
-that it was written against. A pull request that changes a feature bullet in the README fails
-`tests/test_listing.py` until you have checked the listing still describes the app (a new storage
-option, say), edited it if not, and set the hash the failure message gives.
-
-```bash
-scripts/teslamate-listing.sh check     # how TeslaMate's page differs from our entry (read-only)
-scripts/teslamate-listing.sh propose   # open or refresh the pull request on teslamate-org/teslamate
-```
-
-Proposing the change to TeslaMate is a step of the release process (RELEASING.md, step 7), run by
-hand after a stable release, not by CI: it publishes under your GitHub account. `propose` updates the
-same branch and pull request each time.
 
 ## CodeQL before you push
 
@@ -69,7 +54,6 @@ scripts/dev.sh reset          # wipe the test database
 scripts/dev.sh demo up         # second stack of invented data, for screenshots (see below)
 scripts/dev.sh sample-expenses  # add made-up expenses to try the app with; `clear` removes them
 scripts/dev.sh sample-invoices  # write made-up invoice PDFs into the stack's invoice folder
-scripts/dev.sh schema         # regenerate db/teslamate-schema.sql after a TeslaMate upgrade
 scripts/dev.sh setup          # in a new worktree: create .venv
 scripts/dev.sh down           # stop the stack, keeping its data
 scripts/dev.sh logs           # follow the app's log
@@ -106,12 +90,12 @@ dashboards, which won't work there because the test database only has these thre
 ## Releasing
 
 Pushing a `v*` tag runs the tests and publishes a multi-arch image to
-`ghcr.io/mattew124/teslamate-expenses`. Pre-release tags such as `v0.2.0-rc1` don't move `:latest`.
+`ghcr.io/mattew124/garagebooks`. Pre-release tags such as `v0.2.0-rc1` don't move `:latest`.
 The run summary shows the digest, so what you test is what you deploy:
 
 ```bash
 git tag v0.2.0-rc1 && git push origin v0.2.0-rc1
-scripts/dev.sh up --image ghcr.io/mattew124/teslamate-expenses@sha256:...
+scripts/dev.sh up --image ghcr.io/mattew124/garagebooks@sha256:...
 scripts/dev.sh test-browser
 ```
 
@@ -163,7 +147,7 @@ git grep -n '^<!-- screenshot:' -- docs
 ```
 
 Version numbering and the candidate-to-stable steps are in
-[RELEASING.md](https://github.com/mattew124/teslamate-expenses/blob/main/RELEASING.md).
+[RELEASING.md](https://github.com/mattew124/garagebooks/blob/main/RELEASING.md).
 
 ### Keeping the docs in step with the code
 

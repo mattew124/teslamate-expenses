@@ -42,10 +42,10 @@ def check(conn, allow_untested=False):
         if newest is not None:
             log.info("TeslaMate schema is within what was tested (TeslaMate %s)", TESTED_TESLAMATE)
         return newest
-    message = (f"This TeslaMate database is newer than teslamate-expenses has been tested with "
+    message = (f"This TeslaMate database is newer than garagebooks has been tested with "
                f"(TeslaMate {TESTED_TESLAMATE}, migration {TESTED_MIGRATION}; this database is at "
                f"{newest}). TeslaMate's tables can change without notice, so the expense list or "
-               f"dashboard may be wrong or fail. Upgrade teslamate-expenses to a release that lists "
+               f"dashboard may be wrong or fail. Upgrade garagebooks to a release that lists "
                f"a newer TeslaMate, or set ALLOW_UNTESTED_TESLAMATE=1 to run anyway.")
     if allow_untested:
         log.error("ALLOW_UNTESTED_TESLAMATE=1: running anyway. %s", message)

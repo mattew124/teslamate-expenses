@@ -19,7 +19,7 @@ the dev stack) shows *Development build* and never checks.
 
 To find out whether a newer release exists, the app makes one anonymous request to the public
 releases list on `api.github.com`, at most every six hours, in the background (a page never waits for
-it). GitHub sees your server's address and a `User-Agent` of `teslamate-expenses/<version>`; nothing
+it). GitHub sees your server's address and a `User-Agent` of `garagebooks/<version>`; nothing
 from your data is sent. If GitHub can't be reached, the footer simply shows the version and tries
 again later. Set `UPDATE_CHECK=0` in `.env` and restart to switch the check off.
 
@@ -42,7 +42,7 @@ The app connects as `DATABASE_USER` with `DATABASE_PASS` to `DATABASE_NAME` on `
 
 ## TeslaMate version
 
-Each release is tested against one TeslaMate release (named in the README and in `tmexpenses/compat.py`). TeslaMate has no stable database schema, so on start the app compares the newest migration in TeslaMate's `schema_migrations` table with the one it was tested against. If the database is **newer**, the app stops with a message saying so; upgrade teslamate-expenses to a release that lists a newer TeslaMate. `ALLOW_UNTESTED_TESLAMATE=1` (in `.env`, restart to apply) starts it anyway and logs an error on every start; use it only for a short while, since a changed table can make pages or the dashboard wrong or fail. An older TeslaMate is not refused. If the role cannot read `schema_migrations`, the app warns and carries on.
+Each release is tested against one TeslaMate release (named in the README and in `garagebooks/compat.py`). TeslaMate has no stable database schema, so on start the app compares the newest migration in TeslaMate's `schema_migrations` table with the one it was tested against. If the database is **newer**, the app stops with a message saying so; upgrade garagebooks to a release that lists a newer TeslaMate. `ALLOW_UNTESTED_TESLAMATE=1` (in `.env`, restart to apply) starts it anyway and logs an error on every start; use it only for a short while, since a changed table can make pages or the dashboard wrong or fail. An older TeslaMate is not refused. If the role cannot read `schema_migrations`, the app warns and carries on.
 
 ## Logs
 

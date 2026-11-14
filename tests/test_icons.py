@@ -5,7 +5,7 @@ import re
 
 import pytest
 
-from tmexpenses import icons
+from garagebooks import icons
 
 GOOD = b'<svg role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><title>Microsoft OneDrive</title><path d="M1 1h2v2z"/></svg>'
 

@@ -23,7 +23,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from . import compat, dashboard, db, docinfo, icons, invoices, logs, onedrive, storage, updates, validation
 
-log = logging.getLogger("tmexpenses.app")
+log = logging.getLogger("garagebooks.app")
 
 MESSAGES = {
     "saved": "Expense saved.",

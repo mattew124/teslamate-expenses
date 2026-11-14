@@ -18,7 +18,7 @@ from pathlib import Path
 
 from .docinfo import Timer
 
-log = logging.getLogger("tmexpenses.invoices")
+log = logging.getLogger("garagebooks.invoices")
 
 TEXT_TIMEOUT = 30
 OCR_TIMEOUT = 120

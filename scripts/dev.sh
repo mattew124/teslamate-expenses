@@ -29,7 +29,6 @@
 #                                    the repository (ONEDRIVE_DEV_FILE)
 #   scripts/dev.sh onedrive-link     load that sign-in into this stack, pointed at the
 #                                    /Expenses test folder
-#   scripts/dev.sh schema            regenerate db/teslamate-schema.sql from TeslaMate
 #   scripts/dev.sh psql [args]       psql on the test database
 #   scripts/dev.sh logs              follow the app's logs
 #
@@ -60,7 +59,6 @@ if [ -f dev.env ]; then
 fi
 export APP_TZ="${APP_TZ:-UTC}"
 SEED_FROM="${SEED_FROM:-teslamate-database-1}"
-SCHEMA=db/teslamate-schema.sql
 ENVF=.dev/env
 
 # `demo <command>` runs the command on a second stack, with generated data (see header).
@@ -113,12 +111,12 @@ export DEV_INVOICES_SHOWN="$DEV_INVOICES_DIR"
 [ "$DEMO" = 0 ] || export DEV_INVOICES_SHOWN=/mnt/nas/cars/invoices
 
 if [ -z "$INSTANCE" ]; then
-    PROJECT=teslamate-expenses-dev
+    PROJECT=garagebooks-dev
     export DEV_BASE_PATH=/expenses-dev DEV_ROUTER_SUFFIX= DEV_TAG=dev
     export DEV_UI_PRIORITY=110 DEV_GRAFANA_PRIORITY=120
     export DEV_UI_PORT="${DEV_UI_PORT:-8089}" DEV_GRAFANA_PORT="${DEV_GRAFANA_PORT:-8090}"
 else
-    PROJECT="teslamate-expenses-dev-$INSTANCE"
+    PROJECT="garagebooks-dev-$INSTANCE"
     export DEV_BASE_PATH="/expenses-dev/$INSTANCE" DEV_ROUTER_SUFFIX="-$INSTANCE" DEV_TAG="dev-$INSTANCE"
     # Above the main stack's routes: /expenses-dev/ is a prefix of this path.
     export DEV_UI_PRIORITY=130 DEV_GRAFANA_PRIORITY=140
@@ -200,13 +198,6 @@ dump_schema() {
     scripts/dump-teslamate-schema.sh "$SEED_FROM"
 }
 
-warn_if_schema_drifted() {
-    if ! dump_schema | cmp -s - "$SCHEMA"; then
-        echo "dev: WARNING: TeslaMate's tables differ from $SCHEMA." >&2
-        echo "dev:          Run 'scripts/dev.sh schema', review the diff, then 'scripts/dev.sh reset'." >&2
-    fi
-}
-
 columns_of() {
     source_psql "SELECT string_agg(quote_ident(column_name), ',' ORDER BY ordinal_position)
                  FROM information_schema.columns
@@ -239,7 +230,10 @@ copy_data() {
     {
         cat <<SQL
 BEGIN;
-TRUNCATE public.positions, public.charging_processes;
+-- TeslaMate's real tables point at addresses, geofences and settings that are not copied (addresses
+-- are locations): skip those foreign-key checks for this transaction, in this throwaway database only.
+SET LOCAL session_replication_role = replica;
+TRUNCATE public.positions, public.charging_processes CASCADE;   -- CASCADE: the real tables (drives, charges) reference them; expenses.* does not
 CREATE TEMP TABLE incoming_cars (LIKE public.cars) ON COMMIT DROP;
 COPY incoming_cars ($car_cols) FROM STDIN;
 SQL
@@ -281,7 +275,7 @@ demo_data() {
     # Made-up invoices in the invoice folder, and each car pointed at them, for the import screenshots.
     python3 scripts/dev-sample-invoices.py "$ROOT/$INVOICES" >/dev/null
     # The car is pointed at it below, not through the app, so leave the marker choosing a folder would.
-    printf 'Demo invoice folder for teslamate-expenses.\n' > "$ROOT/$INVOICES/.teslamate-expenses"
+    printf 'Demo invoice folder for garagebooks.\n' > "$ROOT/$INVOICES/.garagebooks"
     dev_psql -c "INSERT INTO expenses.car_folder (car_id, folder_id, folder_path, backend)
                  SELECT id, '/Sample invoices', '/Sample invoices', 'local' FROM public.cars
                  ON CONFLICT (car_id) DO NOTHING"
@@ -291,6 +285,18 @@ demo_data() {
     dev_psql -At -c "SELECT 'dev: demo DB has ' || (SELECT count(*) FROM public.charging_processes) || ' charges, '
         || (SELECT count(*) FROM public.positions) || ' odometer readings, '
         || (SELECT count(*) FROM expenses.expense) || ' expenses'"
+}
+
+# TeslaMate's own tables, created by the release this app was tested with: its image migrates the
+# empty dev database, as it does in production. Nothing of TeslaMate's is kept in this repository.
+migrate_with_teslamate_image() {
+    local version db pass
+    version="$(.venv/bin/python -c 'from garagebooks import compat; print(compat.TESTED_TESLAMATE)')"
+    db="$(compose ps -q dev-db)"
+    pass="$(sed -n 's/^DEV_ADMIN_DB_PASS=//p' "$ENVF")"
+    docker run --rm --network "container:$db" -e DATABASE_HOST=127.0.0.1 -e DATABASE_USER=teslamate \
+        -e "DATABASE_PASS=$pass" -e DATABASE_NAME=teslamate -e ENCRYPTION_KEY=dev-only \
+        -e DISABLE_MQTT=true "teslamate/teslamate:$version" /bin/dash -c true
 }
 
 # TeslaMate's own tables, as TeslaMate would have created them. Our schema is not
@@ -306,7 +312,7 @@ prepare_database() {
             require_source
             dump_schema | dev_psql
         else
-            dev_psql < "$SCHEMA"
+            migrate_with_teslamate_image
         fi
     fi
 }
@@ -344,7 +350,6 @@ start() {
         compose up -d --build --wait
     fi
     seed_data
-    if [ "$DEMO" = 0 ] && docker inspect "$SEED_FROM" >/dev/null 2>&1; then warn_if_schema_drifted; fi
     urls
 }
 
@@ -363,7 +368,7 @@ instance=${INSTANCE:-main}
 base_path=$DEV_BASE_PATH
 ui_port=$DEV_UI_PORT
 grafana_port=$DEV_GRAFANA_PORT
-image=${EXPENSES_IMAGE:-teslamate-expenses:$DEV_TAG}
+image=${EXPENSES_IMAGE:-garagebooks:$DEV_TAG}
 invoices=$DEV_INVOICES_DIR
 router_suffix=${DEV_ROUTER_SUFFIX:-none}
 ui_priority=$DEV_UI_PRIORITY
@@ -386,23 +391,23 @@ setup() {
 test_browser() {
     local require_onedrive="${1:-0}"
     ensure_env
-    docker build -q -t teslamate-expenses:browser-tests tests/browser >/dev/null
+    docker build -q -t garagebooks:browser-tests tests/browser >/dev/null
     # Straight to the containers on the dev network, past the proxy's login.
     docker run --rm --network "${PROJECT}_dev" --user "$(id -u):$(id -g)" \
         -e HOME=/tmp -e OUT=/out -e "BASE_PATH=$DEV_BASE_PATH" -e "REQUIRE_ONEDRIVE=$require_onedrive" \
         -v "$ROOT/tests/browser:/tests:ro" -v "$ROOT/$SHOTS:/out" \
-        teslamate-expenses:browser-tests python3 /tests/run.py
+        garagebooks:browser-tests python3 /tests/run.py
 }
 
 # The pages the README and docs show, from the demo stack (invented data only).
 demo_screenshots() {
     [ "$DEMO" = 1 ] || { echo "dev: use 'scripts/dev.sh demo screenshots'" >&2; exit 2; }
     ensure_env
-    docker build -q -t teslamate-expenses:browser-tests tests/browser >/dev/null
+    docker build -q -t garagebooks:browser-tests tests/browser >/dev/null
     docker run --rm --network "${PROJECT}_dev" --user "$(id -u):$(id -g)" \
         -e HOME=/tmp -e OUT=/out -e "BASE_PATH=$DEV_BASE_PATH" \
         -v "$ROOT/tests/browser:/tests:ro" -v "$ROOT/$SHOTS:/out" \
-        teslamate-expenses:browser-tests python3 /tests/screenshots.py
+        garagebooks:browser-tests python3 /tests/screenshots.py
     echo "dev: screenshots in $SHOTS"
 }
 
@@ -411,7 +416,7 @@ demo_screenshots() {
 # One saved sign-in, in a file any worktree can load, so no other stack has to stay around.
 # It holds the encryption key beside what it encrypts, so it opens the real account: keep it
 # private (0600) and out of the repository.
-ONEDRIVE_DEV_FILE="${ONEDRIVE_DEV_FILE:-$HOME/.config/teslamate-expenses/onedrive-dev}"
+ONEDRIVE_DEV_FILE="${ONEDRIVE_DEV_FILE:-$HOME/.config/garagebooks/onedrive-dev}"
 
 onedrive_file_check() {
     local repo
@@ -492,21 +497,21 @@ case "${1:-}" in
         if [ "${2:-}" = --image ]; then start "${3:?--image needs an image reference}"
         else start ""; fi ;;
     refresh) [ "$DEMO" = 0 ] || { echo "dev: the demo has nothing to refresh; use 'demo reset'" >&2; exit 2; }
-        ensure_env; warn_if_schema_drifted; copy_data ;;
+        ensure_env; copy_data ;;
     reset) ensure_env; compose down -v; start "" ;;
     down) ensure_env; compose down ;;
     destroy)
         ensure_env
         compose down -v --remove-orphans
         if [ "$DEMO" = 1 ]; then rm -rf -- "$ROOT/$SHOTS" "$ROOT/$INVOICES"; echo "dev: removed $PROJECT"; exit 0; fi
-        docker image rm "teslamate-expenses:$DEV_TAG" >/dev/null 2>&1 || true
+        docker image rm "garagebooks:$DEV_TAG" >/dev/null 2>&1 || true
         # Last: `compose down` above needs the passwords in .dev/env. This also drops the screenshots.
         # The checkout itself (a worktree's own folder) stays; remove that with `git worktree remove`.
         rm -rf -- "$ROOT/.dev"
         echo "dev: removed $PROJECT"
         # Test PDFs on a share are left for you to delete: nothing here removes files from a NAS.
         [ -z "$INVOICES_SHARE" ] || echo "dev: left $DEV_INVOICES_DIR on the share (this stack's test PDFs); delete it when you no longer need them" ;;
-    list) docker compose ls -a --filter name=teslamate-expenses-dev ;;
+    list) docker compose ls -a --filter name=garagebooks-dev ;;
     setup) setup ;;
     info) info ;;
     screenshots) demo_screenshots ;;
@@ -515,13 +520,6 @@ case "${1:-}" in
         if [ "${2:-}" = --onedrive ]; then test_browser 1; else test_browser 0; fi ;;
     onedrive-save) onedrive_save ;;
     onedrive-link) onedrive_link ;;
-    schema)
-        require_source
-        tmp="$(mktemp)"
-        dump_schema > "$tmp"
-        mv "$tmp" "$SCHEMA"
-        chmod 644 "$SCHEMA"
-        git --no-pager diff --stat -- "$SCHEMA" || true ;;
     sample-expenses)
         ensure_env
         if [ "${2:-}" = clear ]; then

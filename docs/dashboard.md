@@ -8,7 +8,7 @@ own dashboards.
 
 ## The figures
 
-All of them come from the `expenses.ownership` view (`tmexpenses/schema.sql`), one row per car:
+All of them come from the `expenses.ownership` view (`garagebooks/schema.sql`), one row per car:
 
 | Figure | Definition |
 |---|---|

@@ -6,14 +6,13 @@
 #
 # Starts a throwaway Postgres, lets the real teslamate/teslamate:VERSION image migrate it
 # (the image's own entrypoint does that), then:
-#   1. compares the migrated tables with db/teslamate-schema.sql;
-#   2. runs the whole test suite against that database (TEST_TESLAMATE_IMAGE);
-#   3. compares TeslaMate's newest migration with tmexpenses/compat.py.
+#   1. runs the whole test suite against that database (TEST_TESLAMATE_IMAGE);
+#   2. compares TeslaMate's newest migration with garagebooks/compat.py.
 # Never touches a real TeslaMate database. Needs docker and .venv (scripts/dev.sh setup).
 #
-# Exit status: 0 = tested and nothing to change; 1 = the tests failed or the tables we read
-# changed; 2 = tests pass but TeslaMate is newer than compat.py records (run with --record).
-# --record, after a pass, regenerates db/teslamate-schema.sql and updates compat.py to VERSION.
+# Exit status: 0 = tested and nothing to change; 1 = the tests failed; 2 = the tests pass but
+# TeslaMate is newer than compat.py records (run with --record).
+# --record, after a pass, updates compat.py to VERSION.
 # =============================================================================
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -25,8 +24,8 @@ for arg in "$@"; do
         *) version="$arg" ;;
     esac
 done
-tested="$(.venv/bin/python -c 'from tmexpenses import compat; print(compat.TESTED_TESLAMATE)')"
-recorded="$(.venv/bin/python -c 'from tmexpenses import compat; print(compat.TESTED_MIGRATION)')"
+tested="$(.venv/bin/python -c 'from garagebooks import compat; print(compat.TESTED_TESLAMATE)')"
+recorded="$(.venv/bin/python -c 'from garagebooks import compat; print(compat.TESTED_MIGRATION)')"
 version="${version:-$tested}"
 if [ "$version" = latest ]; then
     version="$(curl -fsSL https://api.github.com/repos/teslamate-org/teslamate/releases/latest \
@@ -35,7 +34,7 @@ fi
 image="teslamate/teslamate:$version"
 echo "compat: TeslaMate $version (this release was tested with $tested)"
 
-name="tmexpenses-compat-$$"
+name="garagebooks-compat-$$"
 trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
 pass="$(openssl rand -hex 16)"
 docker run -d --rm --name "$name" -e POSTGRES_USER=teslamate -e POSTGRES_DB=teslamate \
@@ -54,23 +53,6 @@ newest="$(docker exec "$name" psql -X -At -U teslamate -d teslamate -c 'SELECT m
 echo "compat: TeslaMate $version's newest migration is $newest (recorded: $recorded)"
 
 status=0
-scripts/dump-teslamate-schema.sh "$name" > .compat-schema.sql
-# pg_dump may order independent statements differently from one run or machine to the next, so
-# compare the statements (blank-line separated blocks) sorted, not the file byte for byte.
-canon() { python3 -I -c 'import sys; print("\n\n".join(sorted(b.strip() for b in sys.stdin.read().split("\n\n") if b.strip())))' < "$1"; }
-canon db/teslamate-schema.sql > .compat-have.sql
-canon .compat-schema.sql > .compat-new.sql
-if ! diff -u --label db/teslamate-schema.sql --label "TeslaMate $version" .compat-have.sql .compat-new.sql; then
-    echo "compat: the tables we read differ from db/teslamate-schema.sql (diff above)" >&2
-    if [ "$record" = 1 ]; then
-        # Some tests build their database from this file, so it is replaced before the suite runs.
-        # If the suite then fails, `git checkout db/teslamate-schema.sql` puts it back.
-        cp .compat-schema.sql db/teslamate-schema.sql
-        echo "compat: --record: db/teslamate-schema.sql replaced"
-    else
-        status=1
-    fi
-fi
 
 echo "compat: running the test suite against TeslaMate $version's own schema..."
 TEST_TESLAMATE_IMAGE="$image" .venv/bin/python -m pytest -q -p no:cacheprovider || status=1
@@ -82,9 +64,8 @@ if [ "$status" = 0 ] && [ "$newest" -gt "$recorded" ]; then
 fi
 if [ "$record" = 1 ] && { [ "$status" = 0 ] || [ "$status" = 2 ]; }; then
     sed -i -E "s/^TESTED_TESLAMATE = .*/TESTED_TESLAMATE = \"$version\"/; s/^TESTED_MIGRATION = .*/TESTED_MIGRATION = $newest/" \
-        tmexpenses/compat.py
+        garagebooks/compat.py
     echo "compat: recorded TeslaMate $version (migration $newest). Review 'git diff', update the docs and CHANGELOG."
     status=0
 fi
-rm -f .compat-schema.sql .compat-have.sql .compat-new.sql
 exit "$status"

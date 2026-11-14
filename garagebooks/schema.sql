@@ -1,4 +1,4 @@
--- teslamate-expenses schema. Idempotent: safe to re-run (scripts/provision-db.sh
+-- garagebooks schema. Idempotent: safe to re-run (scripts/provision-db.sh
 -- does so on every deploy). Lives in its own `expenses` schema inside the
 -- TeslaMate database so Grafana can join it to TeslaMate's own tables
 -- (cars, positions, charging_processes) without a second datasource.

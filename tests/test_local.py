@@ -10,7 +10,7 @@ import psycopg
 import pytest
 from psycopg.rows import dict_row
 
-from tmexpenses import create_app, invoices, storage
+from garagebooks import create_app, invoices, storage
 from tests.test_app import ORIGIN, category_id, form, rows
 from tests.test_import import TEXT, TYRES_TEXT
 from tests.test_onedrive import KEY, choose_folder, ms, sign_in, with_pdf  # noqa: F401  (ms is a fixture)
@@ -418,7 +418,7 @@ class LeakyError(storage.StorageError):
     """An error whose str() carries internals, as a library's might: only user_message may be shown."""
 
     def __str__(self):
-        return "Traceback (most recent call last): /srv/tmexpenses/secret.py line 1"
+        return "Traceback (most recent call last): /srv/garagebooks/secret.py line 1"
 
 
 @pytest.mark.parametrize("call", ["picker", "scan", "prefill"])
@@ -514,7 +514,7 @@ def test_preview_proposes_from_the_pdf_and_links_to_it(stocked, admin):
 
 
 def test_a_forged_size_cant_add_a_line_to_the_log(stocked, caplog):
-    caplog.set_level("DEBUG", logger="tmexpenses")      # the app's own logger, where the read is logged
+    caplog.set_level("DEBUG", logger="garagebooks")      # the app's own logger, where the read is logged
     stocked.post("/local/import/1/read", headers=ORIGIN, data={
         "n": "0", "id": TYRES, "url": TYRES, "name": "261024 - Tyres.pdf", "folder": "",
         "size": "10\n2026-11-13 [ERROR] forged entry"})

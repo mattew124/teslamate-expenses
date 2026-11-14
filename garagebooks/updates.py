@@ -18,8 +18,8 @@ import time
 import urllib.error
 import urllib.request
 
-REPO = "mattew124/teslamate-expenses"
-DOCS_URL = "https://mattew124.github.io/teslamate-expenses/"
+REPO = "mattew124/garagebooks"
+DOCS_URL = "https://mattew124.github.io/garagebooks/"
 RELEASES_URL = f"https://github.com/{REPO}/releases"
 API_URL = f"https://api.github.com/repos/{REPO}/releases?per_page=20"
 
@@ -28,7 +28,7 @@ RETRY_SECONDS = 15 * 60      # how long before asking again after a failure (off
 TIMEOUT_SECONDS = 5
 MAX_BYTES = 1024 * 1024      # a releases page is a few kB; anything bigger is not what we asked for
 
-log = logging.getLogger("tmexpenses.updates")
+log = logging.getLogger("garagebooks.updates")
 
 _VERSION = re.compile(r"v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*))?")
 
@@ -60,7 +60,7 @@ def fetch_tags(installed):
     """The tag names of GitHub's published releases (drafts excluded). Raises CheckFailed."""
     req = urllib.request.Request(API_URL, headers={
         "Accept": "application/vnd.github+json",
-        "User-Agent": f"teslamate-expenses/{installed}",
+        "User-Agent": f"garagebooks/{installed}",
     })
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:  # nosec B310 - fixed https address

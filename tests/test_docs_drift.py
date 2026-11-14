@@ -18,7 +18,7 @@ def docs_text():
 
 
 def test_every_setting_the_app_reads_is_documented():
-    code = "\n".join(p.read_text() for p in (ROOT / "tmexpenses").rglob("*.py"))
+    code = "\n".join(p.read_text() for p in (ROOT / "garagebooks").rglob("*.py"))
     names = set(re.findall(r'environ(?:\.get)?[(\[]\s*"([A-Z][A-Z0-9_]+)"', code)) - INTERNAL
     documented = docs_text() + (ROOT / ".env.example").read_text() + (ROOT / "README.md").read_text()
     assert [n for n in sorted(names) if n not in documented] == []

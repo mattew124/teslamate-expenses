@@ -6,7 +6,7 @@ real extraction is exercised on its own in test_invoices.
 
 import pytest
 
-from tmexpenses import invoices
+from garagebooks import invoices
 from tests.test_app import ORIGIN, rows
 from tests.test_onedrive import FakeMicrosoft, an_hour_passes, app_for, choose_folder, sign_in  # noqa: F401  (fixtures)
 
@@ -142,7 +142,7 @@ def test_bad_link_refused(client, admin):
 
 
 def test_works_in_batches(client, admin, monkeypatch):
-    monkeypatch.setattr("tmexpenses.IMPORT_BATCH", 1)
+    monkeypatch.setattr("garagebooks.IMPORT_BATCH", 1)
     page = client.get("/onedrive/import/1?sync=1").data.decode()
     assert "2 more waiting" in page
 
@@ -270,7 +270,7 @@ def test_rename_uses_the_values_the_owner_typed(client, ms, admin, dashed):
 def test_a_slow_round_stops_early_and_defers_the_rest(client, monkeypatch):
     """OCR can take 10+ s a file; gunicorn kills a request at 120 s. Past the time budget the
     page stops reading files and leaves the rest for the next round."""
-    monkeypatch.setattr("tmexpenses.IMPORT_BUDGET_SECONDS", -1)      # already used up
+    monkeypatch.setattr("garagebooks.IMPORT_BUDGET_SECONDS", -1)      # already used up
     page = client.get("/onedrive/import/1?sync=1").data.decode()
     assert page.count('name="include_') == 1          # always at least one file per round
     assert "2 more waiting" in page
@@ -306,7 +306,7 @@ def test_scan_lists_the_files_without_reading_them(client, ms):
 
 def test_scan_lists_every_file_not_a_batch(client, admin, monkeypatch):
     client.post("/onedrive/import/1", data=post_rows(admin), headers=ORIGIN)      # imports P3 and P1
-    monkeypatch.setattr("tmexpenses.IMPORT_BATCH", 1)
+    monkeypatch.setattr("garagebooks.IMPORT_BATCH", 1)
     data = client.get("/onedrive/import/1/scan").get_json()
     assert (data["listed"], data["already_imported"], data["remaining"]) == (3, 2, 0)
     assert [f["name"] for f in data["files"]] == ["scan.pdf"]
@@ -403,7 +403,7 @@ def test_sign_in_expiring_before_a_scan_is_explained(client, ms, monkeypatch):
 
 
 def test_scan_is_not_capped_by_the_batch_size(client, monkeypatch):
-    monkeypatch.setattr("tmexpenses.IMPORT_BATCH", 1)
+    monkeypatch.setattr("garagebooks.IMPORT_BATCH", 1)
     assert len(client.get("/onedrive/import/1/scan").get_json()["files"]) == 3
 
 

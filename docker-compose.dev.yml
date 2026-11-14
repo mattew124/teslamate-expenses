@@ -3,13 +3,13 @@
 # scripts/dev.sh, which generates the --env-file. Published on loopback only;
 # docker-compose.dev.traefik.yml replaces that with the reverse proxy.
 # scripts/dev.sh sets the project name, path and ports per checkout (worktree).
-name: teslamate-expenses-dev
+name: garagebooks-dev
 
 services:
   expenses-dev:
     build: .
     # EXPENSES_IMAGE: test a released image rather than this working tree.
-    image: ${EXPENSES_IMAGE:-teslamate-expenses:${DEV_TAG:-dev}}
+    image: ${EXPENSES_IMAGE:-garagebooks:${DEV_TAG:-dev}}
     restart: unless-stopped
     read_only: true
     cap_drop: [ALL]

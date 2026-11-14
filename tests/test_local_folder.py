@@ -9,7 +9,7 @@ import threading
 
 import pytest
 
-from tmexpenses import storage
+from garagebooks import storage
 from tests.test_validation import PDF
 
 
@@ -230,7 +230,7 @@ def test_claiming_the_folder_leaves_a_hidden_marker(root):
     local.claim()
     local.claim()                                       # again: nothing changes
     marker = root / storage.MARKER
-    assert marker.is_file() and "teslamate-expenses" in marker.read_text()
+    assert marker.is_file() and "garagebooks" in marker.read_text()
     here, folders, files = local.contents(None)
     assert storage.MARKER not in [f["name"] for f in folders + files]
 
@@ -253,6 +253,14 @@ def test_a_folder_in_use_with_its_marker_works(root):
     storage.LocalFolder(root).claim()
     local = storage.LocalFolder(root, in_use=lambda: True)
     assert local.available() and local.upload("/Model 3", "a.pdf", PDF) == "/Model 3/a.pdf"
+
+
+def test_a_folder_marked_under_the_old_project_name_still_counts_as_mounted(root):
+    """Folders claimed before the rename carry .teslamate-expenses: they must keep working."""
+    (root / storage.LEGACY_MARKER).write_text("old")
+    local = storage.LocalFolder(root, in_use=lambda: True)
+    assert local.available() and local.upload("/Model 3", "a.pdf", PDF) == "/Model 3/a.pdf"
+    assert not (root / storage.MARKER).exists()
 
 
 def test_before_any_car_uses_it_no_marker_is_needed_and_reading_writes_none(root):

@@ -5,7 +5,7 @@ import logging
 import os
 
 from tests.test_dev_stack import ROOT
-from tmexpenses import create_app, dashboard
+from garagebooks import create_app, dashboard
 
 SOURCE = json.loads((ROOT / "grafana" / "cost-of-ownership.json").read_text())
 
@@ -68,7 +68,7 @@ def test_unwritable_dashboard_dir_warns_but_the_app_starts(tmp_path, monkeypatch
     try:
         if os.access(locked, os.W_OK):
             return                                   # running as root: can't make a dir unwritable
-        caplog.set_level(logging.WARNING, logger="tmexpenses")
+        caplog.set_level(logging.WARNING, logger="garagebooks")
         create_app(connect=lambda: None)
         assert any("dashboard" in m.lower() for m in caplog.messages)
     finally:
@@ -104,7 +104,7 @@ def _lab(colour):
 def test_category_colours_are_fixed_and_clearly_different():
     """Grafana's default palette hands out neighbouring shades; the starter categories and charging get
     fixed, well-separated colours (the colour-blind-safe Okabe-Ito set), the same in every chart."""
-    seed = (ROOT / "tmexpenses" / "schema.sql").read_text()
+    seed = (ROOT / "garagebooks" / "schema.sql").read_text()
     running = [n for n in ("Insurance", "Registration", "Tyres", "Cabin air filter", "Air filter",
                            "Wheel alignment", "Tyre rotation") if f"('{n}'" in seed]
     assert len(running) == 7

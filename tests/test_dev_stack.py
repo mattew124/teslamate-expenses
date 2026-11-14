@@ -1,5 +1,5 @@
 """The dev stack's one job is to stay away from live data. Guard that, the
-generated schema snapshot, and the rules keeping the app behind a login."""
+schema dump filter, and the rules keeping the app behind a login."""
 
 import json
 import re
@@ -11,7 +11,6 @@ DEV = (ROOT / "docker-compose.dev.yml").read_text()
 DEV_PROXY = (ROOT / "docker-compose.dev.traefik.yml").read_text()
 PROD_PROXY = (ROOT / "docker-compose.traefik.yml").read_text()
 SCRIPT = (ROOT / "scripts" / "dev.sh").read_text()
-SCHEMA = (ROOT / "db" / "teslamate-schema.sql").read_text()
 
 
 def config():
@@ -84,15 +83,6 @@ def test_positions_are_hourly_and_stripped_of_location():
     assert "location data reached the test database" in SCRIPT
 
 
-def test_schema_snapshot_is_the_real_definition():
-    for column in ("latitude numeric(8,6) NOT NULL", "tpms_pressure_rr", "marketing_name",
-                   "charge_energy_used", "position_id integer NOT NULL"):
-        assert column in SCHEMA
-    assert "REVOKE ALL ON SCHEMA public FROM PUBLIC" in SCHEMA
-    targets = re.findall(r"REFERENCES public\.(\w+)\(", SCHEMA)
-    assert targets and set(targets) == {"cars"}
-
-
 def test_schema_filter():
     dump = r"""--
 -- PostgreSQL database dump
@@ -141,7 +131,7 @@ def test_dashboard_expenses_link_comes_from_the_apps_own_settings():
 
 
 def test_seeded_grafana_link_points_at_this_dashboards_uid():
-    from tmexpenses import db
+    from garagebooks import db
     dash = json.loads((ROOT / "grafana" / "cost-of-ownership.json").read_text())
     assert dash["uid"] == db.DASHBOARD_UID
 

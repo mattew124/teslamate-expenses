@@ -50,7 +50,7 @@ then chosen inside it, in the app.
     The page's **Folder on this server** card shows the folder it is using, by the path you gave in
     `INVOICES_HOST_DIR`, and each car's folder is shown in full below it. Check that path is the share,
     not an empty folder on the server's own disk: see [If the share isn't mounted](#if-the-share-isnt-mounted).
-    Choosing the first car's folder leaves a hidden file, `.teslamate-expenses`, at the top of the folder.
+    Choosing the first car's folder leaves a hidden file, `.garagebooks`, at the top of the folder.
 
 ## If the share isn't mounted
 
@@ -61,7 +61,7 @@ app (`create_host_path: false` in `docker-compose.invoices.yml`) instead of maki
 
 **Only the mount point is there.** This is the usual case: the share didn't mount, but the folder it
 mounts on, `/mnt/nas/cars/invoices`, still exists on the server's own disk, empty. To the app that
-looks just like an empty share, so it uses the hidden `.teslamate-expenses` file instead. It writes the
+looks just like an empty share, so it uses the hidden `.garagebooks` file instead. It writes the
 file when you choose a car's folder, and from then on, while any car keeps its invoices in this folder,
 a folder without that file is treated as not mounted:
 
@@ -84,7 +84,7 @@ docker compose logs expenses
 ```
 
 ```text
-[ERROR] INVOICES_DIR /invoices can't be used, and INVOICES_REQUIRED=1, so the app won't start: The invoice folder (INVOICES_DIR) doesn't look like the one your cars use: it has no .teslamate-expenses file, ...
+[ERROR] INVOICES_DIR /invoices can't be used, and INVOICES_REQUIRED=1, so the app won't start: The invoice folder (INVOICES_DIR) doesn't look like the one your cars use: it has no .garagebooks file, ...
 ```
 
 The container's restart policy (`restart: unless-stopped`) starts it again and again, so it comes up
@@ -100,13 +100,13 @@ Invoice storage page:
 INVOICES_REQUIRED=0
 ```
 
-Leave `.teslamate-expenses` where it is, and copy it along if you move the invoices to a new share. If
+Leave `.garagebooks` where it is, and copy it along if you move the invoices to a new share. If
 the app reports a folder you know is the right one (you deleted the file, say), either clear each car's
 folder on the Invoice storage page and choose it again, which writes the file afresh, or create it
 yourself:
 
 ```bash
-touch /mnt/nas/cars/invoices/.teslamate-expenses
+touch /mnt/nas/cars/invoices/.garagebooks
 ```
 
 Before the first car's folder is chosen there is nothing to compare with, so check the path the page
@@ -178,12 +178,12 @@ EXPENSES_GID=1000
 ```
 
 One thing to do when you change the user on an installation that has already run: the Grafana
-dashboard file in the `teslamate-expenses-dashboards` volume still belongs to the old user, and the
+dashboard file in the `garagebooks-dashboards` volume still belongs to the old user, and the
 app can no longer replace it (the log says `Could not write the Grafana dashboard`). Hand the volume
 over once:
 
 ```bash
-docker run --rm -v teslamate-expenses-dashboards:/d busybox chown -R 1000:1000 /d
+docker run --rm -v garagebooks-dashboards:/d busybox chown -R 1000:1000 /d
 ```
 
 When the app can't write, saving an expense with a PDF says *The app has no permission to write in
@@ -229,6 +229,6 @@ folder and the folders below it that have no expense yet. See [Importing invoice
   to 20 MB, checked by content when uploaded). Files and folders whose names start with a dot, such
   as a NAS's recycle bin, are left out.
 - **Backups.** The PDFs are not in the TeslaMate database, only their paths are. Back the folder up
-  with whatever backs up the share, `.teslamate-expenses` included.
+  with whatever backs up the share, `.garagebooks` included.
 - **Turning it off.** Remove the compose file from the command and start the app again. The files stay
   where they are; expenses that point at them show no working link until it is back on.

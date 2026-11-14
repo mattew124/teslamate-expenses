@@ -1,9 +1,23 @@
 # Changelog
 
-All notable changes to teslamate-expenses. Version numbers and the candidate-to-stable
+All notable changes to garagebooks. Version numbers and the candidate-to-stable
 steps are in [RELEASING.md](RELEASING.md). Newest first.
 
 Each entry says what an installer must do to upgrade. Where nothing is said, pull the new image.
+
+## Unreleased
+
+**The project is now called GarageBooks** (it was teslamate-expenses). TeslaMate's trademark policy reserves
+the TeslaMate name for tools that use only its MQTT interface, and this app reads the database, so it takes its
+own name and says plainly that it is not affiliated with TeslaMate. Nothing about how it works has changed.
+
+**To upgrade:** the image is now `ghcr.io/<owner>/garagebooks` (the old `teslamate-expenses` image stops
+receiving releases), so change the `image:` line in your compose file. The dashboards volume is now
+`garagebooks-dashboards`: if you mount it by name for Grafana, change that too, or the dashboard stops updating.
+The repository no longer holds a copy of TeslaMate's table definitions (they are AGPL-3.0, this project MIT):
+tests and the dev stack get them by running the real TeslaMate image. Your `expenses` schema, `EXPENSES_*` settings and invoice folders are untouched, and a folder already marked with
+`.teslamate-expenses` keeps working. The GitHub address, documentation address and update check follow the rename.
+There is also a new logo and icon (app header, browser tab, home-screen icon, README and documentation site).
 
 ## 0.3.0-rc1 - 2026-11-13
 

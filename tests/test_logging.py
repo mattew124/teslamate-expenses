@@ -3,8 +3,8 @@ import logging
 
 import pytest
 
-from tmexpenses import logs
-from tmexpenses import create_app
+from garagebooks import logs
+from garagebooks import create_app
 
 from tests.test_app import ORIGIN, client, form  # noqa: F401  (shared fixtures)
 
@@ -28,14 +28,14 @@ def test_app_refuses_an_unknown_level(monkeypatch):
 def test_level_is_applied_to_the_app_logger(monkeypatch):
     monkeypatch.setenv("LOG_LEVEL", "debug")
     create_app(connect=lambda: None)
-    assert logging.getLogger("tmexpenses").level == logging.DEBUG
+    assert logging.getLogger("garagebooks").level == logging.DEBUG
     monkeypatch.delenv("LOG_LEVEL")
     create_app(connect=lambda: None)
-    assert logging.getLogger("tmexpenses").level == logging.INFO
+    assert logging.getLogger("garagebooks").level == logging.INFO
 
 
 def test_expense_changes_are_logged_at_info(client, admin, caplog):
-    caplog.set_level(logging.INFO, logger="tmexpenses")
+    caplog.set_level(logging.INFO, logger="garagebooks")
     assert client.post("/new", data=form(admin), headers=ORIGIN).status_code == 303
     assert any("expense 1 saved" in m for m in caplog.messages)
     client.post("/1/edit", data=form(admin), headers=ORIGIN)
@@ -45,13 +45,13 @@ def test_expense_changes_are_logged_at_info(client, admin, caplog):
 
 
 def test_info_level_hides_debug_detail(client, admin, caplog):
-    caplog.set_level(logging.INFO, logger="tmexpenses")
+    caplog.set_level(logging.INFO, logger="garagebooks")
     client.get("/")
     assert not [r for r in caplog.records if r.levelno < logging.INFO]
 
 
 def test_notes_and_vendor_are_never_logged(client, admin, caplog):
-    caplog.set_level(logging.DEBUG, logger="tmexpenses")
+    caplog.set_level(logging.DEBUG, logger="garagebooks")
     client.post("/new", data=form(admin, vendor="Secret Vendor Ltd", notes="private note"), headers=ORIGIN)
     text = "\n".join(caplog.messages)
     assert "Secret Vendor" not in text and "private note" not in text

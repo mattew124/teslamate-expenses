@@ -506,7 +506,7 @@ def test_footer_links_to_the_docs_and_names_the_build(page):
     page.goto(UI)
     footer = page.locator("footer")
     docs = footer.get_by_role("link", name="Documentation")
-    assert docs.get_attribute("href") == "https://mattew124.github.io/teslamate-expenses/"
+    assert docs.get_attribute("href") == "https://mattew124.github.io/garagebooks/"
     assert docs.get_attribute("rel") == "noopener noreferrer"
     assert "Development build" in footer.inner_text()
     shot(page, "footer")

@@ -1,12 +1,12 @@
-"""Fixtures: a throwaway Postgres container with TeslaMate's real definitions of the
-three tables we touch (db/teslamate-schema.sql), provisioned by the real scripts/provision-db.sh —
-so the tests also cover the schema, the grants and the provisioning script.
+"""Fixtures: a throwaway Postgres container that the real TeslaMate image (the release
+compat.py says this app was tested with) migrates, so the whole suite runs on TeslaMate's own
+tables, which are pulled for the test and not kept in this repository. The database is then
+provisioned by the real scripts/provision-db.sh, so the tests also cover the schema, the grants
+and the provisioning script.
 
-Set TEST_PG_IMAGE to use another image. Skipped when docker isn't available.
-
-Set TEST_TESLAMATE_IMAGE (e.g. teslamate/teslamate:4.4.0) to have that real TeslaMate image
-migrate the database instead, so the whole suite runs on TeslaMate's own schema
-(scripts/teslamate-compat.sh does this).
+Set TEST_PG_IMAGE to use another Postgres image, TEST_TESLAMATE_IMAGE (e.g. teslamate/teslamate:4.5.0)
+to try another TeslaMate release (scripts/teslamate-compat.sh does this). Skipped when docker isn't
+available.
 """
 
 import os
@@ -20,19 +20,15 @@ import psycopg
 import pytest
 from psycopg.rows import dict_row
 
-from tmexpenses import compat
+from garagebooks import compat
 
 ROOT = Path(__file__).resolve().parent.parent
 IMAGE = os.environ.get("TEST_PG_IMAGE", "postgres:18-trixie")
 
-TESLAMATE_IMAGE = os.environ.get("TEST_TESLAMATE_IMAGE")
+TESLAMATE_IMAGE = os.environ.get("TEST_TESLAMATE_IMAGE") or f"teslamate/teslamate:{compat.TESTED_TESLAMATE}"
 CAR = """
 INSERT INTO cars (id, eid, vid, vin, settings_id, name, inserted_at, updated_at)
 VALUES (1, 1, 1, 'TESTVIN', 1, 'Test car', now(), now());
-"""
-# The snapshot of TeslaMate's tables, plus the newest migration this release was tested with.
-STUBS = (ROOT / "db" / "teslamate-schema.sql").read_text() + CAR + f"""
-INSERT INTO schema_migrations (version, inserted_at) VALUES ({compat.TESTED_MIGRATION}, now());
 """
 
 
@@ -66,7 +62,7 @@ class Pg:
 def pg():
     if not shutil.which("docker"):
         pytest.skip("docker not available")
-    name = f"tmexpenses-test-{secrets.token_hex(4)}"
+    name = f"garagebooks-test-{secrets.token_hex(4)}"
     admin_pass = secrets.token_hex(16)
     try:
         sh("docker", "run", "-d", "--rm", "--name", name, "-p", "127.0.0.1::5432",
@@ -87,14 +83,15 @@ def pg():
                 time.sleep(1)
         else:
             pytest.fail("test Postgres never became ready")
-        if TESLAMATE_IMAGE:
-            # The image's entrypoint applies TeslaMate's migrations, then runs the no-op command.
-            sh("docker", "run", "--rm", "--network", f"container:{name}", "-e", "DATABASE_HOST=127.0.0.1",
-               "-e", "DATABASE_USER=postgres", "-e", f"DATABASE_PASS={admin_pass}", "-e", "DATABASE_NAME=teslamate",
-               "-e", "ENCRYPTION_KEY=test-only", "-e", "DISABLE_MQTT=true", TESLAMATE_IMAGE, "/bin/dash", "-c", "true")
-            pg.psql("INSERT INTO car_settings (id) VALUES (1), (2) ON CONFLICT DO NOTHING;" + CAR)
-        else:
-            pg.psql(STUBS)
+        # The image's entrypoint applies TeslaMate's migrations, then runs the no-op command.
+        sh("docker", "run", "--rm", "--network", f"container:{name}", "-e", "DATABASE_HOST=127.0.0.1",
+           "-e", "DATABASE_USER=postgres", "-e", f"DATABASE_PASS={admin_pass}", "-e", "DATABASE_NAME=teslamate",
+           "-e", "ENCRYPTION_KEY=test-only", "-e", "DISABLE_MQTT=true", TESLAMATE_IMAGE, "/bin/dash", "-c", "true")
+        pg.psql("INSERT INTO car_settings (id) VALUES (1), (2) ON CONFLICT DO NOTHING;" + CAR)
+        # A copy of the database as TeslaMate leaves it, for blank_db: made from another database,
+        # because a template can't be in use while it is copied.
+        sh("docker", "exec", name, "psql", "-X", "-q", "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "postgres",
+           "-c", "CREATE DATABASE tm_pristine TEMPLATE teslamate")
         result = pg.provision()
         assert result.returncode == 0, result.stderr
         yield pg
@@ -119,10 +116,8 @@ def blank_db(pg):
     """A TeslaMate database as TeslaMate leaves it: its own tables, no `expenses` schema."""
     name = f"blank_{secrets.token_hex(4)}"
     with pg.admin() as conn:
-        conn.execute(f'CREATE DATABASE "{name}"')
+        conn.execute(f'CREATE DATABASE "{name}" TEMPLATE tm_pristine')
     url = f"postgresql://postgres:{pg.admin_pass}@127.0.0.1:{pg.port}/{name}"
-    with psycopg.connect(url, autocommit=True) as conn:
-        conn.execute(STUBS)
     yield url
     with pg.admin() as conn:
         conn.execute(f'DROP DATABASE "{name}" WITH (FORCE)')

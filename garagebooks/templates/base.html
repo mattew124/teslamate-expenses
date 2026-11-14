@@ -4,8 +4,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Expenses{% endblock %} · TeslaMate</title>
-  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='icon.svg') }}">
+  <title>{% block title %}Expenses{% endblock %} · GarageBooks</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icon-32.png') }}">
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='icon-180.png') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <script src="{{ url_for('static', filename='view.js') }}"></script>
@@ -14,7 +14,7 @@
 <body>
   <header>
     <div class="bar">
-      <a class="brand" href="{{ url_for('index') }}"><img src="{{ url_for('static', filename='icon.svg') }}" alt="" width="28" height="28">Expenses</a>
+      <a class="brand" href="{{ url_for('index') }}"><img src="{{ url_for('static', filename='icon-64.png') }}" alt="" width="28" height="28">Expenses</a>
       {% set endpoint = request.endpoint or '' %}
       {% macro at(section) %}{% if section %} aria-current="page"{% endif %}{% endmacro %}
       <nav>

@@ -30,8 +30,8 @@ jobs:
           --scanners vuln,secret,misconfig --severity HIGH,CRITICAL --ignore-unfixed
           --skip-dirs tests --skip-dirs .git --exit-code 1 --quiet .
       - name: Build the image
-        run: docker build -t teslamate-expenses:scan .
+        run: docker build -t garagebooks:scan .
       - name: Image (OS packages and Python packages)
         run: >
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$TRIVY_IMAGE" image
-          --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --quiet teslamate-expenses:scan
+          --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --quiet garagebooks:scan
