@@ -21,7 +21,8 @@ def test_every_page_is_in_the_navigation():
 
 def test_screenshots_live_in_docs_images_and_every_one_is_used():
     """Screenshots come from the demo stack's invented data (`scripts/dev.sh demo screenshots`)."""
-    images = [p for p in DOCS.rglob("*") if p.suffix.lower() in IMAGE_TYPES]
+    # docs/assets holds the project's own logo and icons, not screenshots
+    images = [p for p in DOCS.rglob("*") if p.suffix.lower() in IMAGE_TYPES and DOCS / "assets" not in p.parents]
     assert all(p.parent == DOCS / "images" for p in images), images
     pages = "".join(p.read_text() for p in DOCS.rglob("*.md")) + (ROOT / "README.md").read_text()
     assert [p.name for p in images if p.name not in pages] == []

@@ -1,6 +1,4 @@
-<p align="center"><img src="garagebooks/static/icon.svg" alt="" width="96" height="96"></p>
-
-<h1 align="center">GarageBooks</h1>
+<p align="center"><img src="docs/assets/logo.png" alt="GarageBooks" width="160" height="160"></p>
 
 <p align="center">Track what your Tesla costs to own: expenses, invoices and total cost of ownership in Grafana.</p>
 

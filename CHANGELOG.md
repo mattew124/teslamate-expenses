@@ -17,6 +17,7 @@ receiving releases), so change the `image:` line in your compose file. The dashb
 The repository no longer holds a copy of TeslaMate's table definitions (they are AGPL-3.0, this project MIT):
 tests and the dev stack get them by running the real TeslaMate image. Your `expenses` schema, `EXPENSES_*` settings and invoice folders are untouched, and a folder already marked with
 `.teslamate-expenses` keeps working. The GitHub address, documentation address and update check follow the rename.
+There is also a new logo and icon (app header, browser tab, home-screen icon, README and documentation site).
 
 ## 0.3.0-rc1 - 2026-11-13
 

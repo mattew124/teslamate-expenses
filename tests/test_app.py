@@ -235,14 +235,15 @@ def test_security_headers(client):
 def test_site_icon(client):
     """The page names its icons, and the CSP lets the browser load them (default-src is 'none')."""
     page = client.get("/")
-    assert b'rel="icon"' in page.data and b'/static/icon.svg' in page.data
+    assert b'rel="icon"' in page.data and b'/static/icon-32.png' in page.data
     assert b'rel="apple-touch-icon"' in page.data and b'/static/icon-180.png' in page.data
     assert "img-src 'self'" in page.headers["Content-Security-Policy"]
-    assert client.get("/static/icon.svg").status_code == 200
+    assert client.get("/static/icon-32.png").mimetype == "image/png"
+
     # the header's home link carries the icon, and keeps its "Expenses" text
     import re
     brand = re.search(rb'<a class="brand"[^>]*>(.*?)</a>', page.data, re.S).group(1)
-    assert b"/static/icon.svg" in brand and b"Expenses" in brand
+    assert b"/static/icon-64.png" in brand and b"Expenses" in brand
     assert client.get("/static/icon-180.png").mimetype == "image/png"
 
 
